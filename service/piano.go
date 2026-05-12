@@ -2,11 +2,12 @@ package service
 
 import (
 	"fmt"
+	"sync"
+	"time"
+
 	"gitlab.com/gomidi/midi/v2"
 	"gitlab.com/gomidi/midi/v2/drivers"
 	_ "gitlab.com/gomidi/midi/v2/drivers/rtmididrv"
-	"sync"
-	"time"
 )
 
 type KeyboardSignal struct {
@@ -21,7 +22,8 @@ type Listener struct {
 }
 
 type InMidiDevice struct {
-	Device drivers.In `json:"device"`
+	// Device 是 Go 后端内部使用的驱动对象，不能直接暴露给前端。
+	Device drivers.In `json:"-"`
 	Name   string     `json:"name"`
 	Value  int        `json:"value"`
 }
@@ -35,10 +37,10 @@ type OutMidiDevice struct {
 type PedalSingal struct {
 	DeviceID        int             `json:"deviceID"`
 	DamperPedal     bool            `json:"damperPedal"`    // 延音踏板 64
-	SostenutoPedal  bool            `json:"sostenutoPedal"` // 消音踏板 66
+	SostenutoPedal  bool            `json:"sostenutoPedal"` // 持音踏板 66
 	SoftPedal       bool            `json:"softPedal"`      // 柔音踏板 67
 	DamperPedalKeys []uint8         `json:"-"`
-	DownKeys        map[uint8]uint8 `json:"-"`
+	DownKeys        map[uint8]uint8 `json:"-"` // key -> channel
 }
 
 type MidiDevices struct {
@@ -50,6 +52,11 @@ type MidiDevices struct {
 	Listener          Listener              `json:"-"`
 	Initialized       bool                  `json:"initialized"`
 }
+
+var (
+	midiMu           sync.RWMutex
+	midiListenerStop func()
+)
 
 var Midis = MidiDevices{
 	InMidiPool: map[int]InMidiDevice{
@@ -76,267 +83,450 @@ var Midis = MidiDevices{
 
 type Keyboard struct{}
 
+func newPedalSignal(deviceID int) *PedalSingal {
+	return &PedalSingal{
+		DeviceID:        deviceID,
+		DamperPedal:     false,
+		SostenutoPedal:  false,
+		SoftPedal:       false,
+		DamperPedalKeys: make([]uint8, 0),
+		DownKeys:        make(map[uint8]uint8),
+	}
+}
+
+// snapshotMidiDevices 生成一份只包含前端需要字段的快照。
+// 注意不要把 drivers.In / drivers.Out 直接返回给前端，避免序列化不稳定。
+func snapshotMidiDevices() MidiDevices {
+	midiMu.RLock()
+	defer midiMu.RUnlock()
+
+	snapshot := MidiDevices{
+		InMidiPool:        make(map[int]InMidiDevice, len(Midis.InMidiPool)),
+		OutMidiPool:       make(map[int]OutMidiDevice, len(Midis.OutMidiPool)),
+		SelectedInDevice:  Midis.SelectedInDevice,
+		SelectedOutDevice: Midis.SelectedOutDevice,
+		PedalStatus:       make(map[int]*PedalSingal, len(Midis.PedalStatus)),
+		Initialized:       Midis.Initialized,
+	}
+
+	for id, device := range Midis.InMidiPool {
+		snapshot.InMidiPool[id] = InMidiDevice{Name: device.Name, Value: device.Value}
+	}
+	for id, device := range Midis.OutMidiPool {
+		snapshot.OutMidiPool[id] = OutMidiDevice{Name: device.Name, Value: device.Value}
+	}
+	for id, pedal := range Midis.PedalStatus {
+		if pedal == nil {
+			continue
+		}
+		snapshot.PedalStatus[id] = &PedalSingal{
+			DeviceID:       pedal.DeviceID,
+			DamperPedal:    pedal.DamperPedal,
+			SostenutoPedal: pedal.SostenutoPedal,
+			SoftPedal:      pedal.SoftPedal,
+		}
+	}
+
+	return snapshot
+}
+
 func CloseMidiDevice() {
-	for i, _ := range Midis.InMidiPool {
-		if i != -1 {
-			Midis.InMidiPool[i].Device.Close()
+	(&Keyboard{}).MidiListenerStop()
+	(&Keyboard{}).AllNotesOff()
 
+	midiMu.Lock()
+	defer midiMu.Unlock()
+	for id, device := range Midis.InMidiPool {
+		if id != -1 && device.Device != nil {
+			_ = device.Device.Close()
 		}
 	}
-	for i, _ := range Midis.OutMidiPool {
-		if i != -1 {
-			Midis.OutMidiPool[i].Device.Close()
-
+	for id, device := range Midis.OutMidiPool {
+		if id != -1 && device.Device != nil {
+			_ = device.Device.Close()
 		}
 	}
+
 	midi.CloseDriver()
 	drivers.Close()
-	fmt.Println("midi listener stop")
-	App.Quit()
+	fmt.Println("midi devices closed")
 }
 
 func CompareInDevices(inports midi.InPorts) {
-	lastId := -1
-	for i, _ := range inports {
-		if _, ok := Midis.InMidiPool[inports[i].Number()]; ok {
+	midiMu.Lock()
+	defer midiMu.Unlock()
+
+	lastID := -1
+	alive := map[int]bool{-1: true}
+
+	for _, port := range inports {
+		deviceID := port.Number()
+		alive[deviceID] = true
+		lastID = deviceID
+
+		if _, ok := Midis.InMidiPool[deviceID]; ok {
 			continue
-		} else {
-			Midis.InMidiPool[inports[i].Number()] = InMidiDevice{
-				Device: inports[i],
-				Name:   inports[i].String(),
-				Value:  i,
-			}
-			Midis.PedalStatus[i] = &PedalSingal{
-				DeviceID:        i,
-				DamperPedal:     false,
-				SostenutoPedal:  false,
-				SoftPedal:       false,
-				DamperPedalKeys: make([]uint8, 0),
-				DownKeys:        make(map[uint8]uint8, 0),
-			}
 		}
-		lastId = inports[i].Number()
-	}
-	if Midis.SelectedInDevice == -1 && len(inports) > 0 {
-		Midis.SelectedInDevice = lastId
-		go (&Keyboard{}).MidiListenerStart()
-	}
-	indexArray := make([]int, 0)
-	for index, _ := range Midis.InMidiPool {
-		indexArray = append(indexArray, index)
-	}
-	for _, i := range indexArray {
-		exsit := false
-		for j, _ := range inports {
-			if inports[j].Number() == i {
-				exsit = true
-				break
-			}
-		}
-		if !exsit {
-			if i == Midis.SelectedInDevice {
-				Midis.SelectedInDevice = -1
-			}
-			if i != -1 {
-				Midis.InMidiPool[i].Device.Close()
-				(&Keyboard{}).MidiListenerStop()
-				delete(Midis.PedalStatus, i)
-				delete(Midis.InMidiPool, i)
-			}
 
+		Midis.InMidiPool[deviceID] = InMidiDevice{
+			Device: port,
+			Name:   port.String(),
+			Value:  deviceID,
 		}
+		Midis.PedalStatus[deviceID] = newPedalSignal(deviceID)
 	}
 
+	if Midis.SelectedInDevice == -1 && lastID != -1 {
+		Midis.SelectedInDevice = lastID
+	}
+
+	for id, device := range Midis.InMidiPool {
+		if alive[id] {
+			continue
+		}
+		if id == Midis.SelectedInDevice {
+			Midis.SelectedInDevice = -1
+			// 当前输入设备被拔掉时，停止监听并清理本地音符，避免残留卡音。
+			go (&Keyboard{}).MidiListenerStop()
+			go (&Keyboard{}).AllNotesOff()
+		}
+		if id != -1 && device.Device != nil {
+			_ = device.Device.Close()
+		}
+		delete(Midis.PedalStatus, id)
+		delete(Midis.InMidiPool, id)
+	}
 }
 
 func CompareOutDevices(outports midi.OutPorts) {
-	lastId := -1
-	for i, _ := range outports {
-		if _, ok := Midis.OutMidiPool[outports[i].Number()]; ok {
+	midiMu.Lock()
+	defer midiMu.Unlock()
+
+	lastID := -1
+	alive := map[int]bool{-1: true}
+
+	for _, port := range outports {
+		deviceID := port.Number()
+		alive[deviceID] = true
+		lastID = deviceID
+
+		if _, ok := Midis.OutMidiPool[deviceID]; ok {
 			continue
-		} else {
-			Midis.OutMidiPool[outports[i].Number()] = OutMidiDevice{
-				Device: outports[i],
-				Name:   outports[i].String(),
-				Value:  i,
-			}
-			outports[i].Open()
 		}
-		lastId = outports[i].Number()
-	}
-	if Midis.SelectedOutDevice == -1 && len(outports) > 0 {
-		Midis.SelectedOutDevice = lastId
-	}
-	indexArray := make([]int, 0)
-	for index, _ := range Midis.OutMidiPool {
-		indexArray = append(indexArray, index)
-	}
-	for _, i := range indexArray {
-		exsit := false
-		for j, _ := range outports {
-			if outports[j].Number() == i {
-				exsit = true
-				break
-			}
+
+		if err := port.Open(); err != nil {
+			fmt.Println("打开 MIDI 输出设备失败:", err)
+			continue
 		}
-		if !exsit {
-			if i == Midis.SelectedOutDevice {
-				Midis.SelectedOutDevice = -1
-			}
-			if i != -1 {
-				Midis.OutMidiPool[i].Device.Close()
-				delete(Midis.OutMidiPool, i)
-			}
+
+		Midis.OutMidiPool[deviceID] = OutMidiDevice{
+			Device: port,
+			Name:   port.String(),
+			Value:  deviceID,
 		}
+	}
+
+	if Midis.SelectedOutDevice == -1 && lastID != -1 {
+		Midis.SelectedOutDevice = lastID
+	}
+
+	for id, device := range Midis.OutMidiPool {
+		if alive[id] {
+			continue
+		}
+		if id == Midis.SelectedOutDevice {
+			Midis.SelectedOutDevice = -1
+			go (&Keyboard{}).AllNotesOff()
+		}
+		if id != -1 && device.Device != nil {
+			_ = device.Device.Close()
+		}
+		delete(Midis.OutMidiPool, id)
 	}
 }
 
 func ListenMidiDevices() {
-	wg := sync.WaitGroup{}
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		CompareInDevices(midi.GetInPorts())
-	}()
-	go func() {
-		defer wg.Done()
-		CompareOutDevices(midi.GetOutPorts())
-	}()
-	wg.Wait()
+	CompareInDevices(midi.GetInPorts())
+	CompareOutDevices(midi.GetOutPorts())
 
-	App.Event.Emit("devices", Midis)
+	midiMu.Lock()
+	Midis.Initialized = true
+	midiMu.Unlock()
 
+	if App != nil {
+		App.Event.Emit("devices", snapshotMidiDevices())
+	}
 }
 
 func (k *Keyboard) GetMidiDevices() MidiDevices {
-	return Midis
+	return snapshotMidiDevices()
 }
 
 func (k *Keyboard) MidiListenerStart() {
-	if Midis.SelectedInDevice == -1 {
+	midiMu.Lock()
+	if Midis.Listener.Started || Midis.SelectedInDevice == -1 {
+		midiMu.Unlock()
 		return
 	}
+	deviceID := Midis.SelectedInDevice
+	device, ok := Midis.InMidiPool[deviceID]
+	if !ok || device.Device == nil {
+		midiMu.Unlock()
+		return
+	}
+	midiMu.Unlock()
+
 	fmt.Println("midi listener start")
-	stop, err := midi.ListenTo(Midis.InMidiPool[Midis.SelectedInDevice].Device, func(msg midi.Message, timestampms int32) {
-		var bt []byte
-		var ch, key, vel, con uint8
-		switch {
-		case msg.GetSysEx(&bt):
-			//fmt.Println("got sysex: % X\n", bt)
-		case msg.GetNoteStart(&ch, &key, &vel):
-			Keydown(int32(ch), int32(key), int32(vel))
-			Midis.PedalStatus[Midis.SelectedInDevice].DamperPedalKeys = append(Midis.PedalStatus[Midis.SelectedInDevice].DamperPedalKeys, midi.Note(key).Value())
-			Midis.PedalStatus[Midis.SelectedInDevice].DownKeys[midi.Note(key).Value()] = midi.Note(key).Value()
-			App.Event.Emit("down", &KeyboardSignal{
-				Value:    midi.Note(key).Value(),
-				Velocity: vel,
-				Channel:  ch,
-			})
-		case msg.GetControlChange(&ch, &con, &vel):
-			if con == 64 {
-				Midis.PedalStatus[Midis.SelectedInDevice].DamperPedal = vel > 0
-				if !Midis.PedalStatus[Midis.SelectedInDevice].DamperPedal {
-					for _, key := range Midis.PedalStatus[Midis.SelectedInDevice].DamperPedalKeys {
-						if _, ok := Midis.PedalStatus[Midis.SelectedInDevice].DownKeys[key]; !ok {
-							App.Event.Emit("up", &KeyboardSignal{
-								Value:    key,
-								Velocity: 0,
-								Channel:  ch,
-							})
-						}
-
-					}
-					Midis.PedalStatus[Midis.SelectedInDevice].DamperPedalKeys = make([]uint8, 0)
-				}
-			} else if con == 66 {
-				Midis.PedalStatus[Midis.SelectedInDevice].SostenutoPedal = vel > 0
-			} else if con == 67 {
-				Midis.PedalStatus[Midis.SelectedInDevice].SoftPedal = vel > 0
-			}
-			if con == 64 || con == 66 || con == 67 {
-				App.Event.Emit("pedal", Midis.PedalStatus[Midis.SelectedInDevice])
-			}
-		case msg.GetNoteEnd(&ch, &key):
-			if !Midis.PedalStatus[Midis.SelectedInDevice].DamperPedal {
-				App.Event.Emit("up", &KeyboardSignal{
-					Value:    midi.Note(key).Value(),
-					Velocity: 0,
-					Channel:  ch,
-				})
-				Keyup(int32(ch), int32(key))
-
-			}
-			delete(Midis.PedalStatus[Midis.SelectedInDevice].DownKeys, midi.Note(key).Value())
-			//fmt.Println(midi.Note(key), midi.Note(key).Value(), midi.Note(key).Octave(), midi.Note(key).Name(), midi.Note(key).Base(), ch)
-		default:
-			// ignore
-		}
+	stop, err := midi.ListenTo(device.Device, func(msg midi.Message, timestampms int32) {
+		handleMidiMessage(deviceID, msg)
 	}, midi.UseSysEx())
-
 	if err != nil {
 		fmt.Printf("ERROR: %s\n", err)
 		return
 	}
-	Midis.Listener.Started = true
 
-	go func() {
-		<-Midis.Listener.Down
-		if len(Midis.InMidiPool) > 1 {
-			stop()
-		} else {
-			stop = nil
+	midiMu.Lock()
+	midiListenerStop = stop
+	Midis.Listener.Started = true
+	midiMu.Unlock()
+}
+
+func handleMidiMessage(deviceID int, msg midi.Message) {
+	var bt []byte
+	var ch, key, vel, con uint8
+
+	switch {
+	case msg.GetSysEx(&bt):
+		return
+
+	case msg.GetNoteStart(&ch, &key, &vel):
+		midiKey := midi.Note(key).Value()
+		Keydown(int32(ch), int32(key), int32(vel))
+
+		midiMu.Lock()
+		pedal := Midis.PedalStatus[deviceID]
+		if pedal == nil {
+			pedal = newPedalSignal(deviceID)
+			Midis.PedalStatus[deviceID] = pedal
+		}
+		pedal.DownKeys[midiKey] = ch
+		midiMu.Unlock()
+
+		emitKeyboardEvent("down", midiKey, vel, ch)
+		emitKeyboardEvent("pressedDown", midiKey, vel, ch)
+
+	case msg.GetNoteEnd(&ch, &key):
+		midiKey := midi.Note(key).Value()
+		shouldReleaseNow := true
+
+		midiMu.Lock()
+		pedal := Midis.PedalStatus[deviceID]
+		if pedal == nil {
+			pedal = newPedalSignal(deviceID)
+			Midis.PedalStatus[deviceID] = pedal
+		}
+		delete(pedal.DownKeys, midiKey)
+		if pedal.DamperPedal {
+			shouldReleaseNow = false
+			if !containsUint8(pedal.DamperPedalKeys, midiKey) {
+				pedal.DamperPedalKeys = append(pedal.DamperPedalKeys, midiKey)
+			}
+		}
+		midiMu.Unlock()
+
+		emitKeyboardEvent("pressedUp", midiKey, 0, ch)
+
+		if shouldReleaseNow {
+			emitKeyboardEvent("up", midiKey, 0, ch)
+			Keyup(int32(ch), int32(key))
 		}
 
-		fmt.Println("midi listener stop")
-	}()
-	<-Midis.Listener.Down
+	case msg.GetControlChange(&ch, &con, &vel):
+		handlePedalMessage(deviceID, ch, con, vel)
+	}
+}
+
+func handlePedalMessage(deviceID int, channel, controller, velocity uint8) {
+	if controller != 64 && controller != 66 && controller != 67 {
+		return
+	}
+
+	var releaseKeys []uint8
+
+	midiMu.Lock()
+	pedal := Midis.PedalStatus[deviceID]
+	if pedal == nil {
+		pedal = newPedalSignal(deviceID)
+		Midis.PedalStatus[deviceID] = pedal
+	}
+
+	switch controller {
+	case 64:
+		pedal.DamperPedal = velocity > 0
+		if !pedal.DamperPedal {
+			for _, sustainedKey := range pedal.DamperPedalKeys {
+				if _, stillDown := pedal.DownKeys[sustainedKey]; !stillDown {
+					releaseKeys = append(releaseKeys, sustainedKey)
+				}
+			}
+			pedal.DamperPedalKeys = make([]uint8, 0)
+		}
+	case 66:
+		pedal.SostenutoPedal = velocity > 0
+	case 67:
+		pedal.SoftPedal = velocity > 0
+	}
+	pedalSnapshot := &PedalSingal{
+		DeviceID:       pedal.DeviceID,
+		DamperPedal:    pedal.DamperPedal,
+		SostenutoPedal: pedal.SostenutoPedal,
+		SoftPedal:      pedal.SoftPedal,
+	}
+	midiMu.Unlock()
+
+	for _, key := range releaseKeys {
+		emitKeyboardEvent("up", key, 0, channel)
+		Keyup(int32(channel), int32(key))
+	}
+
+	if App != nil {
+		App.Event.Emit("pedal", pedalSnapshot)
+	}
+}
+
+func emitKeyboardEvent(event string, key uint8, velocity uint8, channel uint8) {
+	if App == nil {
+		return
+	}
+	App.Event.Emit(event, &KeyboardSignal{Value: key, Velocity: velocity, Channel: channel})
+}
+
+func containsUint8(list []uint8, target uint8) bool {
+	for _, item := range list {
+		if item == target {
+			return true
+		}
+	}
+	return false
 }
 
 func (k *Keyboard) KeyboardPlay(key uint8) {
-	//fmt.Println("down:", key)
-	Keydown(0, int32(key), UserConfig.Volume)
+	k.KeyboardPlayWithVelocity(key, GetUserConfig().Velocity)
+}
 
-	if !Midis.Listener.Started || Midis.SelectedOutDevice == -1 {
+func (k *Keyboard) KeyboardPlayWithVelocity(key uint8, velocity uint8) {
+	config := GetUserConfig()
+	// 本地音源的响度使用 “音符力度 × 用户音量” 计算。
+	// 这样 MIDI 文件可以保留自身 velocity，同时主窗口音量滑块仍然能控制整体响度。
+	Keydown(0, int32(key), scaleVelocityByVolume(velocity, config.Volume))
+
+	midiMu.RLock()
+	selectedOut := Midis.SelectedOutDevice
+	outDevice, ok := Midis.OutMidiPool[selectedOut]
+	midiMu.RUnlock()
+	if !ok || selectedOut == -1 || outDevice.Device == nil {
 		return
 	}
-	noteOn := midi.NoteOn(uint8(Midis.SelectedOutDevice), key, UserConfig.Velocity)
-	if err := Midis.OutMidiPool[Midis.SelectedOutDevice].Device.Send(noteOn); err != nil {
-		fmt.Println(err)
+
+	noteOn := midi.NoteOn(config.MidiChannel, key, velocity)
+	if err := outDevice.Device.Send(noteOn); err != nil {
+		fmt.Println("发送 MIDI NoteOn 失败:", err)
 	}
+}
+
+func scaleVelocityByVolume(velocity uint8, volume int32) int32 {
+	if velocity == 0 || volume <= 0 {
+		return 0
+	}
+	if volume > 127 {
+		volume = 127
+	}
+	scaled := int32(velocity) * volume / 127
+	if scaled < 1 {
+		return 1
+	}
+	return scaled
 }
 
 func (k *Keyboard) KeyboardStop(key uint8) {
 	Keyup(0, int32(key))
 
-	if !Midis.Listener.Started || Midis.SelectedOutDevice == -1 {
+	config := GetUserConfig()
+	midiMu.RLock()
+	selectedOut := Midis.SelectedOutDevice
+	outDevice, ok := Midis.OutMidiPool[selectedOut]
+	midiMu.RUnlock()
+	if !ok || selectedOut == -1 || outDevice.Device == nil {
 		return
 	}
-	noteOff := midi.NoteOff(uint8(Midis.SelectedOutDevice), key)
-	if err := Midis.OutMidiPool[Midis.SelectedOutDevice].Device.Send(noteOff); err != nil {
-		fmt.Println(err)
+
+	noteOff := midi.NoteOff(config.MidiChannel, key)
+	if err := outDevice.Device.Send(noteOff); err != nil {
+		fmt.Println("发送 MIDI NoteOff 失败:", err)
 	}
 }
 
 func (k *Keyboard) MidiListenerStop() {
+	midiMu.Lock()
 	if !Midis.Listener.Started {
+		midiMu.Unlock()
 		return
 	}
-	Midis.Listener.Down <- true
-	close(Midis.Listener.Down)
+	stop := midiListenerStop
+	midiListenerStop = nil
 	Midis.Listener.Started = false
-	Midis.Listener.Down = make(chan bool)
+	midiMu.Unlock()
+
+	if stop != nil {
+		stop()
+	}
+	fmt.Println("midi listener stop")
 }
 
 func (k *Keyboard) ChangeDevice(deviceType string, deviceID int) bool {
-	if deviceType == "in" && len(Midis.InMidiPool) > deviceID {
+	midiMu.Lock()
+	defer midiMu.Unlock()
+
+	switch deviceType {
+	case "in":
+		if _, ok := Midis.InMidiPool[deviceID]; !ok {
+			return false
+		}
 		Midis.SelectedInDevice = deviceID
-	} else if deviceType == "out" && len(Midis.OutMidiPool) > deviceID {
+	case "out":
+		if _, ok := Midis.OutMidiPool[deviceID]; !ok {
+			return false
+		}
 		Midis.SelectedOutDevice = deviceID
-	} else {
+	default:
 		return false
 	}
-	fmt.Println(Midis)
 	return true
+}
+
+func (k *Keyboard) AllNotesOff() {
+	AllSynthNotesOff()
+
+	config := GetUserConfig()
+	midiMu.RLock()
+	selectedOut := Midis.SelectedOutDevice
+	outDevice, ok := Midis.OutMidiPool[selectedOut]
+	midiMu.RUnlock()
+
+	if ok && selectedOut != -1 && outDevice.Device != nil {
+		for channel := uint8(0); channel < 16; channel++ {
+			// CC 123 = All Notes Off，CC 120 = All Sound Off。
+			_ = outDevice.Device.Send(midi.ControlChange(channel, 123, 0))
+			_ = outDevice.Device.Send(midi.ControlChange(channel, 120, 0))
+		}
+		for key := uint8(0); key < 128; key++ {
+			_ = outDevice.Device.Send(midi.NoteOff(config.MidiChannel, key))
+		}
+	}
+
+	if App != nil {
+		App.Event.Emit("allNotesOff")
+	}
 }
 
 func ListenDevices() {

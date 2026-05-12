@@ -1,12 +1,16 @@
-
-import {createRouter, createWebHashHistory, createWebHistory} from "vue-router"
+import {createRouter, createWebHashHistory} from 'vue-router'
 
 const routes = [
-    // {
-    //     path: "",
-    //     name: "sandtable",
-    //     component: () => import("../components/Sandtable.vue"),
-    // },
+    {
+        path: '/',
+        name: 'main-window',
+        component: () => import('../views/MainWindow.vue'),
+    },
+    {
+        path: '/control',
+        name: 'control-center',
+        component: () => import('../views/ControlCenterWindow.vue'),
+    },
 ]
 
 const router = createRouter({
@@ -14,7 +18,7 @@ const router = createRouter({
     routes,
 })
 
-router.beforeEach((to,from,next)=>{
+router.beforeEach((to, from, next) => {
     next()
 })
 

@@ -5,9 +5,18 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 )
 
-var configFilePath = "config.json"
+const (
+	appName              = "Peirato's Piano"
+	defaultSoundFontPath = "./assets/Yamaha-Grand-Lite-v2.0.sf2"
+)
+
+var (
+	configFilePath = "config.json"
+	configMu       sync.RWMutex
+)
 
 type Color struct {
 	Label string `json:"label"`
@@ -22,14 +31,16 @@ type Window struct {
 }
 
 type Config struct {
-	Colors       map[string]Color `json:"colors"`
-	KeyLabel     string           `json:"keyLabel"`
-	KeyboardType int              `json:"keyboardType"`
-	Velocity     uint8            `json:"velocity"`
-	Opacity      int              `json:"opacity"`
-	Version      string           `json:"version"`
-	ShowPedal    bool             `json:"showPedal"`
-	Volume       int32            `json:"volume"`
+	Colors        map[string]Color `json:"colors"`
+	KeyLabel      string           `json:"keyLabel"`
+	KeyboardType  int              `json:"keyboardType"`
+	Velocity      uint8            `json:"velocity"`
+	Opacity       int              `json:"opacity"`
+	Version       string           `json:"version"`
+	ShowPedal     bool             `json:"showPedal"`
+	Volume        int32            `json:"volume"`
+	MidiChannel   uint8            `json:"midiChannel"`
+	SoundFontPath string           `json:"soundFontPath"`
 }
 
 var DefaultConfig = Config{
@@ -55,95 +66,155 @@ var DefaultConfig = Config{
 			Color: "#1054e7",
 		},
 	},
-	KeyLabel:     "octave_key",
-	KeyboardType: 0,
-	Velocity:     80,
-	Volume:       80,
-	Opacity:      100,
-	ShowPedal:    true,
+	KeyLabel:      "octave_key",
+	KeyboardType:  0,
+	Velocity:      80,
+	Volume:        80,
+	Opacity:       100,
+	ShowPedal:     true,
+	MidiChannel:   0,
+	SoundFontPath: "",
 }
 
-var UserConfig Config
+var UserConfig = DefaultConfig
 
-func LoadConfig(version string) {
+// LoadConfig 负责读取用户配置，并自动补齐旧配置里缺失的新字段。
+// 后续新增配置字段时，优先在 mergeConfigWithDefaults 中补默认值，避免旧用户升级后出现空字段。
+func LoadConfig(version string) error {
 	ucd, err := os.UserConfigDir()
 	if err != nil {
-		fmt.Println("获取用户配置目录失败:", err)
 		ucd = "./assets"
 	}
-	configFilePath = filepath.Join(ucd, "Peirato's Piano", "config.json")
-	var config Config
-	if _, err := os.Stat(configFilePath); os.IsNotExist(err) {
 
-		err := SaveConfig(DefaultConfig)
-		if err != nil {
-			fmt.Println("保存默认配置失败:", err)
+	configFilePath = filepath.Join(ucd, appName, "config.json")
+	config := DefaultConfig
+
+	if _, err := os.Stat(configFilePath); os.IsNotExist(err) {
+		config.Version = version
+		if saveErr := SaveConfig(config); saveErr != nil {
+			return fmt.Errorf("保存默认配置失败: %w", saveErr)
 		}
-		config = DefaultConfig
+		return nil
 	}
 
 	data, err := os.ReadFile(configFilePath)
 	if err != nil {
-		fmt.Println("读取配置文件失败:", err)
-		config = DefaultConfig
-	}
-
-	err = json.Unmarshal(data, &config)
-	if err != nil {
-		fmt.Println("解析配置文件失败:", err)
-		config = DefaultConfig
-	}
-
-	if config.Opacity < 20 {
-		config.Opacity = 100
-		err = SaveConfig(config)
-		fmt.Println(err)
-	}
-	if config.Version != version {
 		config.Version = version
-		err = SaveConfig(config)
-		fmt.Println(err)
+		UserConfig = config
+		return fmt.Errorf("读取配置文件失败: %w", err)
 	}
-	UserConfig = config
+
+	if err := json.Unmarshal(data, &config); err != nil {
+		config = DefaultConfig
+		config.Version = version
+		UserConfig = config
+		return fmt.Errorf("解析配置文件失败: %w", err)
+	}
+
+	config = mergeConfigWithDefaults(config)
+	config.Version = version
+
+	if config.Opacity < 20 || config.Opacity > 100 {
+		config.Opacity = DefaultConfig.Opacity
+	}
+	if config.Volume < 0 || config.Volume > 127 {
+		config.Volume = DefaultConfig.Volume
+	}
+	if config.MidiChannel > 15 {
+		config.MidiChannel = DefaultConfig.MidiChannel
+	}
+
+	return SaveConfig(config)
+}
+
+// mergeConfigWithDefaults 用于兼容旧版本 config.json。
+// 例如用户旧配置没有 midiChannel / soundFontPath 时，这里会补上安全默认值。
+func mergeConfigWithDefaults(config Config) Config {
+	merged := DefaultConfig
+	merged.KeyLabel = config.KeyLabel
+	merged.KeyboardType = config.KeyboardType
+	merged.Velocity = config.Velocity
+	merged.Opacity = config.Opacity
+	merged.Version = config.Version
+	merged.ShowPedal = config.ShowPedal
+	merged.Volume = config.Volume
+	merged.MidiChannel = config.MidiChannel
+	merged.SoundFontPath = config.SoundFontPath
+
+	merged.Colors = make(map[string]Color, len(DefaultConfig.Colors))
+	for key, value := range DefaultConfig.Colors {
+		merged.Colors[key] = value
+	}
+	for key, value := range config.Colors {
+		merged.Colors[key] = value
+	}
+
+	return merged
 }
 
 func SaveConfig(config Config) error {
+	configMu.Lock()
+	defer configMu.Unlock()
 
-	UserConfig = config
+	UserConfig = mergeConfigWithDefaults(config)
 
-	data, err := json.MarshalIndent(config, "", "  ")
+	data, err := json.MarshalIndent(UserConfig, "", "  ")
 	if err != nil {
-		return fmt.Errorf("序列化 JSON 失败: %v", err)
+		return fmt.Errorf("序列化 JSON 失败: %w", err)
 	}
 
 	dir := filepath.Dir(configFilePath)
 	if dir != "" {
 		if err := os.MkdirAll(dir, 0755); err != nil {
-			return fmt.Errorf("创建目录失败: %v", err)
+			return fmt.Errorf("创建目录失败: %w", err)
 		}
 	}
 
-	err = os.WriteFile(configFilePath, data, 0644)
-	if err != nil {
-		return fmt.Errorf("写入文件失败: %v", err)
+	if err := os.WriteFile(configFilePath, data, 0644); err != nil {
+		return fmt.Errorf("写入文件失败: %w", err)
 	}
 
 	return nil
 }
 
-func (k *Keyboard) SendConfig() Config {
+func GetUserConfig() Config {
+	configMu.RLock()
+	defer configMu.RUnlock()
 	return UserConfig
+}
+
+func ResolveSoundFontPath() string {
+	config := GetUserConfig()
+	if config.SoundFontPath != "" {
+		if _, err := os.Stat(config.SoundFontPath); err == nil {
+			return config.SoundFontPath
+		}
+	}
+	return defaultSoundFontPath
+}
+
+func (k *Keyboard) SendConfig() Config {
+	return GetUserConfig()
 }
 
 func (k *Keyboard) ReceiveConfig(config Config) (bool, string) {
 	if err := SaveConfig(config); err != nil {
 		return false, err.Error()
-	} else {
-		return true, ""
 	}
+	EmitConfigChanged()
+	return true, ""
 }
 
 func (k *Keyboard) ResetConfig() Config {
-	SaveConfig(DefaultConfig)
-	return DefaultConfig
+	resetConfig := DefaultConfig
+	resetConfig.Version = GetUserConfig().Version
+	_ = SaveConfig(resetConfig)
+	EmitConfigChanged()
+	return resetConfig
+}
+
+func EmitConfigChanged() {
+	if App != nil {
+		App.Event.Emit("configChanged", GetUserConfig())
+	}
 }

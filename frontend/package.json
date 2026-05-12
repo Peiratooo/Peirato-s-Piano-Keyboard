@@ -12,17 +12,17 @@
   "dependencies": {
     "@ckpack/vue-color": "^1.6.0",
     "@tonejs/midi": "^2.0.28",
-    "axios": "1.7.4",
-    "pinia": "^2.3.0",
-    "tonal": "^6.4.2",
-    "vue": "^3.5.13",
-    "vue-router": "^4.5.0"
+    "axios": "^1.16.0",
+    "pinia": "^3.0.4",
+    "tonal": "^6.4.3",
+    "vue": "^3.5.34",
+    "vue-router": "^5.0.6"
   },
   "devDependencies": {
-    "@vitejs/plugin-vue": "^5.2.1",
-    "@wailsio/runtime": "^3.0.0-alpha.69",
-    "naive-ui": "^2.40.4",
-    "sass-embedded": "^1.82.0",
-    "vite": "^6.1.0"
+    "@vitejs/plugin-vue": "^6.0.6",
+    "@wailsio/runtime": "^3.0.0-alpha.79",
+    "naive-ui": "^2.44.1",
+    "sass-embedded": "^1.99.0",
+    "vite": "^8.0.12"
   }
 }

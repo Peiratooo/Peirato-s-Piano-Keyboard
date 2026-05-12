@@ -1,25 +1,4 @@
 
-
-# 💖 [支持我们的新产品 Beautifolder](https://store.steampowered.com/app/3948380/Beautifolder/) ✨
-
-Beautifolder 让您轻松美化和个性化文件夹🗂️。它支持快速更换文件夹图标🎨、批量管理📂以及多种风格的主题图标🖼️。您可以直接使用内置的精美图标，也可以发挥创意💡，制作属于自己的专属图标，并与他人分享🌟。
-
-## 主要功能 🚀
-
-- **一键更换文件夹图标** 🖱️：打造整齐美观的桌面💻。  
-- **丰富的主题图标库** 📚：轻松找到心仪风格🎯。  
-- **支持自制图标** ✏️：释放您的创意灵感🌈。  
-- **批量操作** ⚡：高效管理海量文件夹📂📂📂。  
-- **分享与下载社区图标资源** 🌐：让个性化更简单💖。  
-
-Beautifolder 专注于为您的桌面和文件系统带来全新体验，让日常操作更美观、更有乐趣🎉。
-
-## [点击前往Steam商店页面](https://store.steampowered.com/app/3948380/Beautifolder/)
-
-[<img src="./beautifolder.png" style="zoom: 67%;" />](https://store.steampowered.com/app/3948380/Beautifolder/)
-
----
-
 # 🎹 Peirato's Piano
 
 ✨ 一个基于 **Wails3 + Vue3** 开发的跨平台轻量桌面钢琴程序。  

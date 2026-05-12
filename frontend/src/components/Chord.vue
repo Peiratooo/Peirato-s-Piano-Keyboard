@@ -1,97 +1,59 @@
 <template>
     <transition enter-active-class="blurFadeIN" leave-active-class="blurFadeOUT">
-        <div class="chord" v-if="Object.keys(chord).length > 0 && chord.type==='chord'">
-
+        <div class="chord" v-if="Object.keys(displayChord).length > 0 && displayChord.type === 'chord'">
             <div class="top">
-                <div class="left">
-                    {{ chord.chord }}
-                </div>
+                <div class="left">{{ displayChord.chord }}</div>
                 <div class="right">
-                    <div class="symbols" v-if="chord.alternativeSymbols && chord.alternativeSymbols.length > 0">
-                        <div class="symbol" style="white-space: nowrap"
-                             v-for="(item,index) in chord.alternativeSymbols.slice(0,3)">
+                    <div class="symbols" v-if="displayChord.alternativeSymbols && displayChord.alternativeSymbols.length > 0">
+                        <div class="symbol" v-for="item in displayChord.alternativeSymbols.slice(0, 3)" :key="item">
                             {{ item }}
                         </div>
                     </div>
-
                     <div class="synonym-notes" v-else>
-                        <div class="notes">
-                            {{ chord.notes?.join(" ") }}
-                        </div>
-
+                        <div class="notes">{{ displayChord.notes?.join(' ') }}</div>
                     </div>
-
-                    <div class="cn">
-                        {{ chord.chinese }}
-                    </div>
+                    <div class="cn">{{ displayChord.chinese }}</div>
                 </div>
             </div>
-
-
             <div class="bottom">
-                <div class="en">
-                    {{ chord.name }}
-                </div>
+                <div class="en">{{ displayChord.name }}</div>
             </div>
         </div>
-        <div class="note" v-else-if="Object.keys(chord).length > 0 && chord.type==='note'">
-            {{chord.note}}
+
+        <div class="note" v-else-if="Object.keys(displayChord).length > 0 && displayChord.type === 'note'">
+            {{ displayChord.note }}
+        </div>
+
+        <div class="note unknown" v-else-if="Object.keys(displayChord).length > 0 && displayChord.type === 'unknown'">
+            {{ displayChord.notes.join(' ') }}
         </div>
     </transition>
 </template>
 
 <script setup>
-import {computed, inject} from "vue";
+import {computed, inject, ref, watch} from 'vue'
+import {detectChord} from '../services/chordEngine'
 
-const store = inject("store")
+const store = inject('store')
 
-function getSuitableChord(noteList = []) {
+// rawChord 完全实时；displayChord 做轻微防抖，避免用户按下和弦时因为手指先后落键而频繁闪烁。
+const rawChord = computed(() => detectChord(store.pressedKey, store.chordsname))
+const displayChord = ref({})
+let debounceTimer = null
 
-    if (noteList.length === 1) {
-        return noteList[0]
-    }
-    const chordNoteList = [store.rootNote, "C", "D", "E", "F", "G", "A", "B"]
-    let rest = []
-    for (let i of noteList) {
-        if (i.length === 1) {
-            for (let n of chordNoteList) {
-                if (i.startsWith(n)) {
-                    return i
-                }
-            }
-        } else {
-            rest.push(i)
-        }
-    }
-    for (let i of rest) {
-        for (let n of chordNoteList) {
-            if (i.startsWith(n)) {
-                return i
-            }
-        }
-    }
-}
-
-const chord = computed(() => {
-    if (store.activeNotes.length === 1) {
-        return {
-            type:"note",
-            note:store.noteName[store.activeNotes[0]]
-        }
-    } else {
-        const activeKeys = store.activeNotes.join(" ")
-        if (activeKeys in store.chordsname) {
-            return {type:"chord",...store.chordsname[activeKeys][getSuitableChord(Object.keys(store.chordsname[activeKeys] || {}))]}
-        } else {
-            return {}
-        }
-    }
-
-})
+watch(
+    rawChord,
+    (value) => {
+        clearTimeout(debounceTimer)
+        debounceTimer = setTimeout(() => {
+            displayChord.value = value
+        }, 40)
+    },
+    {immediate: true, deep: true},
+)
 </script>
 
 <style lang="scss" scoped>
-
 .chord,.note {
     background-color: #eeeeee55;
     border-radius: 4px;
@@ -118,23 +80,24 @@ const chord = computed(() => {
             display: flex;
             align-items: flex-end;
             flex-direction: column;
-
         }
     }
 }
+
 .note {
     font-size: 32px;
     padding: 12px 16px;
     color: #333333;
 }
+
+.unknown {
+    font-size: 18px;
+}
+
 .synonym-notes {
     font-size: 12px;
     display: flex;
     justify-content: space-between;
-}
-
-.synonym {
-    color: #666;
 }
 
 .symbols {
@@ -142,10 +105,7 @@ const chord = computed(() => {
     font-size: 12px;
     gap: 8px;
     color: #333333;
-}
-
-.en {
-    font-size: 10px;
+    white-space: nowrap;
 }
 
 .en, .cn {

@@ -6,10 +6,6 @@
 // @ts-ignore: Unused imports
 import { Create as $Create } from "@wailsio/runtime";
 
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as drivers$0 from "../../gitlab.com/gomidi/midi/v2/drivers/models.js";
-
 export class Color {
     /**
      * Creates a new Color instance.
@@ -54,7 +50,7 @@ export class Config {
         if (!("colors" in $$source)) {
             /**
              * @member
-             * @type {{ [_: string]: Color }}
+             * @type {{ [_ in string]?: Color }}
              */
             this["colors"] = {};
         }
@@ -107,6 +103,20 @@ export class Config {
              */
             this["volume"] = 0;
         }
+        if (!("midiChannel" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["midiChannel"] = 0;
+        }
+        if (!("soundFontPath" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["soundFontPath"] = "";
+        }
 
         Object.assign(this, $$source);
     }
@@ -126,19 +136,317 @@ export class Config {
     }
 }
 
+/**
+ * FollowGroup 是跟弹模式的后端分组结果。
+ * 开始时间相近的音符会合并为一组，用户需要一次性按下这一组音。
+ */
+export class FollowGroup {
+    /**
+     * Creates a new FollowGroup instance.
+     * @param {Partial<FollowGroup>} [$$source = {}] - The source object to create the FollowGroup.
+     */
+    constructor($$source = {}) {
+        if (!("index" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["index"] = 0;
+        }
+        if (!("time" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["time"] = 0;
+        }
+        if (!("duration" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["duration"] = 0;
+        }
+        if (!("notes" in $$source)) {
+            /**
+             * @member
+             * @type {MidiNote[]}
+             */
+            this["notes"] = [];
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new FollowGroup instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {FollowGroup}
+     */
+    static createFrom($$source = {}) {
+        const $$createField3_0 = $$createType3;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("notes" in $$parsedSource) {
+            $$parsedSource["notes"] = $$createField3_0($$parsedSource["notes"]);
+        }
+        return new FollowGroup(/** @type {Partial<FollowGroup>} */($$parsedSource));
+    }
+}
+
+/**
+ * FollowPracticeOptions 是跟弹练习计划的输入配置。
+ * 播放器本身始终按完整 MIDI 播放；区间只作用于跟弹练习，避免播放器职责被拉得过复杂。
+ */
+export class FollowPracticeOptions {
+    /**
+     * Creates a new FollowPracticeOptions instance.
+     * @param {Partial<FollowPracticeOptions>} [$$source = {}] - The source object to create the FollowPracticeOptions.
+     */
+    constructor($$source = {}) {
+        if (!("threshold" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["threshold"] = 0;
+        }
+        if (!("start" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["start"] = 0;
+        }
+        if (!("end" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["end"] = 0;
+        }
+        if (!("practiceHand" in $$source)) {
+            /**
+             * single | left | right | both
+             * @member
+             * @type {string}
+             */
+            this["practiceHand"] = "";
+        }
+        if (!("autoPlayOtherHand" in $$source)) {
+            /**
+             * 练右手时是否自动播放左手，反之亦然
+             * @member
+             * @type {boolean}
+             */
+            this["autoPlayOtherHand"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new FollowPracticeOptions instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {FollowPracticeOptions}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new FollowPracticeOptions(/** @type {Partial<FollowPracticeOptions>} */($$parsedSource));
+    }
+}
+
+/**
+ * FollowPracticePlan 是跟弹模式的完整计划。
+ * 前端只负责根据这个结构展示、判断用户按键、切换步骤，不需要再理解轨道和左右手推断细节。
+ */
+export class FollowPracticePlan {
+    /**
+     * Creates a new FollowPracticePlan instance.
+     * @param {Partial<FollowPracticePlan>} [$$source = {}] - The source object to create the FollowPracticePlan.
+     */
+    constructor($$source = {}) {
+        if (!("steps" in $$source)) {
+            /**
+             * @member
+             * @type {FollowPracticeStep[]}
+             */
+            this["steps"] = [];
+        }
+        if (!("assignments" in $$source)) {
+            /**
+             * @member
+             * @type {TrackHandAssignment[]}
+             */
+            this["assignments"] = [];
+        }
+        if (!("availableHands" in $$source)) {
+            /**
+             * @member
+             * @type {string[]}
+             */
+            this["availableHands"] = [];
+        }
+        if (!("practiceHand" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["practiceHand"] = "";
+        }
+        if (!("singleTrackOnly" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["singleTrackOnly"] = false;
+        }
+        if (!("start" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["start"] = 0;
+        }
+        if (!("end" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["end"] = 0;
+        }
+        if (!("autoPlayOtherHand" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["autoPlayOtherHand"] = false;
+        }
+        if (!("totalPracticeNotes" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["totalPracticeNotes"] = 0;
+        }
+        if (!("totalAutoPlayNotes" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["totalAutoPlayNotes"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new FollowPracticePlan instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {FollowPracticePlan}
+     */
+    static createFrom($$source = {}) {
+        const $$createField0_0 = $$createType5;
+        const $$createField1_0 = $$createType7;
+        const $$createField2_0 = $$createType8;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("steps" in $$parsedSource) {
+            $$parsedSource["steps"] = $$createField0_0($$parsedSource["steps"]);
+        }
+        if ("assignments" in $$parsedSource) {
+            $$parsedSource["assignments"] = $$createField1_0($$parsedSource["assignments"]);
+        }
+        if ("availableHands" in $$parsedSource) {
+            $$parsedSource["availableHands"] = $$createField2_0($$parsedSource["availableHands"]);
+        }
+        return new FollowPracticePlan(/** @type {Partial<FollowPracticePlan>} */($$parsedSource));
+    }
+}
+
+/**
+ * FollowPracticeStep 是跟弹模式真正消费的一步。
+ * PracticeNotes 是用户需要按下的音；AutoPlayNotes 是非练习声部，会由程序自动播放声音。
+ */
+export class FollowPracticeStep {
+    /**
+     * Creates a new FollowPracticeStep instance.
+     * @param {Partial<FollowPracticeStep>} [$$source = {}] - The source object to create the FollowPracticeStep.
+     */
+    constructor($$source = {}) {
+        if (!("index" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["index"] = 0;
+        }
+        if (!("time" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["time"] = 0;
+        }
+        if (!("duration" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["duration"] = 0;
+        }
+        if (!("practiceNotes" in $$source)) {
+            /**
+             * @member
+             * @type {MidiNote[]}
+             */
+            this["practiceNotes"] = [];
+        }
+        if (!("autoPlayNotes" in $$source)) {
+            /**
+             * @member
+             * @type {MidiNote[]}
+             */
+            this["autoPlayNotes"] = [];
+        }
+        if (!("allNotes" in $$source)) {
+            /**
+             * @member
+             * @type {MidiNote[]}
+             */
+            this["allNotes"] = [];
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new FollowPracticeStep instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {FollowPracticeStep}
+     */
+    static createFrom($$source = {}) {
+        const $$createField3_0 = $$createType3;
+        const $$createField4_0 = $$createType3;
+        const $$createField5_0 = $$createType3;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("practiceNotes" in $$parsedSource) {
+            $$parsedSource["practiceNotes"] = $$createField3_0($$parsedSource["practiceNotes"]);
+        }
+        if ("autoPlayNotes" in $$parsedSource) {
+            $$parsedSource["autoPlayNotes"] = $$createField4_0($$parsedSource["autoPlayNotes"]);
+        }
+        if ("allNotes" in $$parsedSource) {
+            $$parsedSource["allNotes"] = $$createField5_0($$parsedSource["allNotes"]);
+        }
+        return new FollowPracticeStep(/** @type {Partial<FollowPracticeStep>} */($$parsedSource));
+    }
+}
+
 export class InMidiDevice {
     /**
      * Creates a new InMidiDevice instance.
      * @param {Partial<InMidiDevice>} [$$source = {}] - The source object to create the InMidiDevice.
      */
     constructor($$source = {}) {
-        if (!("device" in $$source)) {
-            /**
-             * @member
-             * @type {drivers$0.In}
-             */
-            this["device"] = null;
-        }
         if (!("name" in $$source)) {
             /**
              * @member
@@ -177,14 +485,14 @@ export class MidiDevices {
         if (!("inMidiPool" in $$source)) {
             /**
              * @member
-             * @type {{ [_: `${number}`]: InMidiDevice }}
+             * @type {{ [_ in `${number}`]?: InMidiDevice }}
              */
             this["inMidiPool"] = {};
         }
         if (!("outMidiPool" in $$source)) {
             /**
              * @member
-             * @type {{ [_: `${number}`]: OutMidiDevice }}
+             * @type {{ [_ in `${number}`]?: OutMidiDevice }}
              */
             this["outMidiPool"] = {};
         }
@@ -205,7 +513,7 @@ export class MidiDevices {
         if (!("pedalStatus" in $$source)) {
             /**
              * @member
-             * @type {{ [_: `${number}`]: PedalSingal | null }}
+             * @type {{ [_ in `${number}`]?: PedalSingal | null }}
              */
             this["pedalStatus"] = {};
         }
@@ -226,9 +534,9 @@ export class MidiDevices {
      * @returns {MidiDevices}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType3;
-        const $$createField1_0 = $$createType5;
-        const $$createField4_0 = $$createType8;
+        const $$createField0_0 = $$createType10;
+        const $$createField1_0 = $$createType12;
+        const $$createField4_0 = $$createType15;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("inMidiPool" in $$parsedSource) {
             $$parsedSource["inMidiPool"] = $$createField0_0($$parsedSource["inMidiPool"]);
@@ -240,6 +548,314 @@ export class MidiDevices {
             $$parsedSource["pedalStatus"] = $$createField4_0($$parsedSource["pedalStatus"]);
         }
         return new MidiDevices(/** @type {Partial<MidiDevices>} */($$parsedSource));
+    }
+}
+
+/**
+ * MidiFileInfo 是前端和后端共享的 MIDI 文件模型。
+ * 注意：这里不要直接暴露第三方 MIDI 库的结构，后续无论替换解析实现还是优化播放器，前端都不用跟着改。
+ */
+export class MidiFileInfo {
+    /**
+     * Creates a new MidiFileInfo instance.
+     * @param {Partial<MidiFileInfo>} [$$source = {}] - The source object to create the MidiFileInfo.
+     */
+    constructor($$source = {}) {
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("duration" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["duration"] = 0;
+        }
+        if (!("ppq" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["ppq"] = 0;
+        }
+        if (!("bpm" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["bpm"] = 0;
+        }
+        if (!("tracks" in $$source)) {
+            /**
+             * @member
+             * @type {MidiTrackInfo[]}
+             */
+            this["tracks"] = [];
+        }
+        if (!("notes" in $$source)) {
+            /**
+             * @member
+             * @type {MidiNote[]}
+             */
+            this["notes"] = [];
+        }
+        if (!("totalNotes" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["totalNotes"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new MidiFileInfo instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {MidiFileInfo}
+     */
+    static createFrom($$source = {}) {
+        const $$createField4_0 = $$createType17;
+        const $$createField5_0 = $$createType3;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("tracks" in $$parsedSource) {
+            $$parsedSource["tracks"] = $$createField4_0($$parsedSource["tracks"]);
+        }
+        if ("notes" in $$parsedSource) {
+            $$parsedSource["notes"] = $$createField5_0($$parsedSource["notes"]);
+        }
+        return new MidiFileInfo(/** @type {Partial<MidiFileInfo>} */($$parsedSource));
+    }
+}
+
+/**
+ * MidiNote 是播放器、跟弹模式、琴键高亮共同消费的音符结构。
+ * 时间单位统一使用秒；velocity 已归一到 1-127。
+ */
+export class MidiNote {
+    /**
+     * Creates a new MidiNote instance.
+     * @param {Partial<MidiNote>} [$$source = {}] - The source object to create the MidiNote.
+     */
+    constructor($$source = {}) {
+        if (!("id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["id"] = "";
+        }
+        if (!("midi" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["midi"] = 0;
+        }
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("velocity" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["velocity"] = 0;
+        }
+        if (!("start" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["start"] = 0;
+        }
+        if (!("duration" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["duration"] = 0;
+        }
+        if (!("end" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["end"] = 0;
+        }
+        if (!("trackIndex" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["trackIndex"] = 0;
+        }
+        if (!("trackName" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["trackName"] = "";
+        }
+        if (!("channel" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["channel"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new MidiNote instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {MidiNote}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new MidiNote(/** @type {Partial<MidiNote>} */($$parsedSource));
+    }
+}
+
+/**
+ * MidiPlaybackState 是后端播放器暴露给前端的轻量状态。
+ * 前端只需要用它渲染进度、按钮状态和错误信息；真正调度由 Go 负责。
+ */
+export class MidiPlaybackState {
+    /**
+     * Creates a new MidiPlaybackState instance.
+     * @param {Partial<MidiPlaybackState>} [$$source = {}] - The source object to create the MidiPlaybackState.
+     */
+    constructor($$source = {}) {
+        if (!("fileName" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["fileName"] = "";
+        }
+        if (!("duration" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["duration"] = 0;
+        }
+        if (!("currentTime" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["currentTime"] = 0;
+        }
+        if (!("playbackRate" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["playbackRate"] = 0;
+        }
+        if (!("status" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["status"] = "";
+        }
+        if (!("totalNotes" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["totalNotes"] = 0;
+        }
+        if (!("error" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["error"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new MidiPlaybackState instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {MidiPlaybackState}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new MidiPlaybackState(/** @type {Partial<MidiPlaybackState>} */($$parsedSource));
+    }
+}
+
+/**
+ * MidiTrackInfo 只保存设置页需要展示的轨道概要。
+ * 轨道内的详细音符统一放在 MidiFileInfo.Notes，避免重复传输太多数据。
+ */
+export class MidiTrackInfo {
+    /**
+     * Creates a new MidiTrackInfo instance.
+     * @param {Partial<MidiTrackInfo>} [$$source = {}] - The source object to create the MidiTrackInfo.
+     */
+    constructor($$source = {}) {
+        if (!("index" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["index"] = 0;
+        }
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("noteCount" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["noteCount"] = 0;
+        }
+        if (!("notes" in $$source)) {
+            /**
+             * @member
+             * @type {MidiNote[]}
+             */
+            this["notes"] = [];
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new MidiTrackInfo instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {MidiTrackInfo}
+     */
+    static createFrom($$source = {}) {
+        const $$createField3_0 = $$createType3;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("notes" in $$parsedSource) {
+            $$parsedSource["notes"] = $$createField3_0($$parsedSource["notes"]);
+        }
+        return new MidiTrackInfo(/** @type {Partial<MidiTrackInfo>} */($$parsedSource));
     }
 }
 
@@ -301,7 +917,7 @@ export class PedalSingal {
         }
         if (!("sostenutoPedal" in $$source)) {
             /**
-             * 消音踏板 66
+             * 持音踏板 66
              * @member
              * @type {boolean}
              */
@@ -330,13 +946,132 @@ export class PedalSingal {
     }
 }
 
+export class SoundFontInfo {
+    /**
+     * Creates a new SoundFontInfo instance.
+     * @param {Partial<SoundFontInfo>} [$$source = {}] - The source object to create the SoundFontInfo.
+     */
+    constructor($$source = {}) {
+        if (!("loaded" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["loaded"] = false;
+        }
+        if (!("path" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["path"] = "";
+        }
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("error" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["error"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new SoundFontInfo instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {SoundFontInfo}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new SoundFontInfo(/** @type {Partial<SoundFontInfo>} */($$parsedSource));
+    }
+}
+
+/**
+ * TrackHandAssignment 是 Go 侧根据轨道平均音高推断出的左右手归属。
+ * 多数钢琴 MIDI 会把左右手分在不同轨道：平均音高更低的轨道归左手，更高的轨道归右手。
+ * 如果 MIDI 只有一个轨道，则强制为 single，前端也只允许单手练习。
+ */
+export class TrackHandAssignment {
+    /**
+     * Creates a new TrackHandAssignment instance.
+     * @param {Partial<TrackHandAssignment>} [$$source = {}] - The source object to create the TrackHandAssignment.
+     */
+    constructor($$source = {}) {
+        if (!("trackIndex" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["trackIndex"] = 0;
+        }
+        if (!("trackName" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["trackName"] = "";
+        }
+        if (!("noteCount" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["noteCount"] = 0;
+        }
+        if (!("averageMidi" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["averageMidi"] = 0;
+        }
+        if (!("hand" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["hand"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new TrackHandAssignment instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {TrackHandAssignment}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new TrackHandAssignment(/** @type {Partial<TrackHandAssignment>} */($$parsedSource));
+    }
+}
+
 // Private type creation functions
 const $$createType0 = Color.createFrom;
 const $$createType1 = $Create.Map($Create.Any, $$createType0);
-const $$createType2 = InMidiDevice.createFrom;
-const $$createType3 = $Create.Map($Create.Any, $$createType2);
-const $$createType4 = OutMidiDevice.createFrom;
-const $$createType5 = $Create.Map($Create.Any, $$createType4);
-const $$createType6 = PedalSingal.createFrom;
-const $$createType7 = $Create.Nullable($$createType6);
-const $$createType8 = $Create.Map($Create.Any, $$createType7);
+const $$createType2 = MidiNote.createFrom;
+const $$createType3 = $Create.Array($$createType2);
+const $$createType4 = FollowPracticeStep.createFrom;
+const $$createType5 = $Create.Array($$createType4);
+const $$createType6 = TrackHandAssignment.createFrom;
+const $$createType7 = $Create.Array($$createType6);
+const $$createType8 = $Create.Array($Create.Any);
+const $$createType9 = InMidiDevice.createFrom;
+const $$createType10 = $Create.Map($Create.Any, $$createType9);
+const $$createType11 = OutMidiDevice.createFrom;
+const $$createType12 = $Create.Map($Create.Any, $$createType11);
+const $$createType13 = PedalSingal.createFrom;
+const $$createType14 = $Create.Nullable($$createType13);
+const $$createType15 = $Create.Map($Create.Any, $$createType14);
+const $$createType16 = MidiTrackInfo.createFrom;
+const $$createType17 = $Create.Array($$createType16);
