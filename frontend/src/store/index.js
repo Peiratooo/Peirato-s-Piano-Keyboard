@@ -34,7 +34,7 @@ export const data = defineStore('data', {
             hintKey: {},
             wrongKey: {},
 
-            // player 保存 MIDI 练习中心的基础状态。解析和播放调度统一由 Go / Wails 服务负责。
+            // player 保存 MIDI 独立窗口的播放基础状态。解析和播放调度统一由 Go / Wails 服务负责。
             player: createInitialPlayerState(),
             // soundFontInfo 由后端音源服务维护，设置中心只负责展示和触发 reload / restore。
             soundFontInfo: {

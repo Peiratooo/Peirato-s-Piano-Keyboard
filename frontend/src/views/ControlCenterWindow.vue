@@ -2,8 +2,8 @@
     <div class="control-window">
         <div class="titlebar">
             <div>
-                <div class="title">Peirato's Piano 设置中心</div>
-                <div class="subtitle">设备、键盘、音源、MIDI 播放与后续跟弹功能都会在这里集中管理。</div>
+                <div class="title">Peirato's Piano Keyboard 设置</div>
+                <div class="subtitle">设备、键盘、音源和外观会在这里集中管理；MIDI 播放 / 练习已移到独立窗口。</div>
             </div>
             <n-tag size="small" :bordered="false" type="info">v{{ store.config.version || '-' }}</n-tag>
         </div>

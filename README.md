@@ -41,6 +41,10 @@ wails3 task release
 
 *注意：构建前需安装 [Wails 3](https://wails.io/) 和 Go 环境。*
 
+## 🧭 架构与排障
+
+项目的启动流程、核心函数职责、MIDI/音源/练习流程和常见问题排查见 [架构文档](./docs/ARCHITECTURE.md)。
+
 ---
 
 ## 📜 许可证

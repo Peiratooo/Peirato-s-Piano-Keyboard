@@ -220,7 +220,7 @@ wails3 dev
 
 1. **设置中心菜单合并**
    - 原来的 `MIDI 播放` 与 `跟弹模式` 合并为 `MIDI 练习`。
-   - 新增 `frontend/src/components/settings/MidiPracticePanel.vue`。
+   - 新增 `frontend/src/views/MidiWindow.vue`。
    - `Setting.vue` 只挂载一个练习中心页面，减少用户在两个菜单之间切换。
 
 2. **练习中心流程重组**
@@ -289,3 +289,57 @@ wails3 generate bindings
 ```
 
 否则旧的 `frontend/bindings` 里不会包含 `OpenControlCenter / AllNotesOff / LoadMidiFileBase64 / BuildFollowPracticePlan / PlayFollowAutoNotes` 等新方法。
+
+## Step 6 - MIDI 独立窗口反黑箱回查补丁
+
+本轮不是新增大功能，而是按“反黑箱”方式回看上一轮改动是否闭环。
+
+### 已补齐
+
+1. **已保存 MIDI 的自动加载**
+   - `MidiWindow.vue` 在 `onMounted` 时会自动加载 MIDI 目录中的当前选中项。
+   - 避免出现“左侧已经选中一首 MIDI，但右侧状态为空”的黑箱体验。
+
+2. **移除当前 MIDI 后的状态清理**
+   - 移除当前选中 MIDI 时会先停止播放 / 练习，再重置 player 状态。
+   - 如果列表里还有下一首，会自动尝试加载下一首；不会继续显示已删除记录的旧播放状态。
+
+3. **练习模式暂停 / 继续语义修正**
+   - 练习中点击主按钮现在是暂停，不再直接停止整段练习。
+   - 暂停会保留当前步骤和提示键；继续时从当前步骤恢复。
+
+4. **练习进度同步**
+   - 跟弹练习每进入一步时，会把该步骤时间写入 `store.player.currentTime`。
+   - 进度条不再只服务普通播放，也能反映练习步骤推进。
+
+5. **锚点变化后的练习计划重建**
+   - 左右锚点变化会重新生成练习计划。
+   - 如果正在练习，会先停止旧练习，避免区间变了但提示音仍沿用旧计划。
+
+6. **当前步骤完成后的轻反馈**
+   - 用户按对当前步骤后，练习卡片会出现一次轻微成功反馈。
+
+### 仍需本地闭环
+
+1. **Wails bindings 必须重新生成**
+   - Go 侧已经新增 `CheckMidiPathExists` 和 `LoadMidiFileFromPath`。
+   - 当前压缩包里的 `frontend/bindings/main/service/keyboard.js` 仍是旧绑定文件，没有这两个方法。
+   - 必须在本地执行：
+
+```bash
+wails3 generate bindings
+```
+
+2. **前端依赖需要本地重装**
+   - 压缩包不应该依赖已打包的 `node_modules`。
+   - 本地应执行：
+
+```bash
+cd frontend
+npm install
+npm run build
+```
+
+3. **绝对路径导入方式仍建议继续增强**
+   - 当前实现优先读取 WebView `File.path`。
+   - 如果某些平台的前端 `<input type=file>` 不返回绝对路径，应增加 Go/Wails 原生文件选择入口，直接由后端返回绝对路径。

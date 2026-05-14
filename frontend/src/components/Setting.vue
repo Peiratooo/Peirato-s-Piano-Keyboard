@@ -168,12 +168,11 @@
                     </div>
 
                     <div class="tip-box">
-                        当前不使用后端原生文件选择器：文件由前端选择，然后以 base64 传给 Go。这样后续 MIDI 文件和音源文件的导入方式保持一致。
+                        当前不使用后端原生文件选择器：文件由前端选择，然后以 base64 传给 Go。MIDI 播放 / 练习不再放在设置中心，已迁移到独立长条窗口。
                     </div>
                 </div>
             </section>
 
-            <MidiPracticePanel v-else-if="store.controlMenu === 'practice'" />
 
             <section v-else-if="store.controlMenu === 'about'" class="content-card about-card">
                 <Author/>
@@ -199,7 +198,6 @@ import {Chrome} from '@ckpack/vue-color'
 import {
     NButton,
     NDrawer,
-    NInput,
     NInputNumber,
     NTag,
     NRadioButton,
@@ -211,7 +209,6 @@ import {
 import ExampleKeyboard from './ExampleKeyboard.vue'
 import ExamplePedal from './ExamplePedal.vue'
 import Author from './Author.vue'
-import MidiPracticePanel from './settings/MidiPracticePanel.vue'
 import {readFileAsBase64} from '../services/backendMidiService'
 
 const store = inject('store')
@@ -232,7 +229,6 @@ const menus = [
     {key: 'keyboard', label: '键盘显示', icon: '🎹'},
     {key: 'appearance', label: '外观主题', icon: '🎨'},
     {key: 'soundfont', label: '音源管理', icon: '🎧'},
-    {key: 'practice', label: 'MIDI 练习', icon: '✨'},
     {key: 'about', label: '关于软件', icon: 'i'},
 ]
 

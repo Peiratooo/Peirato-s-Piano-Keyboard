@@ -7,12 +7,14 @@ import (
 	"runtime"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
 var (
 	App        *application.App
 	PianoWin   *application.WebviewWindow
 	ControlWin *application.WebviewWindow
+	MidiWin    *application.WebviewWindow
 	PRODUCTION = false
 )
 
@@ -104,8 +106,12 @@ func (k *Keyboard) OpenControlCenter() {
 		return
 	}
 
-	// Wails v3 alpha 的窗口生命周期 API 还在变化；当前先保持简单：点击时创建设置中心窗口。
-	// 后续如果需要严格单例，可以在升级 Wails 后接入窗口关闭回调，将 ControlWin 置空并聚焦已有窗口。
+	if ControlWin != nil {
+		ControlWin.Show()
+		ControlWin.Focus()
+		return
+	}
+
 	ControlWin = App.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:                  "设置中心",
 		URL:                    "/#/control",
@@ -120,7 +126,52 @@ func (k *Keyboard) OpenControlCenter() {
 		OpenInspectorOnStartup: false,
 		EnableFileDrop:         true,
 	})
+	ControlWin.OnWindowEvent(events.Common.WindowClosing, func(e *application.WindowEvent) {
+		ControlWin.Close()
+		ControlWin = nil
+	})
 	App.Window.Add(ControlWin)
+	ControlWin.Show()
+}
+
+func (k *Keyboard) OpenMidiCenter() {
+	if App == nil {
+		return
+	}
+
+	if MidiWin != nil {
+		MidiWin.Show()
+		MidiWin.Focus()
+	}
+	MidiWin = App.Window.NewWithOptions(application.WebviewWindowOptions{
+		Title: "MIDI 播放 / 练习",
+		Mac: application.MacWindow{
+			InvisibleTitleBarHeight: 40,
+			TitleBar:                application.MacTitleBarHidden,
+		},
+		Windows: application.WindowsWindow{
+			BackdropType:                      0,
+			WindowMaskDraggable:               true,
+			DisableFramelessWindowDecorations: true,
+		},
+		Width:                  1120,
+		Height:                 360,
+		MinWidth:               920,
+		MinHeight:              300,
+		BackgroundType:         application.BackgroundTypeSolid,
+		BackgroundColour:       application.NewRGBA(245, 247, 251, 255),
+		URL:                    "/#/midi",
+		DevToolsEnabled:        !PRODUCTION,
+		OpenInspectorOnStartup: false,
+		EnableFileDrop:         true,
+		AlwaysOnTop:            false,
+	})
+	MidiWin.OnWindowEvent(events.Common.WindowClosing, func(e *application.WindowEvent) {
+		MidiWin.Close()
+		MidiWin = nil
+	})
+	App.Window.Add(MidiWin)
+	MidiWin.Show()
 }
 
 func (k *Keyboard) Quit() {

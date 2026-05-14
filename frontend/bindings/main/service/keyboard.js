@@ -52,6 +52,16 @@ export function ChangeDevice(deviceType, deviceID) {
 }
 
 /**
+ * CheckMidiPathExists 供 MIDI 独立窗口在切换目录记录时做轻量校验。
+ * MIDI 目录只保存绝对路径，不复制文件；真实文件被移动或删除时，前端会提示用户移除这条记录。
+ * @param {string} path
+ * @returns {$CancellablePromise<boolean>}
+ */
+export function CheckMidiPathExists(path) {
+    return $Call.ByID(2330610391, path);
+}
+
+/**
  * @returns {$CancellablePromise<$models.MidiDevices>}
  */
 export function GetMidiDevices() {
@@ -130,6 +140,18 @@ export function LoadMidiFileBase64(fileName, encoded) {
 }
 
 /**
+ * LoadMidiFileFromPath 从系统绝对路径读取并解析 MIDI。
+ * 这和前端上传 base64 的入口并存：独立 MIDI 窗口优先用绝对路径加载，旧逻辑和兼容场景仍可用 base64。
+ * @param {string} path
+ * @returns {$CancellablePromise<$models.MidiFileInfo>}
+ */
+export function LoadMidiFileFromPath(path) {
+    return $Call.ByID(620560847, path).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType6($result);
+    }));
+}
+
+/**
  * @returns {$CancellablePromise<void>}
  */
 export function MidiListenerStart() {
@@ -148,6 +170,13 @@ export function MidiListenerStop() {
  */
 export function OpenControlCenter() {
     return $Call.ByID(4074507341);
+}
+
+/**
+ * @returns {$CancellablePromise<void>}
+ */
+export function OpenMidiCenter() {
+    return $Call.ByID(5940351);
 }
 
 /**

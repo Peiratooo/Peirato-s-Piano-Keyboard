@@ -8,72 +8,34 @@
             <transition enter-active-class="blurFadeIN" leave-active-class="blurFadeOUT">
                 <div
                     class="panel main-panel"
-                    v-if="store.showSetting"
-                    :style="{left: store.menuBar ? '0' : '-515px'}"
+                    v-if="store.showSetting || true"
+                    :style="{left: store.menuBar ? '0' : '-128px'}"
                 >
-                    <button class="icon-button quit" title="退出" @click="Keyboard.Quit()">⏻</button>
-                    <button class="icon-button" title="打开设置中心" @click="openControlCenter">⚙</button>
-                    <button class="icon-button" title="停止所有声音" @click="allNotesOff">■</button>
-                    <div class="slider volume" title="音量">
-                        <span class="panel-icon">🔊</span>
-                        <n-slider :tooltip="false" v-model:value="store.config.volume" :min="0" :max="127" @dragend="changeConfig"/>
-                    </div>
-                    <div class="slider velocity" title="力度">
-                        <span class="panel-icon">🎹</span>
-                        <n-slider :tooltip="false" v-model:value="store.config.velocity" :min="0" :max="127" @dragend="changeConfig"/>
-                    </div>
-                    <div class="slider opacity" title="透明度">
-                        <span class="panel-icon">◩</span>
-                        <n-slider :tooltip="false" v-model:value="store.config.opacity" :min="20" :max="100" @dragend="changeConfig"/>
-                    </div>
+                    <button class="icon-button quit" title="退出" @click="Keyboard.Quit">
+                        <n-icon>
+                            <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 24 24"><path d="M12 3c-.55 0-1 .45-1 1v8c0 .55.45 1 1 1s1-.45 1-1V4c0-.55-.45-1-1-1zm5.14 2.86a.99.99 0 0 0-.01 1.39c1.13 1.2 1.83 2.8 1.87 4.57c.09 3.83-3.08 7.13-6.91 7.17A6.981 6.981 0 0 1 5 12c0-1.84.71-3.51 1.87-4.76c.37-.39.37-1-.01-1.38a.993.993 0 0 0-1.43.02A8.92 8.92 0 0 0 3 11.74c-.14 4.88 3.83 9.1 8.71 9.25c5.1.16 9.29-3.93 9.29-9c0-2.37-.92-4.51-2.42-6.11c-.38-.41-1.04-.42-1.44-.02z" fill="currentColor"></path></svg>
+                        </n-icon>
+                    </button>
+                    <button class="icon-button" title="打开设置中心" @click="Keyboard.OpenControlCenter">
+                        <n-icon>
+                            <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 32 32"><path d="M27 16.76V16v-.77l1.92-1.68A2 2 0 0 0 29.3 11l-2.36-4a2 2 0 0 0-1.73-1a2 2 0 0 0-.64.1l-2.43.82a11.35 11.35 0 0 0-1.31-.75l-.51-2.52a2 2 0 0 0-2-1.61h-4.68a2 2 0 0 0-2 1.61l-.51 2.52a11.48 11.48 0 0 0-1.32.75l-2.38-.86A2 2 0 0 0 6.79 6a2 2 0 0 0-1.73 1L2.7 11a2 2 0 0 0 .41 2.51L5 15.24v1.53l-1.89 1.68A2 2 0 0 0 2.7 21l2.36 4a2 2 0 0 0 1.73 1a2 2 0 0 0 .64-.1l2.43-.82a11.35 11.35 0 0 0 1.31.75l.51 2.52a2 2 0 0 0 2 1.61h4.72a2 2 0 0 0 2-1.61l.51-2.52a11.48 11.48 0 0 0 1.32-.75l2.42.82a2 2 0 0 0 .64.1a2 2 0 0 0 1.73-1l2.28-4a2 2 0 0 0-.41-2.51zM25.21 24l-3.43-1.16a8.86 8.86 0 0 1-2.71 1.57L18.36 28h-4.72l-.71-3.55a9.36 9.36 0 0 1-2.7-1.57L6.79 24l-2.36-4l2.72-2.4a8.9 8.9 0 0 1 0-3.13L4.43 12l2.36-4l3.43 1.16a8.86 8.86 0 0 1 2.71-1.57L13.64 4h4.72l.71 3.55a9.36 9.36 0 0 1 2.7 1.57L25.21 8l2.36 4l-2.72 2.4a8.9 8.9 0 0 1 0 3.13L27.57 20z" fill="currentColor"></path><path d="M16 22a6 6 0 1 1 6-6a5.94 5.94 0 0 1-6 6zm0-10a3.91 3.91 0 0 0-4 4a3.91 3.91 0 0 0 4 4a3.91 3.91 0 0 0 4-4a3.91 3.91 0 0 0-4-4z" fill="currentColor"></path></svg>
+                        </n-icon>
+                    </button>
+                    <button class="icon-button" title="打开Midi中心" @click="Keyboard.OpenMidiCenter">
+                        <n-icon>
+                            <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 16 16"><g fill="none"><path d="M12 5.21v5.058A2 2 0 1 0 13 12V1.926a.8.8 0 0 0-1.07-.754l-6.4 2.286a.8.8 0 0 0-.53.753v7.056A2 2 0 1 0 6 13V7.353l6-2.142zm0-1.062L6 6.29V4.351l6-2.143v1.939zM11 11a1 1 0 1 1 0 2a1 1 0 0 1 0-2zm-7 1a1 1 0 1 1 0 2a1 1 0 0 1 0-2z" fill="currentColor"></path></g></svg>
+                        </n-icon>
+                    </button>
                     <button
-                        class="switcher"
+                        class="icon-button switcher"
                         @click="store.menuBar = !store.menuBar"
                         :style="{transform: store.menuBar ? 'rotate(0deg)' : 'rotate(180deg)'}"
                         title="收起/展开"
-                    >‹</button>
-                </div>
-            </transition>
-
-            <transition enter-active-class="blurFadeIN" leave-active-class="blurFadeOUT">
-                <div
-                    v-if="store.showSetting"
-                    class="keyboard-setting panel"
-                    :style="{right: store.keyboardMenu ? '0' : '-510px'}"
-                >
-                    <button
-                        class="switcher"
-                        @click="store.keyboardMenu = !store.keyboardMenu"
-                        :style="{transform: store.keyboardMenu ? 'rotate(180deg)' : 'rotate(0deg)'}"
-                        title="收起/展开"
-                    >‹</button>
-                    <div class="key-count">
-                        <span class="panel-icon">🎚</span>
-                        <n-radio-group v-model:value="store.config.keyboardType" @update:value="changeKeyboardType" :disabled="!store.keyboardMenu">
-                            <n-radio-button
-                                v-for="item in store.keybordType"
-                                :key="item.value"
-                                :value="item.value"
-                                :label="item.label"
-                                size="small"
-                            />
-                        </n-radio-group>
-                    </div>
-                    <div class="key-tips">
-                        <n-select
-                            v-model:value="store.config.keyLabel"
-                            :options="store.labelMap"
-                            size="small"
-                            @update:value="changeConfig"
-                            :disabled="!store.keyboardMenu"
-                        />
-                    </div>
-                    <div class="show-pedal">
-                        <n-radio-group v-model:value="store.config.showPedal" @update:value="changeKeyboardType" :disabled="!store.keyboardMenu">
-                            <n-radio-button :value="true" label="显示踏板" size="small"/>
-                            <n-radio-button :value="false" label="隐藏踏板" size="small"/>
-                        </n-radio-group>
-                    </div>
+                    >
+                       <n-icon>
+                           <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 24 24"><path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6l6 6l1.41-1.41z" fill="currentColor"></path></svg>
+                       </n-icon>
+                    </button>
                 </div>
             </transition>
         </div>
@@ -98,15 +60,12 @@
 
 <script setup>
 import {inject, ref} from 'vue'
-import {NRadioButton, NRadioGroup, NSelect, NSlider} from 'naive-ui'
 import ClassicKeyboard from '../components/ClassicKeyboard.vue'
 import Pedal from '../components/Pedal.vue'
 import Chord from '../components/Chord.vue'
-
+import {NIcon} from "naive-ui"
 const store = inject('store')
 const Keyboard = inject('Keyboard')
-const changeConfig = inject('changeConfig')
-const changeKeyboardType = inject('changeKeyboardType')
 
 const pedalDrag = ref({
     x: window.innerWidth * 0.92,
@@ -122,14 +81,6 @@ const chordPos = ref({
     yr: 0.65,
 })
 
-function openControlCenter() {
-    Keyboard.OpenControlCenter()
-}
-
-function allNotesOff() {
-    Keyboard.AllNotesOff()
-    store.clearAllKeys()
-}
 
 function dragPedal(event) {
     if (event.buttons !== 1) return
@@ -155,6 +106,11 @@ function dragChord(event) {
     overflow: hidden;
 }
 
+.floating-card {
+    position: absolute;
+    z-index: 999;
+}
+
 .drag-area {
     position: absolute;
     left: 0;
@@ -173,10 +129,10 @@ function dragChord(event) {
     height: 44px;
     align-items: center;
     font-size: 24px;
-    gap: 16px;
+    gap: 12px;
     display: flex;
     position: relative;
-    padding-left: 16px;
+    padding-left: 14px;
     padding-right: 8px;
     background-color: rgba(180, 180, 180, 0.29);
     border: 1px solid #99999933;
@@ -188,6 +144,11 @@ function dragChord(event) {
 
 .main-panel {
     border-radius: 0 0 16px 0;
+    button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
 }
 
 .icon-button,
@@ -207,7 +168,7 @@ function dragChord(event) {
     border-radius: 10px;
     background: rgba(255, 255, 255, 0.34);
     color: #333;
-    font-size: 15px;
+    font-size: 18px;
 }
 
 .icon-button:hover {
@@ -224,59 +185,10 @@ function dragChord(event) {
     color: #fff;
 }
 
-.slider {
-    width: 138px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 18px;
-}
-
-.panel-icon {
-    opacity: 0.7;
-    font-size: 15px;
-}
-
 .switcher {
     padding: 6px;
-    border-radius: 6px;
     font-size: 18px;
-    background: transparent;
     color: #333;
 }
 
-.switcher:hover {
-    background-color: rgba(128, 128, 128, 0.1);
-}
-
-.keyboard-setting {
-    position: absolute;
-    right: 0;
-    z-index: 999;
-    display: flex;
-    height: 44px;
-    border-radius: 0 0 0 16px;
-    padding-left: 8px;
-}
-
-.key-count {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.key-tips {
-    width: 7rem;
-}
-
-.floating-card {
-    position: absolute;
-    z-index: 9999;
-    user-select: none;
-    cursor: grab;
-}
-
-.floating-card:active {
-    cursor: grabbing;
-}
 </style>

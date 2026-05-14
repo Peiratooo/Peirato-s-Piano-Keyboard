@@ -47,13 +47,16 @@ watch(
         clearTimeout(debounceTimer)
         debounceTimer = setTimeout(() => {
             displayChord.value = value
-        }, 40)
+        }, 50)
     },
     {immediate: true, deep: true},
 )
 </script>
 
 <style lang="scss" scoped>
+* {
+    user-select: none;
+}
 .chord,.note {
     background-color: #eeeeee55;
     border-radius: 4px;

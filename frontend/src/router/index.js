@@ -11,15 +11,16 @@ const routes = [
         name: 'control-center',
         component: () => import('../views/ControlCenterWindow.vue'),
     },
+    {
+        path: '/midi',
+        name: 'midi-window',
+        component: () => import('../views/MidiWindow.vue'),
+    },
 ]
 
 const router = createRouter({
     history: createWebHashHistory(),
     routes,
-})
-
-router.beforeEach((to, from, next) => {
-    next()
 })
 
 export default router
