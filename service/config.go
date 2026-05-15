@@ -53,6 +53,14 @@ var DefaultConfig = Config{
 			Label: "黑键按下",
 			Color: "#5FFF5F",
 		},
+		"whiteKeySub": {
+			Label: "白键按下(左)",
+			Color: "#9AF7B3",
+		},
+		"blackKeySub": {
+			Label: "黑键按下(左)",
+			Color: "#5FFF5F",
+		},
 		"damperPedal": {
 			Label: "延音踏板踩下",
 			Color: "#e7b510",
@@ -76,7 +84,16 @@ var DefaultConfig = Config{
 	SoundFontPath: "",
 }
 
-var UserConfig = DefaultConfig
+var UserConfig = cloneDefaultConfig()
+
+func cloneDefaultConfig() Config {
+	config := DefaultConfig
+	config.Colors = make(map[string]Color, len(DefaultConfig.Colors))
+	for key, value := range DefaultConfig.Colors {
+		config.Colors[key] = value
+	}
+	return config
+}
 
 // LoadConfig 负责读取用户配置，并自动补齐旧配置里缺失的新字段。
 // 后续新增配置字段时，优先在 mergeConfigWithDefaults 中补默认值，避免旧用户升级后出现空字段。
@@ -87,7 +104,7 @@ func LoadConfig(version string) error {
 	}
 
 	configFilePath = filepath.Join(ucd, appName, "config.json")
-	config := DefaultConfig
+	config := cloneDefaultConfig()
 
 	if _, err := os.Stat(configFilePath); os.IsNotExist(err) {
 		config.Version = version
@@ -105,7 +122,7 @@ func LoadConfig(version string) error {
 	}
 
 	if err := json.Unmarshal(data, &config); err != nil {
-		config = DefaultConfig
+		config = cloneDefaultConfig()
 		config.Version = version
 		UserConfig = config
 		return fmt.Errorf("解析配置文件失败: %w", err)
@@ -130,7 +147,8 @@ func LoadConfig(version string) error {
 // mergeConfigWithDefaults 用于兼容旧版本 config.json。
 // 例如用户旧配置没有 midiChannel / soundFontPath 时，这里会补上安全默认值。
 func mergeConfigWithDefaults(config Config) Config {
-	merged := DefaultConfig
+	merged := cloneDefaultConfig()
+
 	merged.KeyLabel = config.KeyLabel
 	merged.KeyboardType = config.KeyboardType
 	merged.Velocity = config.Velocity
@@ -141,10 +159,6 @@ func mergeConfigWithDefaults(config Config) Config {
 	merged.MidiChannel = config.MidiChannel
 	merged.SoundFontPath = config.SoundFontPath
 
-	merged.Colors = make(map[string]Color, len(DefaultConfig.Colors))
-	for key, value := range DefaultConfig.Colors {
-		merged.Colors[key] = value
-	}
 	for key, value := range config.Colors {
 		merged.Colors[key] = value
 	}
@@ -206,9 +220,13 @@ func (k *Keyboard) ReceiveConfig(config Config) (bool, string) {
 }
 
 func (k *Keyboard) ResetConfig() Config {
-	resetConfig := DefaultConfig
+	resetConfig := cloneDefaultConfig()
+	fmt.Printf("%+v\n", resetConfig)
+
 	resetConfig.Version = GetUserConfig().Version
+
 	_ = SaveConfig(resetConfig)
+
 	EmitConfigChanged()
 	return resetConfig
 }

@@ -127,7 +127,6 @@ func (k *Keyboard) OpenControlCenter() {
 		EnableFileDrop:         true,
 	})
 	ControlWin.OnWindowEvent(events.Common.WindowClosing, func(e *application.WindowEvent) {
-		ControlWin.Close()
 		ControlWin = nil
 	})
 	App.Window.Add(ControlWin)
@@ -142,6 +141,7 @@ func (k *Keyboard) OpenMidiCenter() {
 	if MidiWin != nil {
 		MidiWin.Show()
 		MidiWin.Focus()
+		return
 	}
 	MidiWin = App.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title: "MIDI 播放 / 练习",
@@ -167,7 +167,6 @@ func (k *Keyboard) OpenMidiCenter() {
 		AlwaysOnTop:            false,
 	})
 	MidiWin.OnWindowEvent(events.Common.WindowClosing, func(e *application.WindowEvent) {
-		MidiWin.Close()
 		MidiWin = nil
 	})
 	App.Window.Add(MidiWin)

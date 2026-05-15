@@ -25,7 +25,9 @@
         </div>
 
         <div class="note unknown" v-else-if="Object.keys(displayChord).length > 0 && displayChord.type === 'unknown'">
-            {{ displayChord.notes.join(' ') }}
+            <span v-for="(item,index) in displayChord.notes" :key="index">
+                {{ item }}
+            </span>
         </div>
     </transition>
 </template>
@@ -95,6 +97,8 @@ watch(
 
 .unknown {
     font-size: 18px;
+    display: flex;
+    flex-direction: row;
 }
 
 .synonym-notes {

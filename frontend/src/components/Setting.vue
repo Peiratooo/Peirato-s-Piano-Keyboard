@@ -109,10 +109,7 @@
                         </div>
                         <n-switch v-model:value="store.config.showPedal" @update:value="changeConfig"/>
                     </div>
-                    <div class="example-card">
-                        <ExampleKeyboard/>
-                        <ExamplePedal class="example-pedal"/>
-                    </div>
+
                 </div>
             </section>
 
@@ -127,7 +124,10 @@
                         </div>
                     </div>
                 </div>
-                <div class="tip-box">目前先保留你原来的按键配色方案，后续可以在这里加“主题预设”。</div>
+                <div class="example-card">
+                    <ExampleKeyboard/>
+                    <ExamplePedal class="example-pedal"/>
+                </div>
             </section>
 
             <section v-else-if="store.controlMenu === 'soundfont'" class="content-card">
@@ -470,8 +470,8 @@ onBeforeUnmount(() => {
 
 .color-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(180px, 1fr));
-    gap: 14px;
+    grid-template-columns: repeat(3, minmax(180px, 1fr));
+    gap: 12px;
     margin-bottom: 18px;
 }
 
@@ -512,6 +512,7 @@ onBeforeUnmount(() => {
     position: absolute;
     right: 18px;
     bottom: 18px;
+    z-index: 99;
 }
 
 .color-picker-body {

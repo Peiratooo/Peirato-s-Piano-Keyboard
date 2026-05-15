@@ -3,7 +3,7 @@
         <div class="titlebar">
             <div>
                 <div class="title">Peirato's Piano Keyboard 设置</div>
-                <div class="subtitle">设备、键盘、音源和外观会在这里集中管理；MIDI 播放 / 练习已移到独立窗口。</div>
+                <div class="subtitle">自定义你的键盘显示、声音与练习体验。</div>
             </div>
             <n-tag size="small" :bordered="false" type="info">v{{ store.config.version || '-' }}</n-tag>
         </div>
@@ -41,7 +41,7 @@ const store = inject('store')
 }
 
 .subtitle {
-    margin-top: 4px;
+    margin-top: 6px;
     font-size: 13px;
     color: #64748b;
 }

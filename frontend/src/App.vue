@@ -270,6 +270,7 @@ function registerBackendEvents() {
     on('configChanged', (event) => {
         store.config = {...store.config, ...getEventPayload(event)}
         setKeyColor()
+        resize()
     })
     on('allNotesOff', () => {
         store.clearAllKeys()

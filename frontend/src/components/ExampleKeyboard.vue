@@ -1,7 +1,7 @@
 <template>
     <div class="classic-keyboard" @mousedown="mouse.down = true" @mouseup="mouse.down=false;" @mouseleave="mouse.down=false;mouse.keyIndex=-1">
-        <div class="key" v-for="(item, index) in store.keyboardConfig.slice(51,63)"
-             :class="[item.color,item.note,(mouse.down && mouse.keyIndex===index) || [2,5,8].includes(index) ? keyColorMap[item.color]:'',]"
+        <div class="key" v-for="(item, index) in store.keyboardConfig.slice(39,63)"
+             :class="[item.color,item.note,(mouse.down && mouse.keyIndex===index) || [2,5,8,14,17,20].includes(index) ? keyColorMap[item.color]:'',]"
              :key="index" @mouseenter="mouse.keyIndex=index">
             <div class="label" v-if="activeLabel !== ''">
                 {{item[activeLabel]}}
@@ -11,13 +11,15 @@
 </template>
 
 <script setup>
-import {inject, onMounted,ref,onBeforeUnmount,watch} from "vue";
+import {inject, onMounted,ref} from "vue";
 
 const store = inject("store")
 
 const keyColorMap = {
     'black':"b-active",
-    'white':"w-active"
+    'white':"w-active",
+    'black-l':"b-l-active",
+    'white-l':"w-l-active",
 }
 const mouse = ref({
     down:false,

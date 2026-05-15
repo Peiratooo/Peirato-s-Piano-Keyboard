@@ -1,5 +1,7 @@
 <template>
     <div
+        ref="containerRef"
+
         class="container"
         @mouseenter="store.showSetting = true"
         @mouseleave="store.showSetting = false"
@@ -42,73 +44,202 @@
 
         <ClassicKeyboard v-if="store.keyboardLoaded"/>
 
-        <Pedal
+        <div
             v-if="store.loaded && store.config.showPedal"
+            ref="pedalRef"
             class="floating-card"
-            @mousemove="dragPedal"
-            :style="{left: pedalDrag.x + 'px', top: pedalDrag.y + 'px'}"
-        />
+            :style="{ left: pedalDrag.x + 'px', top: pedalDrag.y + 'px' }"
+            @mousedown="startDragPedal"
+        >
+            <Pedal />
+        </div>
 
-        <Chord
+        <div
             v-if="store.loaded"
+            ref="chordRef"
             class="floating-card"
-            @mousemove="dragChord"
-            :style="{left: chordPos.x + 'px', top: chordPos.y + 'px'}"
-        />
+            :style="{ left: chordPos.x + 'px', top: chordPos.y + 'px' }"
+            @mousedown="startDragChord"
+        >
+            <Chord />
+        </div>
     </div>
 </template>
 
 <script setup>
-import {inject, ref} from 'vue'
+import { inject, ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import ClassicKeyboard from '../components/ClassicKeyboard.vue'
 import Pedal from '../components/Pedal.vue'
 import Chord from '../components/Chord.vue'
-import {NIcon} from "naive-ui"
+import { NIcon } from 'naive-ui'
+
 const store = inject('store')
 const Keyboard = inject('Keyboard')
 
+const containerRef = ref(null)
+const pedalRef = ref(null)
+const chordRef = ref(null)
+
+const EDGE_GAP = 12
+
 const pedalDrag = ref({
-    x: window.innerWidth * 0.92,
-    y: window.innerHeight * 0.7,
+    x: 0,
+    y: 0,
     xr: 0.92,
     yr: 0.7,
 })
 
 const chordPos = ref({
-    x: window.innerWidth * 0.02,
-    y: window.innerHeight * 0.65,
+    x: 0,
+    y: 0,
     xr: 0.02,
     yr: 0.65,
 })
 
+let draggingType = null
 
-function dragPedal(event) {
-    if (event.buttons !== 1) return
-    pedalDrag.value.x += event.movementX
-    pedalDrag.value.y += event.movementY
-    pedalDrag.value.xr = pedalDrag.value.x / window.innerWidth
-    pedalDrag.value.yr = pedalDrag.value.y / window.innerHeight
+function getContainerRect() {
+    const el = containerRef.value
+    if (!el) {
+        return {
+            width: window.innerWidth,
+            height: window.innerHeight,
+        }
+    }
+
+    return el.getBoundingClientRect()
 }
 
-function dragChord(event) {
-    if (event.buttons !== 1) return
-    chordPos.value.x += event.movementX
-    chordPos.value.y += event.movementY
-    chordPos.value.xr = chordPos.value.x / window.innerWidth
-    chordPos.value.yr = chordPos.value.y / window.innerHeight
+function getElementSize(targetRef) {
+    const el = targetRef.value
+
+    if (!el || typeof el.getBoundingClientRect !== 'function') {
+        return {
+            width: 0,
+            height: 0,
+        }
+    }
+
+    const rect = el.getBoundingClientRect()
+
+    return {
+        width: rect.width,
+        height: rect.height,
+    }
 }
+
+function clamp(value, min, max) {
+    if (max < min) return min
+    return Math.min(Math.max(value, min), max)
+}
+
+function clampFloatingPosition(pos, targetRef) {
+    const container = getContainerRect()
+    const size = getElementSize(targetRef)
+
+    const maxX = container.width - size.width - EDGE_GAP
+    const maxY = container.height - size.height - EDGE_GAP
+
+    pos.x = clamp(pos.x, EDGE_GAP, maxX)
+    pos.y = clamp(pos.y, EDGE_GAP, maxY)
+
+    pos.xr = container.width > 0 ? pos.x / container.width : pos.xr
+    pos.yr = container.height > 0 ? pos.y / container.height : pos.yr
+}
+
+function syncPositionByRatio(pos, targetRef) {
+    const container = getContainerRect()
+
+    pos.x = container.width * pos.xr
+    pos.y = container.height * pos.yr
+
+    clampFloatingPosition(pos, targetRef)
+}
+
+function syncAllFloatingPositions() {
+    syncPositionByRatio(pedalDrag.value, pedalRef)
+    syncPositionByRatio(chordPos.value, chordRef)
+}
+
+function startDragPedal(event) {
+    if (event.button !== 0) return
+
+    draggingType = 'pedal'
+
+    window.addEventListener('mousemove', handleDragging)
+    window.addEventListener('mouseup', stopDragging)
+}
+
+function startDragChord(event) {
+    if (event.button !== 0) return
+
+    draggingType = 'chord'
+
+    window.addEventListener('mousemove', handleDragging)
+    window.addEventListener('mouseup', stopDragging)
+}
+
+function handleDragging(event) {
+    if (!draggingType) return
+
+    if (draggingType === 'pedal') {
+        pedalDrag.value.x += event.movementX
+        pedalDrag.value.y += event.movementY
+        clampFloatingPosition(pedalDrag.value, pedalRef)
+        return
+    }
+
+    if (draggingType === 'chord') {
+        chordPos.value.x += event.movementX
+        chordPos.value.y += event.movementY
+        clampFloatingPosition(chordPos.value, chordRef)
+    }
+}
+
+function stopDragging() {
+    draggingType = null
+
+    window.removeEventListener('mousemove', handleDragging)
+    window.removeEventListener('mouseup', stopDragging)
+}
+
+async function handleResize() {
+    await nextTick()
+    syncAllFloatingPositions()
+}
+
+onMounted(async () => {
+    await nextTick()
+    syncAllFloatingPositions()
+
+    window.addEventListener('resize', handleResize)
+})
+
+onBeforeUnmount(() => {
+    window.removeEventListener('resize', handleResize)
+    window.removeEventListener('mousemove', handleDragging)
+    window.removeEventListener('mouseup', stopDragging)
+})
 </script>
 
 <style lang="scss" scoped>
 .container {
     position: relative;
+    width: 100vw;
+    height: 100vh;
     border-radius: 6px;
     overflow: hidden;
 }
-
 .floating-card {
     position: absolute;
     z-index: 999;
+    cursor: grab;
+    user-select: none;
+    touch-action: none;
+}
+
+.floating-card:active {
+    cursor: grabbing;
 }
 
 .drag-area {
