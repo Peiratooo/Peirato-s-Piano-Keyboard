@@ -2,6 +2,7 @@ package service
 
 import (
 	"embed"
+	"fmt"
 	"log"
 	"os/exec"
 	"runtime"
@@ -144,7 +145,7 @@ func (k *Keyboard) OpenMidiCenter() {
 		return
 	}
 	MidiWin = App.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title: "MIDI 播放 / 练习",
+		Title: "MIDI 中心",
 		Mac: application.MacWindow{
 			InvisibleTitleBarHeight: 40,
 			TitleBar:                application.MacTitleBarHidden,
@@ -176,4 +177,25 @@ func (k *Keyboard) OpenMidiCenter() {
 func (k *Keyboard) Quit() {
 	(&Keyboard{}).AllNotesOff()
 	App.Quit()
+}
+
+func (k *Keyboard) OpenSoundFontDialog() error {
+	if App == nil {
+		return fmt.Errorf("应用尚未初始化")
+	}
+
+	path, err := App.Dialog.OpenFile().
+		SetTitle("选择 SoundFont 音源").
+		AddFilter("SoundFont", "*.sf2").
+		AddFilter("All Files", "*.*").
+		PromptForSingleSelection()
+
+	if err != nil {
+		return err
+	}
+	if path == "" {
+		return fmt.Errorf("未选择 SoundFont")
+	}
+
+	return AddSoundFontByPath(path)
 }

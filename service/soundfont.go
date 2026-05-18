@@ -1,9 +1,13 @@
 package service
 
 import (
+	"crypto/md5"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -14,7 +18,7 @@ import (
 	"github.com/sinshu/go-meltysynth/meltysynth"
 )
 
-type Sythesizer struct {
+type Synthesizer struct {
 	Synth      *meltysynth.Synthesizer
 	SampleRate int32
 	BufferSize int32
@@ -22,19 +26,117 @@ type Sythesizer struct {
 	Path       string
 }
 
-type SoundFontInfo struct {
-	Loaded bool   `json:"loaded"`
-	Path   string `json:"path"`
-	Name   string `json:"name"`
-	Error  string `json:"error"`
+type UserSoundFont struct {
+	ID         string    `json:"id"`
+	Name       string    `json:"name"`
+	Path       string    `json:"path"`
+	Size       int64     `json:"size"`
+	CreatedAt  time.Time `json:"createdAt"`
+	LastUsedAt time.Time `json:"lastUsedAt"`
+	Missing    bool      `json:"missing"`
+	Error      string    `json:"error"`
 }
 
 var (
-	PianoPlayer    *Sythesizer
+	PianoPlayer    *Synthesizer
 	synthMu        sync.Mutex
 	speakerStarted bool
-	soundFontInfo  = SoundFontInfo{}
 )
+
+func ValidateSoundFont(path string) error {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return fmt.Errorf("音源路径为空")
+	}
+
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return fmt.Errorf("获取绝对路径失败: %w", err)
+	}
+	absPath = filepath.Clean(absPath)
+
+	info, err := os.Stat(absPath)
+	if err != nil {
+		return fmt.Errorf("音源文件不存在")
+	}
+
+	if info.IsDir() {
+		return fmt.Errorf("请选择 .sf2 文件，而不是文件夹")
+	}
+
+	if strings.ToLower(filepath.Ext(absPath)) != ".sf2" {
+		return fmt.Errorf("请选择 .sf2 音源文件")
+	}
+
+	file, err := os.Open(absPath)
+	if err != nil {
+		return fmt.Errorf("打开音源失败: %w", err)
+	}
+	defer file.Close()
+
+	if _, err := meltysynth.NewSoundFont(file); err != nil {
+		return fmt.Errorf("解析音源失败: %w", err)
+	}
+
+	return nil
+}
+
+func EnsureSpeakerStarted() error {
+	if speakerStarted {
+		return nil
+	}
+	return InitSpeaker()
+}
+
+func SwitchSoundFont(sf UserSoundFont) error {
+	if strings.TrimSpace(sf.Path) == "" {
+		return fmt.Errorf("音源路径为空")
+	}
+
+	AllSynthNotesOff()
+
+	if err := LoadSoundFont(sf, 44100, 1024); err != nil {
+		return err
+	}
+
+	return EnsureSpeakerStarted()
+}
+
+func BuildDefaultSoundFont() (UserSoundFont, error) {
+	sf, err := BuildSoundFontFromPath(defaultSoundFontPath)
+	if err != nil {
+		return UserSoundFont{}, fmt.Errorf("默认音源不可用: %w", err)
+	}
+	return sf, nil
+}
+
+func SwitchToDefaultSoundFont() error {
+	sf, err := BuildDefaultSoundFont()
+	if err != nil {
+		return err
+	}
+
+	if err := SwitchSoundFont(sf); err != nil {
+		return fmt.Errorf("加载默认音源失败: %w", err)
+	}
+
+	return nil
+}
+
+func FindSoundFontByID(items []UserSoundFont, id string) (int, UserSoundFont, bool) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return -1, UserSoundFont{}, false
+	}
+
+	for i, item := range items {
+		if item.ID == id {
+			return i, item, true
+		}
+	}
+
+	return -1, UserSoundFont{}, false
+}
 
 func InitSpeaker() error {
 	if PianoPlayer == nil || PianoPlayer.Synth == nil {
@@ -52,7 +154,6 @@ func InitSpeaker() error {
 		left := make([]float32, len(samples))
 		right := make([]float32, len(samples))
 
-		// Render 与 NoteOn / NoteOff 会在不同 goroutine 中调用，统一加锁可以避免偶发并发问题。
 		synthMu.Lock()
 		if PianoPlayer != nil && PianoPlayer.Synth != nil {
 			PianoPlayer.Synth.Render(left, right)
@@ -63,42 +164,87 @@ func InitSpeaker() error {
 			samples[i][0] = float64(left[i])
 			samples[i][1] = float64(right[i])
 		}
+
 		return len(samples), true
 	})
 
 	volumeStreamer := effects.Volume{
 		Streamer: PianoPlayer.Streamer,
 		Base:     7,
-		Volume:   1,
+		Volume:   float64(GetUserConfig().Volume),
 		Silent:   false,
 	}
+
 	speaker.Play(&volumeStreamer)
+
 	return nil
 }
 
-func LoadSoundFont(path string, sampleRate, bufferSize int32) error {
+func FileMD5(path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", fmt.Errorf("打开文件失败: %w", err)
+	}
+	defer file.Close()
+
+	hash := md5.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return "", fmt.Errorf("计算文件 MD5 失败: %w", err)
+	}
+
+	return hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+func IsSamePath(a, b string) bool {
+	a = strings.TrimSpace(a)
+	b = strings.TrimSpace(b)
+
+	absA, errA := filepath.Abs(a)
+	if errA == nil {
+		a = absA
+	}
+
+	absB, errB := filepath.Abs(b)
+	if errB == nil {
+		b = absB
+	}
+
+	a = filepath.Clean(a)
+	b = filepath.Clean(b)
+
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(a, b)
+	}
+
+	return a == b
+}
+
+func LoadSoundFont(sf UserSoundFont, sampleRate, bufferSize int32) error {
+	path := strings.TrimSpace(sf.Path)
+	if path == "" {
+		return fmt.Errorf("音源路径为空")
+	}
+
 	sf2, err := os.Open(path)
 	if err != nil {
-		soundFontInfo = SoundFontInfo{Loaded: false, Path: path, Name: filepath.Base(path), Error: err.Error()}
 		return fmt.Errorf("打开音源失败: %w", err)
 	}
 	defer sf2.Close()
 
 	soundfont, err := meltysynth.NewSoundFont(sf2)
 	if err != nil {
-		soundFontInfo = SoundFontInfo{Loaded: false, Path: path, Name: filepath.Base(path), Error: err.Error()}
 		return fmt.Errorf("解析音源失败: %w", err)
 	}
 
 	settings := meltysynth.NewSynthesizerSettings(sampleRate)
+
 	synthesizer, err := meltysynth.NewSynthesizer(soundfont, settings)
 	if err != nil {
-		soundFontInfo = SoundFontInfo{Loaded: false, Path: path, Name: filepath.Base(path), Error: err.Error()}
 		return fmt.Errorf("创建合成器失败: %w", err)
 	}
 
 	synthMu.Lock()
-	PianoPlayer = &Sythesizer{
+	PianoPlayer = &Synthesizer{
 		Synth:      synthesizer,
 		SampleRate: sampleRate,
 		BufferSize: bufferSize,
@@ -106,41 +252,43 @@ func LoadSoundFont(path string, sampleRate, bufferSize int32) error {
 	}
 	synthMu.Unlock()
 
-	soundFontInfo = SoundFontInfo{Loaded: true, Path: path, Name: filepath.Base(path)}
 	return nil
 }
 
-func InitSoundFont(path string) error {
-	if err := LoadSoundFont(path, 44100, 1024); err != nil {
-		return err
-	}
-	return InitSpeaker()
+func InitSoundFont(sf UserSoundFont) error {
+	return SwitchSoundFont(sf)
 }
 
 func Keydown(channel, key, velocity int32) {
 	synthMu.Lock()
 	defer synthMu.Unlock()
+
 	if PianoPlayer == nil || PianoPlayer.Synth == nil {
 		return
 	}
+
 	PianoPlayer.Synth.NoteOn(channel, key, velocity)
 }
 
 func Keyup(channel, key int32) {
 	synthMu.Lock()
 	defer synthMu.Unlock()
+
 	if PianoPlayer == nil || PianoPlayer.Synth == nil {
 		return
 	}
+
 	PianoPlayer.Synth.NoteOff(channel, key)
 }
 
 func AllSynthNotesOff() {
 	synthMu.Lock()
 	defer synthMu.Unlock()
+
 	if PianoPlayer == nil || PianoPlayer.Synth == nil {
 		return
 	}
+
 	for channel := int32(0); channel < 16; channel++ {
 		for key := int32(0); key < 128; key++ {
 			PianoPlayer.Synth.NoteOff(channel, key)
@@ -148,129 +296,219 @@ func AllSynthNotesOff() {
 	}
 }
 
-func (k *Keyboard) GetSoundFontInfo() SoundFontInfo {
-	return soundFontInfo
-}
-
-// ImportSoundFontBase64 供前端 <input type="file"> 选择 .sf2 后调用。
-// 设计上不使用后端原生文件选择器：用户仍然在前端选择文件，后端只负责保存、加载和记录配置。
-func (k *Keyboard) ImportSoundFontBase64(fileName string, encoded string) (SoundFontInfo, error) {
-	if strings.ToLower(filepath.Ext(fileName)) != ".sf2" {
-		return GetSoundFontInfoSnapshot(), fmt.Errorf("请选择 .sf2 音源文件")
+func BuildSoundFontFromPath(path string) (UserSoundFont, error) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return UserSoundFont{}, fmt.Errorf("音源路径为空")
 	}
 
-	data, err := decodeBase64Payload(encoded)
+	absPath, err := filepath.Abs(path)
 	if err != nil {
-		return GetSoundFontInfoSnapshot(), err
+		return UserSoundFont{}, fmt.Errorf("获取音源绝对路径失败: %w", err)
 	}
-	if len(data) == 0 {
-		return GetSoundFontInfoSnapshot(), fmt.Errorf("音源文件为空")
+	absPath = filepath.Clean(absPath)
+
+	info, err := os.Stat(absPath)
+	if err != nil {
+		return UserSoundFont{}, fmt.Errorf("音源文件不存在: %w", err)
 	}
 
-	soundFontDir := filepath.Join(filepath.Dir(configFilePath), "soundfonts")
-	if err := os.MkdirAll(soundFontDir, 0755); err != nil {
-		return GetSoundFontInfoSnapshot(), fmt.Errorf("创建音源目录失败: %w", err)
+	if err := ValidateSoundFont(absPath); err != nil {
+		return UserSoundFont{}, err
 	}
 
-	// 文件名加时间戳，避免用户多次导入同名音源时互相覆盖。
-	safeName := sanitizeSoundFontFileName(fileName)
-	storedPath := filepath.Join(soundFontDir, fmt.Sprintf("%d_%s", time.Now().Unix(), safeName))
-	if err := os.WriteFile(storedPath, data, 0644); err != nil {
-		return GetSoundFontInfoSnapshot(), fmt.Errorf("保存音源文件失败: %w", err)
+	id, err := FileMD5(absPath)
+	if err != nil {
+		return UserSoundFont{}, fmt.Errorf("获取音源文件 MD5 失败: %w", err)
 	}
 
-	if err := LoadSoundFont(storedPath, 44100, 1024); err != nil {
-		return GetSoundFontInfoSnapshot(), err
-	}
-	if !speakerStarted {
-		if err := InitSpeaker(); err != nil {
-			return GetSoundFontInfoSnapshot(), err
-		}
+	return UserSoundFont{
+		ID:        id,
+		Name:      strings.TrimSuffix(filepath.Base(absPath), filepath.Ext(absPath)),
+		Path:      absPath,
+		Size:      info.Size(),
+		CreatedAt: time.Now(),
+		Missing:   false,
+		Error:     "",
+	}, nil
+}
+
+func AddSoundFontByPath(path string) error {
+	sf, err := BuildSoundFontFromPath(path)
+	if err != nil {
+		return err
 	}
 
 	config := GetUserConfig()
-	config.SoundFontPath = storedPath
-	if err := SaveConfig(config); err != nil {
-		return GetSoundFontInfoSnapshot(), err
-	}
-	EmitConfigChanged()
-	EmitSoundFontChanged()
-	return GetSoundFontInfoSnapshot(), nil
-}
 
-func sanitizeSoundFontFileName(fileName string) string {
-	name := filepath.Base(strings.TrimSpace(fileName))
-	if name == "." || name == string(filepath.Separator) || name == "" {
-		name = "user-soundfont.sf2"
-	}
-	name = strings.ReplaceAll(name, "\\", "_")
-	name = strings.ReplaceAll(name, "/", "_")
-	return name
-}
-
-// SelectSoundFont 供设置中心通过 Wails 绑定调用。
-// 只有音源成功加载后才写入配置，避免用户误选坏文件导致下次启动持续失败。
-func (k *Keyboard) SelectSoundFont(path string) (SoundFontInfo, error) {
-	if err := LoadSoundFont(path, 44100, 1024); err != nil {
-		return GetSoundFontInfoSnapshot(), err
-	}
-	if !speakerStarted {
-		if err := InitSpeaker(); err != nil {
-			return GetSoundFontInfoSnapshot(), err
+	for _, item := range config.SoundFonts {
+		if item.ID == sf.ID {
+			return fmt.Errorf("音源已存在")
 		}
+
+		if IsSamePath(item.Path, sf.Path) {
+			return fmt.Errorf("音源已存在")
+		}
+	}
+
+	config.SoundFonts = append(config.SoundFonts, sf)
+
+	return SaveConfig(config)
+}
+
+func (k *Keyboard) RemoveSoundFontByID(id string) error {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return fmt.Errorf("音源 ID 不能为空")
 	}
 
 	config := GetUserConfig()
-	config.SoundFontPath = path
-	if err := SaveConfig(config); err != nil {
-		return GetSoundFontInfoSnapshot(), err
-	}
-	EmitConfigChanged()
-	EmitSoundFontChanged()
-	return GetSoundFontInfoSnapshot(), nil
-}
 
-// ReloadSoundFont 按当前配置重新加载音源。后续用户替换同路径文件时可以直接调用它。
-func (k *Keyboard) ReloadSoundFont() (SoundFontInfo, error) {
-	path := ResolveSoundFontPath()
-	if err := LoadSoundFont(path, 44100, 1024); err != nil {
-		return GetSoundFontInfoSnapshot(), err
+	index, removed, ok := FindSoundFontByID(config.SoundFonts, id)
+	if !ok {
+		return fmt.Errorf("音源不存在")
 	}
-	if !speakerStarted {
-		if err := InitSpeaker(); err != nil {
-			return GetSoundFontInfoSnapshot(), err
+
+	config.SoundFonts = append(config.SoundFonts[:index], config.SoundFonts[index+1:]...)
+
+	if config.ActiveSoundFontID == id {
+		config.ActiveSoundFontID = ""
+
+		if err := SwitchToDefaultSoundFont(); err != nil {
+			if saveErr := SaveConfig(config); saveErr != nil {
+				return saveErr
+			}
+
+			return fmt.Errorf("已删除音源 %s，但恢复默认音源失败: %w", removed.Name, err)
 		}
 	}
-	EmitSoundFontChanged()
-	return GetSoundFontInfoSnapshot(), nil
+
+	return SaveConfig(config)
 }
 
-// RestoreDefaultSoundFont 清空用户音源路径，并回退到默认音源。
-func (k *Keyboard) RestoreDefaultSoundFont() (SoundFontInfo, error) {
+func (k *Keyboard) SelectSoundFontByID(id string) error {
+	id = strings.TrimSpace(id)
+
 	config := GetUserConfig()
-	config.SoundFontPath = ""
-	if err := SaveConfig(config); err != nil {
-		return GetSoundFontInfoSnapshot(), err
+
+	if id == "" {
+		if err := SwitchToDefaultSoundFont(); err != nil {
+			return err
+		}
+
+		config.ActiveSoundFontID = ""
+
+		return SaveConfig(config)
 	}
-	if err := LoadSoundFont(defaultSoundFontPath, 44100, 1024); err != nil {
-		return GetSoundFontInfoSnapshot(), err
+
+	index, sf, ok := FindSoundFontByID(config.SoundFonts, id)
+	if !ok {
+		return fmt.Errorf("音源不存在")
 	}
-	if !speakerStarted {
-		if err := InitSpeaker(); err != nil {
-			return GetSoundFontInfoSnapshot(), err
+
+	if _, err := os.Stat(sf.Path); err != nil {
+		config.SoundFonts[index].Missing = true
+		config.SoundFonts[index].Error = "文件不存在"
+
+		if saveErr := SaveConfig(config); saveErr != nil {
+			return saveErr
+		}
+
+		return fmt.Errorf("音源文件不存在，请删除该记录或重新添加")
+	}
+
+	if err := ValidateSoundFont(sf.Path); err != nil {
+		config.SoundFonts[index].Missing = false
+		config.SoundFonts[index].Error = err.Error()
+
+		if saveErr := SaveConfig(config); saveErr != nil {
+			return saveErr
+		}
+
+		return err
+	}
+
+	if err := SwitchSoundFont(sf); err != nil {
+		config.SoundFonts[index].Missing = false
+		config.SoundFonts[index].Error = err.Error()
+
+		if saveErr := SaveConfig(config); saveErr != nil {
+			return saveErr
+		}
+
+		return err
+	}
+
+	config.ActiveSoundFontID = id
+	config.SoundFonts[index].LastUsedAt = time.Now()
+	config.SoundFonts[index].Missing = false
+	config.SoundFonts[index].Error = ""
+
+	return SaveConfig(config)
+}
+
+func (k *Keyboard) RefreshSoundFonts() error {
+	return RefreshSoundFonts()
+}
+
+func RefreshSoundFonts() error {
+	config := GetUserConfig()
+
+	changed := false
+
+	for i := range config.SoundFonts {
+		sf := &config.SoundFonts[i]
+
+		path := strings.TrimSpace(sf.Path)
+		if path == "" {
+			if !sf.Missing || sf.Error != "路径为空" {
+				sf.Missing = true
+				sf.Error = "路径为空"
+				changed = true
+			}
+			continue
+		}
+
+		if _, err := os.Stat(path); err != nil {
+			if !sf.Missing || sf.Error != "文件不存在" {
+				sf.Missing = true
+				sf.Error = "文件不存在"
+				changed = true
+			}
+			continue
+		}
+
+		if sf.Missing || sf.Error == "文件不存在" || sf.Error == "路径为空" {
+			sf.Missing = false
+			sf.Error = ""
+			changed = true
 		}
 	}
-	EmitConfigChanged()
-	EmitSoundFontChanged()
-	return GetSoundFontInfoSnapshot(), nil
-}
 
-func GetSoundFontInfoSnapshot() SoundFontInfo {
-	return soundFontInfo
-}
-
-func EmitSoundFontChanged() {
-	if App != nil {
-		App.Event.Emit("soundFontChanged", GetSoundFontInfoSnapshot())
+	if changed {
+		return SaveConfig(config)
 	}
+
+	return nil
+}
+
+func InitSoundFontFromConfig() error {
+	if err := RefreshSoundFonts(); err != nil {
+		return err
+	}
+
+	config := GetUserConfig()
+
+	if strings.TrimSpace(config.ActiveSoundFontID) != "" {
+		_, sf, ok := FindSoundFontByID(config.SoundFonts, config.ActiveSoundFontID)
+		if ok && !sf.Missing {
+			if _, err := os.Stat(sf.Path); err == nil {
+				if err := SwitchSoundFont(sf); err == nil {
+					return nil
+				}
+			}
+		}
+	}
+
+	return SwitchToDefaultSoundFont()
 }

@@ -18,7 +18,7 @@ func main() {
 		log.Println("加载配置失败，已使用默认配置:", err)
 	}
 
-	if err := service.InitSoundFont(service.ResolveSoundFontPath()); err != nil {
+	if err := service.InitSoundFontFromConfig(); err != nil {
 		// 音源加载失败时允许程序继续启动，用户后续可以在设置中心重新选择音源。
 		log.Println("初始化音源失败，程序将以无内置发声模式启动:", err)
 	}

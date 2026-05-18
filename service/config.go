@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	appName              = "Peirato's Piano"
+	appName              = "Peirato's Piano Keyboard"
 	defaultSoundFontPath = "./assets/Yamaha-Grand-Lite-v2.0.sf2"
 )
 
@@ -31,16 +31,18 @@ type Window struct {
 }
 
 type Config struct {
-	Colors        map[string]Color `json:"colors"`
-	KeyLabel      string           `json:"keyLabel"`
-	KeyboardType  int              `json:"keyboardType"`
-	Velocity      uint8            `json:"velocity"`
-	Opacity       int              `json:"opacity"`
-	Version       string           `json:"version"`
-	ShowPedal     bool             `json:"showPedal"`
-	Volume        int32            `json:"volume"`
-	MidiChannel   uint8            `json:"midiChannel"`
-	SoundFontPath string           `json:"soundFontPath"`
+	Colors       map[string]Color `json:"colors"`
+	KeyLabel     string           `json:"keyLabel"`
+	KeyboardType int              `json:"keyboardType"`
+	Velocity     uint8            `json:"velocity"`
+	Opacity      int              `json:"opacity"`
+	Version      string           `json:"version"`
+	ShowPedal    bool             `json:"showPedal"`
+	Volume       int32            `json:"volume"`
+	MidiChannel  uint8            `json:"midiChannel"`
+
+	ActiveSoundFontID string          `json:"activeSoundFontId"`
+	SoundFonts        []UserSoundFont `json:"soundFonts"`
 }
 
 var DefaultConfig = Config{
@@ -53,13 +55,13 @@ var DefaultConfig = Config{
 			Label: "黑键按下",
 			Color: "#5FFF5F",
 		},
-		"whiteKeySub": {
+		"whiteKeyLeft": {
 			Label: "白键按下(左)",
-			Color: "#9AF7B3",
+			Color: "#f7e89a",
 		},
-		"blackKeySub": {
+		"blackKeyLeft": {
 			Label: "黑键按下(左)",
-			Color: "#5FFF5F",
+			Color: "#ffd25f",
 		},
 		"damperPedal": {
 			Label: "延音踏板踩下",
@@ -74,14 +76,15 @@ var DefaultConfig = Config{
 			Color: "#1054e7",
 		},
 	},
-	KeyLabel:      "octave_key",
-	KeyboardType:  0,
-	Velocity:      80,
-	Volume:        80,
-	Opacity:       100,
-	ShowPedal:     true,
-	MidiChannel:   0,
-	SoundFontPath: "",
+	KeyLabel:          "octave_key",
+	KeyboardType:      0,
+	Velocity:          80,
+	Volume:            80,
+	Opacity:           100,
+	ShowPedal:         true,
+	MidiChannel:       0,
+	SoundFonts:        []UserSoundFont{},
+	ActiveSoundFontID: "",
 }
 
 var UserConfig = cloneDefaultConfig()
@@ -131,15 +134,7 @@ func LoadConfig(version string) error {
 	config = mergeConfigWithDefaults(config)
 	config.Version = version
 
-	if config.Opacity < 20 || config.Opacity > 100 {
-		config.Opacity = DefaultConfig.Opacity
-	}
-	if config.Volume < 0 || config.Volume > 127 {
-		config.Volume = DefaultConfig.Volume
-	}
-	if config.MidiChannel > 15 {
-		config.MidiChannel = DefaultConfig.MidiChannel
-	}
+	config = normalizeConfigRanges(config)
 
 	return SaveConfig(config)
 }
@@ -157,36 +152,59 @@ func mergeConfigWithDefaults(config Config) Config {
 	merged.ShowPedal = config.ShowPedal
 	merged.Volume = config.Volume
 	merged.MidiChannel = config.MidiChannel
-	merged.SoundFontPath = config.SoundFontPath
+	merged.SoundFonts = config.SoundFonts
+	merged.ActiveSoundFontID = config.ActiveSoundFontID
 
 	for key, value := range config.Colors {
 		merged.Colors[key] = value
 	}
 
-	return merged
+	return normalizeConfigRanges(merged)
+}
+
+func normalizeConfigRanges(config Config) Config {
+	if config.Opacity < 20 || config.Opacity > 100 {
+		config.Opacity = DefaultConfig.Opacity
+	}
+	if config.Volume < 0 || config.Volume > 100 {
+		config.Volume = DefaultConfig.Volume
+	}
+	if config.Velocity == 0 || config.Velocity > 127 {
+		config.Velocity = DefaultConfig.Velocity
+	}
+	if config.MidiChannel > 15 {
+		config.MidiChannel = DefaultConfig.MidiChannel
+	}
+	return config
 }
 
 func SaveConfig(config Config) error {
 	configMu.Lock()
-	defer configMu.Unlock()
+	nextConfig := mergeConfigWithDefaults(config)
 
-	UserConfig = mergeConfigWithDefaults(config)
-
-	data, err := json.MarshalIndent(UserConfig, "", "  ")
+	data, err := json.MarshalIndent(nextConfig, "", "  ")
 	if err != nil {
+		configMu.Unlock()
 		return fmt.Errorf("序列化 JSON 失败: %w", err)
 	}
 
 	dir := filepath.Dir(configFilePath)
-	if dir != "" {
+	if dir != "" && dir != "." {
 		if err := os.MkdirAll(dir, 0755); err != nil {
-			return fmt.Errorf("创建目录失败: %w", err)
+			configMu.Unlock()
+			return fmt.Errorf("创建配置目录失败: %w", err)
 		}
 	}
 
 	if err := os.WriteFile(configFilePath, data, 0644); err != nil {
-		return fmt.Errorf("写入文件失败: %w", err)
+		configMu.Unlock()
+		return fmt.Errorf("写入配置文件失败: %w", err)
 	}
+
+	UserConfig = nextConfig
+
+	configMu.Unlock()
+	EmitConfigChanged()
 
 	return nil
 }
@@ -197,37 +215,43 @@ func GetUserConfig() Config {
 	return UserConfig
 }
 
-func ResolveSoundFontPath() string {
+func ResolveSoundFontPath() UserSoundFont {
 	config := GetUserConfig()
-	if config.SoundFontPath != "" {
-		if _, err := os.Stat(config.SoundFontPath); err == nil {
-			return config.SoundFontPath
+	path := defaultSoundFontPath
+	if config.ActiveSoundFontID != "" {
+		for _, sf := range config.SoundFonts {
+			if sf.ID == config.ActiveSoundFontID {
+				path = sf.Path
+				break
+			}
 		}
 	}
-	return defaultSoundFontPath
+	sf, err := BuildSoundFontFromPath(path)
+	if err != nil {
+		sf, _ = BuildSoundFontFromPath(defaultSoundFontPath)
+	}
+	return sf
 }
 
 func (k *Keyboard) SendConfig() Config {
 	return GetUserConfig()
 }
 
+func (k *Keyboard) GetDefaultConfig() Config {
+	return cloneDefaultConfig()
+}
+
 func (k *Keyboard) ReceiveConfig(config Config) (bool, string) {
 	if err := SaveConfig(config); err != nil {
 		return false, err.Error()
 	}
-	EmitConfigChanged()
 	return true, ""
 }
 
 func (k *Keyboard) ResetConfig() Config {
 	resetConfig := cloneDefaultConfig()
-	fmt.Printf("%+v\n", resetConfig)
-
 	resetConfig.Version = GetUserConfig().Version
-
 	_ = SaveConfig(resetConfig)
-
-	EmitConfigChanged()
 	return resetConfig
 }
 

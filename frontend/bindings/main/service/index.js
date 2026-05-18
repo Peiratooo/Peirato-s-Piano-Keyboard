@@ -10,18 +10,9 @@ export {
 export {
     Color,
     Config,
-    FollowGroup,
-    FollowPracticeOptions,
-    FollowPracticePlan,
-    FollowPracticeStep,
     InMidiDevice,
     MidiDevices,
-    MidiFileInfo,
-    MidiNote,
-    MidiPlaybackState,
-    MidiTrackInfo,
     OutMidiDevice,
     PedalSingal,
-    SoundFontInfo,
-    TrackHandAssignment
+    UserSoundFont
 } from "./models.js";

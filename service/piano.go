@@ -411,14 +411,8 @@ func containsUint8(list []uint8, target uint8) bool {
 }
 
 func (k *Keyboard) KeyboardPlay(key uint8) {
-	k.KeyboardPlayWithVelocity(key, GetUserConfig().Velocity)
-}
-
-func (k *Keyboard) KeyboardPlayWithVelocity(key uint8, velocity uint8) {
 	config := GetUserConfig()
-	// 本地音源的响度使用 “音符力度 × 用户音量” 计算。
-	// 这样 MIDI 文件可以保留自身 velocity，同时主窗口音量滑块仍然能控制整体响度。
-	Keydown(0, int32(key), scaleVelocityByVolume(velocity, config.Volume))
+	Keydown(0, int32(key), int32(config.Velocity))
 
 	midiMu.RLock()
 	selectedOut := Midis.SelectedOutDevice
@@ -427,25 +421,10 @@ func (k *Keyboard) KeyboardPlayWithVelocity(key uint8, velocity uint8) {
 	if !ok || selectedOut == -1 || outDevice.Device == nil {
 		return
 	}
-
-	noteOn := midi.NoteOn(config.MidiChannel, key, velocity)
+	noteOn := midi.NoteOn(config.MidiChannel, key, config.Velocity)
 	if err := outDevice.Device.Send(noteOn); err != nil {
 		fmt.Println("发送 MIDI NoteOn 失败:", err)
 	}
-}
-
-func scaleVelocityByVolume(velocity uint8, volume int32) int32 {
-	if velocity == 0 || volume <= 0 {
-		return 0
-	}
-	if volume > 127 {
-		volume = 127
-	}
-	scaled := int32(velocity) * volume / 127
-	if scaled < 1 {
-		return 1
-	}
-	return scaled
 }
 
 func (k *Keyboard) KeyboardStop(key uint8) {

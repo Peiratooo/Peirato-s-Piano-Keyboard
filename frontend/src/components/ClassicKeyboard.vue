@@ -29,8 +29,14 @@ const Keyboard = inject('Keyboard')
 const resize = inject('resize')
 
 const keyColorMap = {
-    black: 'b-active',
-    white: 'w-active',
+    right: {
+        black: 'b-active',
+        white: 'w-active',
+    },
+    left: {
+        black: 'b-l-active',
+        white: 'w-l-active',
+    }
 }
 
 const mouse = reactive({
@@ -44,9 +50,9 @@ const visibleKeys = computed(() => {
 })
 
 function getKeyClass(item) {
-    if (store.wrongKey[item.index]) return item.color === 'black' ? 'b-wrong' : 'w-wrong'
-    if (store.activeKey[item.index] || store.playbackKey[item.index]) return keyColorMap[item.color]
-    if (store.hintKey[item.index]) return item.color === 'black' ? 'b-hint' : 'w-hint'
+    if (store.activeKey[item.index]) {
+        return keyColorMap.right[item.color]
+    }
     return ''
 }
 
@@ -120,13 +126,13 @@ onBeforeUnmount(() => {
 }
 
 .white {
-    height:100%;
-    width:var(--white-key-width);
-    z-index:1;
-    border-left:1px solid #bbb;
-    border-bottom:1px solid #bbb;
-    border-radius:0 0 5px 5px;
-    box-shadow:-1px 0 0 rgba(255,255,255,0.5) inset,0 0 5px #ccc inset,0 0 3px rgba(0,0,0,0.1);
+    height: 100%;
+    width: var(--white-key-width);
+    z-index: 1;
+    border-left: 1px solid #bbb;
+    border-bottom: 1px solid #bbb;
+    border-radius: 0 0 5px 5px;
+    box-shadow: -1px 0 0 rgba(255, 255, 255, 0.5) inset, 0 0 5px #ccc inset, 0 0 3px rgba(0, 0, 0, 0.1);
     background-color: #f6f6f6;
 
     .label {
@@ -135,30 +141,30 @@ onBeforeUnmount(() => {
 }
 
 .w-active {
-    border-left:1px solid var(--whiteKey-o);
-    border-bottom:1px solid var(--whiteKey-o);
-    box-shadow:3px 0 3px rgba(0,0,0,0.1) inset,-3px 0 8px rgba(0,0,0,0.1) inset,0 0 3px rgba(0,0,0,0.2);
+    border-left: 1px solid var(--whiteKey-o);
+    border-bottom: 1px solid var(--whiteKey-o);
+    box-shadow: 3px 0 3px rgba(0, 0, 0, 0.1) inset, -3px 0 8px rgba(0, 0, 0, 0.1) inset, 0 0 3px rgba(0, 0, 0, 0.2);
     background-color: var(--whiteKey);
 }
 
-.w-hint {
-    background: linear-gradient(180deg, #fff, rgba(99, 102, 241, 0.28));
+.w-l-active {
+    border-left: 1px solid var(--whiteKeyLeft-o);
+    border-bottom: 1px solid var(--whiteKeyLeft-o);
+    box-shadow: 3px 0 3px rgba(0, 0, 0, 0.1) inset, -3px 0 8px rgba(0, 0, 0, 0.1) inset, 0 0 3px rgba(0, 0, 0, 0.2);
+    background-color: var(--whiteKeyLeft);
 }
 
-.w-wrong {
-    background: linear-gradient(180deg, #fff, rgba(239, 68, 68, 0.35));
-}
 
 .black {
-    height:63%;
+    height: 63%;
     width: var(--black-key-width);
     transform: translateX(var(--black-key-offset));
-    z-index:3;
-    border-bottom:1px solid #000;
-    border-left:1px solid #000;
-    border-radius:0 0 3px 3px;
-    box-shadow:-1px -1px 2px rgba(255,255,255,0.2) inset,0 -5px 2px 3px rgba(0,0,0,0.6) inset,0 2px 4px rgba(0,0,0,0.5);
-    background-color:#333;
+    z-index: 3;
+    border-bottom: 1px solid #000;
+    border-left: 1px solid #000;
+    border-radius: 0 0 3px 3px;
+    box-shadow: -1px -1px 2px rgba(255, 255, 255, 0.2) inset, 0 -5px 2px 3px rgba(0, 0, 0, 0.6) inset, 0 2px 4px rgba(0, 0, 0, 0.5);
+    background-color: #333;
 
     .label {
         font-size: 13px;
@@ -167,25 +173,25 @@ onBeforeUnmount(() => {
 }
 
 .b-active {
-    box-shadow:-1px -5px 2px rgba(131, 131, 131, 0.2) inset,0 -10px 10px 5px rgba(0,0,0,0.6) inset,0 1px 2px rgba(0,0,0,0.5);
+    box-shadow: -1px -5px 2px rgba(131, 131, 131, 0.2) inset, 0 -10px 10px 5px rgba(0, 0, 0, 0.6) inset, 0 1px 2px rgba(0, 0, 0, 0.5);
     background-color: var(--blackKey);
-    border-bottom:1px solid var(--blackKey-o);
-    border-left:1px solid var(--blackKey-o);
+    border-bottom: 1px solid var(--blackKey-o);
+    border-left: 1px solid var(--blackKey-o);
+}
+.b-l-active {
+    box-shadow: -1px -5px 2px rgba(131, 131, 131, 0.2) inset, 0 -10px 10px 5px rgba(0, 0, 0, 0.6) inset, 0 1px 2px rgba(0, 0, 0, 0.5);
+    background-color: var(--blackKeyLeft);
+    border-bottom: 1px solid var(--blackKeyLeft-o);
+    border-left: 1px solid var(--blackKeyLeft-o);
 }
 
-.b-hint {
-    background: #4f46e5;
-}
 
-.b-wrong {
-    background: #dc2626;
-}
 
 .A:first-child {
     margin: 0;
 }
 
-.B,.D,.E,.A,.G {
+.B, .D, .E, .A, .G {
     margin-left: var(--white-key-offset);
 }
 </style>

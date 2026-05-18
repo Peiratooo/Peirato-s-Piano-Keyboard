@@ -21,8 +21,6 @@ import {dateZhCN, NConfigProvider, NLoadingBarProvider, NMessageProvider, NModal
 import {Events, WML} from '@wailsio/runtime'
 import {Keyboard} from '../bindings/main/service'
 import {data} from './store'
-import {subscribeWindowBus} from './services/windowBus'
-import {applyBackendPlayerState, applyParsedMidiToStore} from './services/backendMidiService'
 
 const store = data()
 const route = useRoute()
@@ -30,7 +28,6 @@ const isMainWindow = computed(() => route.path === '/')
 
 const pressedComputerKeys = new Set()
 const unsubscribeBackendEvents = []
-let unsubscribeWindowBus = null
 let unsubscribeKeyboardListener = null
 let unsubscribeResizeListener = null
 
@@ -39,6 +36,9 @@ let unsubscribeResizeListener = null
 // ========================
 
 async function getConfig() {
+    const defaultConfig = await Keyboard.GetDefaultConfig()
+    store.config = {...store.config, ...defaultConfig}
+
     const config = await Keyboard.SendConfig()
     store.config = {...store.config, ...config}
     setKeyColor()
@@ -88,7 +88,6 @@ async function changeDevice(deviceType, deviceID) {
     }
 
     await getMidiDevices()
-    store.soundFontInfo = await Keyboard.GetSoundFontInfo()
 }
 
 // ========================
@@ -105,7 +104,7 @@ async function initKeyboardConfig() {
         keyMappingData[key] -= 12
     }
     store.keyMapping['case-1'] = keyMappingData
-    store.chordsname = chordNames
+    store.chordsName = chordNames
 
     const reverseMapping = {}
     for (const key in keyMappingData) {
@@ -137,6 +136,7 @@ function darkenHexColor(hex, factor = 0.7) {
 }
 
 function setKeyColor() {
+    if (!store.config.colors) return
     for (const key in store.config.colors) {
         document.documentElement.style.setProperty('--' + key, store.config.colors[key].color)
         document.documentElement.style.setProperty('--' + key + '-o', darkenHexColor(store.config.colors[key].color, 0.1) + '66')
@@ -147,6 +147,7 @@ function resize() {
     if (!store.keyboardConfig.length) return
     let whiteKeyCount = 0
     const range = store.keyboardRange[store.config.keyboardType]
+    if (!range) return
     for (const key of store.keyboardConfig.slice(range[0], range[1])) {
         if (key.color === 'white') whiteKeyCount++
     }
@@ -275,25 +276,7 @@ function registerBackendEvents() {
     on('allNotesOff', () => {
         store.clearAllKeys()
     })
-    on('midiPlayerLoaded', (event) => {
-        // Go 侧 MIDI 解析完成后会推送完整文件信息；主窗口和设置窗口都从 store.player 读取同一份数据。
-        applyParsedMidiToStore(store, getEventPayload(event))
-    })
-    on('midiPlayerState', (event) => {
-        // Go 播放器每隔一小段时间推送进度，前端只负责渲染，不再自己调度大量音符。
-        applyBackendPlayerState(store, getEventPayload(event))
-    })
-    on('playbackKey', (event) => {
-        const payload = getEventPayload(event) || {}
-        if (payload.midi === undefined) return
-        store.playbackKey[payload.midi] = !!payload.pressed
-    })
-    on('playbackClear', () => {
-        store.playbackKey = {}
-    })
-    on('soundFontChanged', (event) => {
-        store.soundFontInfo = {...store.soundFontInfo, ...getEventPayload(event)}
-    })
+
 }
 
 function getEventPayload(event) {
@@ -307,50 +290,6 @@ function cleanupBackendEvents() {
     }
 }
 
-
-function registerWindowBusEvents() {
-    unsubscribeWindowBus?.()
-    unsubscribeWindowBus = subscribeWindowBus((message) => {
-        if (!message?.type) return
-
-        switch (message.type) {
-            case 'playback:key': {
-                const {midi, pressed} = message.payload || {}
-                if (midi === undefined) return
-                store.playbackKey[midi] = !!pressed
-                break
-            }
-            case 'playback:clear': {
-                store.playbackKey = {}
-                break
-            }
-            case 'hint:set': {
-                const keys = message.payload?.keys || []
-                store.hintKey = {}
-                for (const key of keys) {
-                    store.hintKey[key] = true
-                }
-                break
-            }
-            case 'hint:clear': {
-                store.hintKey = {}
-                break
-            }
-            case 'wrong:key': {
-                const {midi, active} = message.payload || {}
-                if (midi === undefined) return
-                store.wrongKey[midi] = !!active
-                break
-            }
-            case 'all:clear': {
-                store.clearAllKeys()
-                break
-            }
-            default:
-                break
-        }
-    })
-}
 
 function registerResizeListener() {
     unsubscribeResizeListener?.()
@@ -369,10 +308,8 @@ onMounted(async () => {
     await initKeyboardConfig()
     await getConfig()
     await getMidiDevices()
-    store.soundFontInfo = await Keyboard.GetSoundFontInfo()
     await Keyboard.MidiListenerStart()
     registerBackendEvents()
-    registerWindowBusEvents()
     keyboardListener()
     resize()
     updateScaleByWindowHeight()
@@ -385,9 +322,8 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
     cleanupBackendEvents()
-    unsubscribeWindowBus()
-    unsubscribeKeyboardListener()
-    unsubscribeResizeListener()
+    unsubscribeKeyboardListener?.()
+    unsubscribeResizeListener?.()
 })
 
 provide('store', store)

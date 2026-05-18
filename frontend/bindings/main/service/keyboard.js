@@ -18,31 +18,6 @@ export function AllNotesOff() {
 }
 
 /**
- * BuildFollowGroups 供前端跟弹模式调用。threshold 单位是秒，建议默认 0.06。
- * @param {$models.MidiNote[]} notes
- * @param {number} threshold
- * @returns {$CancellablePromise<$models.FollowGroup[]>}
- */
-export function BuildFollowGroups(notes, threshold) {
-    return $Call.ByID(3687238640, notes, threshold).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType1($result);
-    }));
-}
-
-/**
- * BuildFollowPracticePlan 供 Wails 绑定调用，负责把 MIDI notes 变成“可练习”的步骤。
- * 这里放在 Go 侧是为了后续支持更大的 MIDI、轨道筛选、左右手算法升级时，不阻塞 WebView UI。
- * @param {$models.MidiNote[]} notes
- * @param {$models.FollowPracticeOptions} options
- * @returns {$CancellablePromise<$models.FollowPracticePlan>}
- */
-export function BuildFollowPracticePlan(notes, options) {
-    return $Call.ByID(4873254, notes, options).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType2($result);
-    }));
-}
-
-/**
  * @param {string} deviceType
  * @param {number} deviceID
  * @returns {$CancellablePromise<boolean>}
@@ -52,13 +27,12 @@ export function ChangeDevice(deviceType, deviceID) {
 }
 
 /**
- * CheckMidiPathExists 供 MIDI 独立窗口在切换目录记录时做轻量校验。
- * MIDI 目录只保存绝对路径，不复制文件；真实文件被移动或删除时，前端会提示用户移除这条记录。
- * @param {string} path
- * @returns {$CancellablePromise<boolean>}
+ * @returns {$CancellablePromise<$models.Config>}
  */
-export function CheckMidiPathExists(path) {
-    return $Call.ByID(2330610391, path);
+export function GetDefaultConfig() {
+    return $Call.ByID(1562366532).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType0($result);
+    }));
 }
 
 /**
@@ -66,38 +40,7 @@ export function CheckMidiPathExists(path) {
  */
 export function GetMidiDevices() {
     return $Call.ByID(1374315843).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType3($result);
-    }));
-}
-
-/**
- * @returns {$CancellablePromise<$models.MidiPlaybackState>}
- */
-export function GetMidiPlaybackState() {
-    return $Call.ByID(1236815226).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType4($result);
-    }));
-}
-
-/**
- * @returns {$CancellablePromise<$models.SoundFontInfo>}
- */
-export function GetSoundFontInfo() {
-    return $Call.ByID(546236701).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
-    }));
-}
-
-/**
- * ImportSoundFontBase64 供前端 <input type="file"> 选择 .sf2 后调用。
- * 设计上不使用后端原生文件选择器：用户仍然在前端选择文件，后端只负责保存、加载和记录配置。
- * @param {string} fileName
- * @param {string} encoded
- * @returns {$CancellablePromise<$models.SoundFontInfo>}
- */
-export function ImportSoundFontBase64(fileName, encoded) {
-    return $Call.ByID(2388528511, fileName, encoded).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType1($result);
     }));
 }
 
@@ -124,31 +67,6 @@ export function KeyboardPlayWithVelocity(key, velocity) {
  */
 export function KeyboardStop(key) {
     return $Call.ByID(1684431926, key);
-}
-
-/**
- * LoadMidiFileBase64 是正式的 Wails 绑定入口：前端把 MIDI 文件读成 base64，交给 Go 解析并缓存。
- * 后续播放、暂停、进度、跟弹分组都可以基于这份缓存完成，避免 WebView 主线程承担大文件计算。
- * @param {string} fileName
- * @param {string} encoded
- * @returns {$CancellablePromise<$models.MidiFileInfo>}
- */
-export function LoadMidiFileBase64(fileName, encoded) {
-    return $Call.ByID(1382091503, fileName, encoded).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType6($result);
-    }));
-}
-
-/**
- * LoadMidiFileFromPath 从系统绝对路径读取并解析 MIDI。
- * 这和前端上传 base64 的入口并存：独立 MIDI 窗口优先用绝对路径加载，旧逻辑和兼容场景仍可用 base64。
- * @param {string} path
- * @returns {$CancellablePromise<$models.MidiFileInfo>}
- */
-export function LoadMidiFileFromPath(path) {
-    return $Call.ByID(620560847, path).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType6($result);
-    }));
 }
 
 /**
@@ -180,43 +98,18 @@ export function OpenMidiCenter() {
 }
 
 /**
+ * @returns {$CancellablePromise<void>}
+ */
+export function OpenSoundFontDialog() {
+    return $Call.ByID(1887924031);
+}
+
+/**
  * @param {string} url
  * @returns {$CancellablePromise<void>}
  */
 export function OpenUrl(url) {
     return $Call.ByID(205994420, url);
-}
-
-/**
- * ParseMidiFileBase64 供 Wails 绑定调用。前端读取文件为 base64 后传给 Go 解析。
- * @param {string} fileName
- * @param {string} encoded
- * @returns {$CancellablePromise<$models.MidiFileInfo>}
- */
-export function ParseMidiFileBase64(fileName, encoded) {
-    return $Call.ByID(4082620770, fileName, encoded).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType6($result);
-    }));
-}
-
-/**
- * @returns {$CancellablePromise<$models.MidiPlaybackState>}
- */
-export function PauseMidiPlayback() {
-    return $Call.ByID(1266020547).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType4($result);
-    }));
-}
-
-/**
- * PlayFollowAutoNotes 播放跟弹计划中的非练习声部。
- * 前端只需把当前 step.AutoPlayNotes 传进来；Go 负责真实发声、UI playback 高亮和按时停止。
- * @param {$models.MidiNote[]} notes
- * @param {number} playbackRate
- * @returns {$CancellablePromise<void>}
- */
-export function PlayFollowAutoNotes(notes, playbackRate) {
-    return $Call.ByID(783196132, notes, playbackRate);
 }
 
 /**
@@ -235,13 +128,18 @@ export function ReceiveConfig(config) {
 }
 
 /**
- * ReloadSoundFont 按当前配置重新加载音源。后续用户替换同路径文件时可以直接调用它。
- * @returns {$CancellablePromise<$models.SoundFontInfo>}
+ * @returns {$CancellablePromise<void>}
  */
-export function ReloadSoundFont() {
-    return $Call.ByID(3447311504).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
-    }));
+export function RefreshSoundFonts() {
+    return $Call.ByID(3483343109);
+}
+
+/**
+ * @param {string} id
+ * @returns {$CancellablePromise<void>}
+ */
+export function RemoveSoundFontByID(id) {
+    return $Call.ByID(2216683187, id);
 }
 
 /**
@@ -249,40 +147,16 @@ export function ReloadSoundFont() {
  */
 export function ResetConfig() {
     return $Call.ByID(2912551192).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType7($result);
+        return $$createType0($result);
     }));
 }
 
 /**
- * RestoreDefaultSoundFont 清空用户音源路径，并回退到默认音源。
- * @returns {$CancellablePromise<$models.SoundFontInfo>}
+ * @param {string} id
+ * @returns {$CancellablePromise<void>}
  */
-export function RestoreDefaultSoundFont() {
-    return $Call.ByID(277714182).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
-    }));
-}
-
-/**
- * @param {number} seconds
- * @returns {$CancellablePromise<$models.MidiPlaybackState>}
- */
-export function SeekMidiPlayback(seconds) {
-    return $Call.ByID(959260135, seconds).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType4($result);
-    }));
-}
-
-/**
- * SelectSoundFont 供设置中心通过 Wails 绑定调用。
- * 只有音源成功加载后才写入配置，避免用户误选坏文件导致下次启动持续失败。
- * @param {string} path
- * @returns {$CancellablePromise<$models.SoundFontInfo>}
- */
-export function SelectSoundFont(path) {
-    return $Call.ByID(4191764567, path).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
-    }));
+export function SelectSoundFontByID(id) {
+    return $Call.ByID(2316821647, id);
 }
 
 /**
@@ -290,53 +164,21 @@ export function SelectSoundFont(path) {
  */
 export function SendConfig() {
     return $Call.ByID(1326898251).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType7($result);
+        return $$createType0($result);
     }));
 }
 
 /**
- * @param {number} rate
- * @returns {$CancellablePromise<$models.MidiPlaybackState>}
+ * @param {number} volume
+ * @param {number} revision
+ * @returns {$CancellablePromise<$models.Config>}
  */
-export function SetMidiPlaybackRate(rate) {
-    return $Call.ByID(3900847695, rate).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType4($result);
-    }));
-}
-
-/**
- * @returns {$CancellablePromise<$models.MidiPlaybackState>}
- */
-export function StartMidiPlayback() {
-    return $Call.ByID(3484989885).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType4($result);
-    }));
-}
-
-/**
- * StopFollowAutoNotes 只停止跟弹自动伴奏，不会清空用户手指正在按的 pressedKey。
- * 主要用于“上一步 / 下一步 / 停止跟弹”，避免旧步骤的伴奏残留。
- * @returns {$CancellablePromise<void>}
- */
-export function StopFollowAutoNotes() {
-    return $Call.ByID(77357162);
-}
-
-/**
- * @returns {$CancellablePromise<$models.MidiPlaybackState>}
- */
-export function StopMidiPlayback() {
-    return $Call.ByID(1771646923).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType4($result);
+export function SetVolume(volume, revision) {
+    return $Call.ByID(1058875951, volume, revision).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType0($result);
     }));
 }
 
 // Private type creation functions
-const $$createType0 = $models.FollowGroup.createFrom;
-const $$createType1 = $Create.Array($$createType0);
-const $$createType2 = $models.FollowPracticePlan.createFrom;
-const $$createType3 = $models.MidiDevices.createFrom;
-const $$createType4 = $models.MidiPlaybackState.createFrom;
-const $$createType5 = $models.SoundFontInfo.createFrom;
-const $$createType6 = $models.MidiFileInfo.createFrom;
-const $$createType7 = $models.Config.createFrom;
+const $$createType0 = $models.Config.createFrom;
+const $$createType1 = $models.MidiDevices.createFrom;

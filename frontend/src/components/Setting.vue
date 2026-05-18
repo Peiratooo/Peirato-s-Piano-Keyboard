@@ -20,16 +20,16 @@
                     <div class="setting-row">
                         <div>
                             <div class="label">音量</div>
-                            <div class="desc">控制本地音源播放音量。</div>
+                            <div class="desc">只控制本软件内置音源的输出音量。</div>
                         </div>
-                        <n-slider v-model:value="store.config.volume" :min="0" :max="127" @dragend="changeConfig"/>
+                        <n-slider v-model:value="store.config.volume" :min="0" :max="100" @dragend="changeConfig"/>
                     </div>
                     <div class="setting-row">
                         <div>
                             <div class="label">默认力度</div>
-                            <div class="desc">电脑键盘或鼠标触发时使用的 MIDI velocity。</div>
+                            <div class="desc">电脑键盘或鼠标触发音符时使用的按键力度。</div>
                         </div>
-                        <n-slider v-model:value="store.config.velocity" :min="0" :max="127" @dragend="changeConfig"/>
+                        <n-slider v-model:value="store.config.velocity" :min="1" :max="127" @dragend="changeConfig"/>
                     </div>
                     <div class="setting-row">
                         <div>
@@ -87,7 +87,7 @@
                         </div>
                         <n-radio-group v-model:value="store.config.keyboardType" @update:value="changeKeyboardType">
                             <n-radio-button
-                                v-for="item in store.keybordType"
+                                v-for="item in store.keyboardOptions"
                                 :key="item.value"
                                 :value="item.value"
                                 :label="item.label"
@@ -136,39 +136,69 @@
                     <div class="setting-row vertical">
                         <div>
                             <div class="label">当前音源</div>
-                            <div class="desc">前端选择 .sf2 文件并上传给 Go，Go 负责保存、加载和写入配置。</div>
+                            <div class="desc">SoundFont 文件由后端选择、验证和加载。</div>
                         </div>
                         <div class="soundfont-info">
-                            <n-tag :bordered="false" :type="store.soundFontInfo.loaded ? 'success' : 'warning'">
-                                {{ store.soundFontInfo.loaded ? '已加载' : '未加载' }}
+                            <n-tag :bordered="false" :type="store.config.activeSoundFontId ? 'success' : 'info'">
+                                {{ activeSoundFontName }}
                             </n-tag>
-                            <div class="mono path-text">{{ store.soundFontInfo.path || '默认音源 / 暂无路径' }}</div>
-                            <div v-if="store.soundFontInfo.error" class="error-text">{{ store.soundFontInfo.error }}</div>
+                            <div class="mono path-text">{{ activeSoundFontPath }}</div>
+                            <div v-if="soundFontError" class="error-text">{{ soundFontError }}</div>
                         </div>
                     </div>
 
                     <div class="soundfont-upload-card">
-                        <input
-                            ref="soundFontInput"
-                            class="hidden-input"
-                            type="file"
-                            accept=".sf2,audio/x-soundfont"
-                            @change="handleSoundFontFileChange"
-                        />
                         <div>
                             <div class="label">导入用户音源</div>
-                            <div class="desc">选择本地 .sf2 文件后会上传到后端保存，下次启动会自动加载该音源。</div>
+                            <div class="desc">添加本地 .sf2 文件后会立即切换为当前音源。</div>
                         </div>
-                        <n-button type="primary" size="small" @click="chooseSoundFontFile">选择 .sf2 文件</n-button>
+                        <n-button type="primary" size="small" @click="addSoundFont">选择 .sf2 文件</n-button>
+                    </div>
+
+                    <div class="soundfont-list">
+                        <div class="soundfont-item" :class="{active: !store.config.activeSoundFontId}">
+                            <div>
+                                <div class="label">默认音源</div>
+                                <div class="desc mono">assets/Yamaha-Grand-Lite-v2.0.sf2</div>
+                            </div>
+                            <n-button size="small" :disabled="!store.config.activeSoundFontId" @click="selectSoundFont('')">
+                                使用
+                            </n-button>
+                        </div>
+
+                        <div
+                            v-for="sf in soundFonts"
+                            :key="sf.id"
+                            class="soundfont-item"
+                            :class="{active: store.config.activeSoundFontId === sf.id, missing: sf.missing || sf.error}"
+                        >
+                            <div class="soundfont-item-main">
+                                <div class="label">
+                                    {{ sf.name }}
+                                    <n-tag v-if="sf.missing" size="small" type="error" :bordered="false">缺失</n-tag>
+                                    <n-tag v-else-if="sf.error" size="small" type="warning" :bordered="false">异常</n-tag>
+                                </div>
+                                <div class="desc mono path-text">{{ sf.path }}</div>
+                                <div v-if="sf.error" class="error-text">{{ sf.error }}</div>
+                                <div class="desc">{{ formatSize(sf.size) }}</div>
+                            </div>
+                            <div class="soundfont-actions">
+                                <n-button size="small" :disabled="store.config.activeSoundFontId === sf.id" @click="selectSoundFont(sf.id)">
+                                    使用
+                                </n-button>
+                                <n-button size="small" type="error" ghost @click="removeSoundFont(sf.id)">
+                                    删除
+                                </n-button>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="setting-actions">
-                        <n-button type="primary" size="small" @click="reloadSoundFont">重新加载音源</n-button>
-                        <n-button size="small" @click="restoreDefaultSoundFont">恢复默认音源</n-button>
+                        <n-button size="small" @click="refreshSoundFonts">刷新音源状态</n-button>
                     </div>
 
                     <div class="tip-box">
-                        当前不使用后端原生文件选择器：文件由前端选择，然后以 base64 传给 Go。MIDI 播放 / 练习不再放在设置中心，已迁移到独立长条窗口。
+                        MIDI 播放 / 练习功能已移除；这里仅管理本地演奏使用的 SoundFont 音源。
                     </div>
                 </div>
             </section>
@@ -209,7 +239,6 @@ import {
 import ExampleKeyboard from './ExampleKeyboard.vue'
 import ExamplePedal from './ExamplePedal.vue'
 import Author from './Author.vue'
-import {readFileAsBase64} from '../services/backendMidiService'
 
 const store = inject('store')
 const changeConfig = inject('changeConfig')
@@ -221,7 +250,8 @@ const Keyboard = inject('Keyboard')
 
 const colorIndex = ref('')
 const showColorPicker = ref(false)
-const soundFontInput = ref(null)
+const soundFontError = ref('')
+
 
 const menus = [
     {key: 'basic', label: '基础设置', icon: '⌘'},
@@ -234,6 +264,10 @@ const menus = [
 
 const inDeviceOptions = computed(() => buildDeviceOptions(store.devices.inMidiPool))
 const outDeviceOptions = computed(() => buildDeviceOptions(store.devices.outMidiPool))
+const soundFonts = computed(() => store.config.soundFonts || [])
+const activeSoundFont = computed(() => soundFonts.value.find((item) => item.id === store.config.activeSoundFontId))
+const activeSoundFontName = computed(() => activeSoundFont.value?.name || '默认音源')
+const activeSoundFontPath = computed(() => activeSoundFont.value?.path || 'assets/Yamaha-Grand-Lite-v2.0.sf2')
 
 function buildDeviceOptions(pool = {}) {
     return Object.entries(pool).map(([key, device]) => ({
@@ -252,51 +286,62 @@ function updateKeyColor(color) {
     setKeyColor()
 }
 
-function chooseSoundFontFile() {
-    soundFontInput.value?.click()
+
+
+
+
+
+async function syncConfigFromBackend() {
+    store.config = {...store.config, ...await Keyboard.SendConfig()}
 }
 
-async function handleSoundFontFileChange(event) {
-    const file = event.target.files?.[0]
-    if (!file) return
-
+async function addSoundFont() {
     try {
-        const encoded = await readFileAsBase64(file)
-        store.soundFontInfo = await Keyboard.ImportSoundFontBase64(file.name, encoded)
+        soundFontError.value = ''
+        await Keyboard.OpenSoundFontDialog()
+        await syncConfigFromBackend()
     } catch (error) {
-        store.soundFontInfo = {
-            ...store.soundFontInfo,
-            loaded: false,
-            error: String(error?.message || error),
-        }
-    } finally {
-        event.target.value = ''
+        soundFontError.value = String(error?.message || error)
     }
 }
 
-async function reloadSoundFont() {
-    changeConfig()
+async function selectSoundFont(id) {
     try {
-        store.soundFontInfo = await Keyboard.ReloadSoundFont()
+        soundFontError.value = ''
+        await Keyboard.SelectSoundFontByID(id)
+        await syncConfigFromBackend()
     } catch (error) {
-        store.soundFontInfo = {
-            ...store.soundFontInfo,
-            loaded: false,
-            error: String(error?.message || error),
-        }
+        soundFontError.value = String(error?.message || error)
+        await syncConfigFromBackend()
     }
 }
 
-async function restoreDefaultSoundFont() {
+async function removeSoundFont(id) {
     try {
-        store.soundFontInfo = await Keyboard.RestoreDefaultSoundFont()
+        soundFontError.value = ''
+        await Keyboard.RemoveSoundFontByID(id)
+        await syncConfigFromBackend()
     } catch (error) {
-        store.soundFontInfo = {
-            ...store.soundFontInfo,
-            loaded: false,
-            error: String(error?.message || error),
-        }
+        soundFontError.value = String(error?.message || error)
+        await syncConfigFromBackend()
     }
+}
+
+async function refreshSoundFonts() {
+    try {
+        soundFontError.value = ''
+        await Keyboard.RefreshSoundFonts()
+        await syncConfigFromBackend()
+    } catch (error) {
+        soundFontError.value = String(error?.message || error)
+    }
+}
+
+function formatSize(size) {
+    const bytes = Number(size || 0)
+    if (bytes <= 0) return ''
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
 watch(showColorPicker, () => {
@@ -418,6 +463,42 @@ onBeforeUnmount(() => {
 .soundfont-info {
     display: flex;
     flex-direction: column;
+    gap: 8px;
+}
+
+.soundfont-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.soundfont-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    padding: 14px;
+    border-radius: 16px;
+    background: rgba(248, 250, 252, 0.9);
+    border: 1px solid rgba(148, 163, 184, 0.22);
+}
+
+.soundfont-item.active {
+    border-color: rgba(34, 197, 94, 0.42);
+    background: rgba(240, 253, 244, 0.72);
+}
+
+.soundfont-item.missing {
+    border-color: rgba(239, 68, 68, 0.28);
+}
+
+.soundfont-item-main {
+    min-width: 0;
+}
+
+.soundfont-actions {
+    display: flex;
+    flex-shrink: 0;
     gap: 8px;
 }
 

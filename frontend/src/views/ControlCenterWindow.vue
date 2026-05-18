@@ -3,7 +3,7 @@
         <div class="titlebar">
             <div>
                 <div class="title">Peirato's Piano Keyboard 设置</div>
-                <div class="subtitle">自定义你的键盘显示、声音与练习体验。</div>
+                <div class="subtitle">自定义你的键盘显示、声音与 MIDI 设备。</div>
             </div>
             <n-tag size="small" :bordered="false" type="info">v{{ store.config.version || '-' }}</n-tag>
         </div>

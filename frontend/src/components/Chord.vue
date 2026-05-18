@@ -39,7 +39,7 @@ import {detectChord} from '../services/chordEngine'
 const store = inject('store')
 
 // rawChord 完全实时；displayChord 做轻微防抖，避免用户按下和弦时因为手指先后落键而频繁闪烁。
-const rawChord = computed(() => detectChord(store.pressedKey, store.chordsname))
+const rawChord = computed(() => detectChord(store.pressedKey, store.chordsName))
 const displayChord = ref({})
 let debounceTimer = null
 
