@@ -54,15 +54,6 @@ export function KeyboardPlay(key) {
 
 /**
  * @param {number} key
- * @param {number} velocity
- * @returns {$CancellablePromise<void>}
- */
-export function KeyboardPlayWithVelocity(key, velocity) {
-    return $Call.ByID(1426120379, key, velocity);
-}
-
-/**
- * @param {number} key
  * @returns {$CancellablePromise<void>}
  */
 export function KeyboardStop(key) {
@@ -164,17 +155,6 @@ export function SelectSoundFontByID(id) {
  */
 export function SendConfig() {
     return $Call.ByID(1326898251).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType0($result);
-    }));
-}
-
-/**
- * @param {number} volume
- * @param {number} revision
- * @returns {$CancellablePromise<$models.Config>}
- */
-export function SetVolume(volume, revision) {
-    return $Call.ByID(1058875951, volume, revision).then(/** @type {($result: any) => any} */(($result) => {
         return $$createType0($result);
     }));
 }

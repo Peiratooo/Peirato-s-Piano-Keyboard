@@ -22,14 +22,14 @@
                             <div class="label">音量</div>
                             <div class="desc">只控制本软件内置音源的输出音量。</div>
                         </div>
-                        <n-slider v-model:value="store.config.volume" :min="0" :max="100" @dragend="changeConfig"/>
+                        <n-slider v-model:value="store.config.volume" :min="0" :max="100" @dragend="changeConfig" :tooltip="false"/>
                     </div>
                     <div class="setting-row">
                         <div>
-                            <div class="label">默认力度</div>
+                            <div class="label">力度</div>
                             <div class="desc">电脑键盘或鼠标触发音符时使用的按键力度。</div>
                         </div>
-                        <n-slider v-model:value="store.config.velocity" :min="1" :max="127" @dragend="changeConfig"/>
+                        <n-slider v-model:value="store.config.velocity" :min="1" :max="127" @dragend="changeConfig" :tooltip="false"/>
                     </div>
                     <div class="setting-row">
                         <div>
@@ -194,11 +194,7 @@
                     </div>
 
                     <div class="setting-actions">
-                        <n-button size="small" @click="refreshSoundFonts">刷新音源状态</n-button>
-                    </div>
-
-                    <div class="tip-box">
-                        MIDI 播放 / 练习功能已移除；这里仅管理本地演奏使用的 SoundFont 音源。
+                        <n-button size="small" @click="refreshSoundFonts">刷新</n-button>
                     </div>
                 </div>
             </section>

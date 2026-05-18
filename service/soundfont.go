@@ -95,7 +95,7 @@ func SwitchSoundFont(sf UserSoundFont) error {
 
 	AllSynthNotesOff()
 
-	if err := LoadSoundFont(sf, 44100, 1024); err != nil {
+	if err := LoadSoundFont(sf, 44100, 2048); err != nil {
 		return err
 	}
 
@@ -171,7 +171,7 @@ func InitSpeaker() error {
 	volumeStreamer := effects.Volume{
 		Streamer: PianoPlayer.Streamer,
 		Base:     7,
-		Volume:   float64(GetUserConfig().Volume),
+		Volume:   1,
 		Silent:   false,
 	}
 

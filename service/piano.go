@@ -412,7 +412,7 @@ func containsUint8(list []uint8, target uint8) bool {
 
 func (k *Keyboard) KeyboardPlay(key uint8) {
 	config := GetUserConfig()
-	Keydown(0, int32(key), int32(config.Velocity))
+	Keydown(0, int32(key), config.Volume)
 
 	midiMu.RLock()
 	selectedOut := Midis.SelectedOutDevice
