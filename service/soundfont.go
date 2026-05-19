@@ -93,9 +93,11 @@ func SwitchSoundFont(sf UserSoundFont) error {
 		return fmt.Errorf("音源路径为空")
 	}
 
+	config := normalizeConfigRanges(GetUserConfig())
+
 	AllSynthNotesOff()
 
-	if err := LoadSoundFont(sf, 44100, 2048); err != nil {
+	if err := LoadSoundFont(sf, config.SampleRate, config.BufferSize); err != nil {
 		return err
 	}
 

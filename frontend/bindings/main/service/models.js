@@ -107,6 +107,20 @@ export class Config {
              */
             this["volume"] = 0;
         }
+        if (!("sampleRate" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["sampleRate"] = 0;
+        }
+        if (!("bufferSize" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["bufferSize"] = 0;
+        }
         if (!("midiChannel" in $$source)) {
             /**
              * @member
@@ -139,13 +153,13 @@ export class Config {
      */
     static createFrom($$source = {}) {
         const $$createField0_0 = $$createType1;
-        const $$createField10_0 = $$createType3;
+        const $$createField12_0 = $$createType3;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("colors" in $$parsedSource) {
             $$parsedSource["colors"] = $$createField0_0($$parsedSource["colors"]);
         }
         if ("soundFonts" in $$parsedSource) {
-            $$parsedSource["soundFonts"] = $$createField10_0($$parsedSource["soundFonts"]);
+            $$parsedSource["soundFonts"] = $$createField12_0($$parsedSource["soundFonts"]);
         }
         return new Config(/** @type {Partial<Config>} */($$parsedSource));
     }

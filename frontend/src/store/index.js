@@ -6,6 +6,8 @@ const safeConfig = {
     keyboardType: 0,
     velocity: 80,
     volume: 80,
+    sampleRate: 44100,
+    bufferSize: 2048,
     opacity: 100,
     showPedal: true,
     midiChannel: 0,

@@ -39,6 +39,8 @@ type Config struct {
 	Version      string           `json:"version"`
 	ShowPedal    bool             `json:"showPedal"`
 	Volume       int32            `json:"volume"`
+	SampleRate   int32            `json:"sampleRate"`
+	BufferSize   int32            `json:"bufferSize"`
 	MidiChannel  uint8            `json:"midiChannel"`
 
 	ActiveSoundFontID string          `json:"activeSoundFontId"`
@@ -80,6 +82,8 @@ var DefaultConfig = Config{
 	KeyboardType:      0,
 	Velocity:          80,
 	Volume:            80,
+	SampleRate:        44100,
+	BufferSize:        2048,
 	Opacity:           100,
 	ShowPedal:         true,
 	MidiChannel:       0,
@@ -151,6 +155,8 @@ func mergeConfigWithDefaults(config Config) Config {
 	merged.Version = config.Version
 	merged.ShowPedal = config.ShowPedal
 	merged.Volume = config.Volume
+	merged.SampleRate = config.SampleRate
+	merged.BufferSize = config.BufferSize
 	merged.MidiChannel = config.MidiChannel
 	merged.SoundFonts = config.SoundFonts
 	merged.ActiveSoundFontID = config.ActiveSoundFontID
@@ -168,6 +174,12 @@ func normalizeConfigRanges(config Config) Config {
 	}
 	if config.Volume < 0 || config.Volume > 100 {
 		config.Volume = DefaultConfig.Volume
+	}
+	if config.SampleRate != 22050 && config.SampleRate != 44100 && config.SampleRate != 48000 {
+		config.SampleRate = DefaultConfig.SampleRate
+	}
+	if config.BufferSize != 512 && config.BufferSize != 1024 && config.BufferSize != 2048 && config.BufferSize != 4096 {
+		config.BufferSize = DefaultConfig.BufferSize
 	}
 	if config.Velocity == 0 || config.Velocity > 127 {
 		config.Velocity = DefaultConfig.Velocity
