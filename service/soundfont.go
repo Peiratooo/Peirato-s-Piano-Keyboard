@@ -139,22 +139,23 @@ func FindSoundFontByID(items []UserSoundFont, id string) (int, UserSoundFont, bo
 
 	return -1, UserSoundFont{}, false
 }
+func newSynthStreamer() beep.Streamer {
+	var leftBuf []float32
+	var rightBuf []float32
 
-func InitSpeaker() error {
-	if PianoPlayer == nil || PianoPlayer.Synth == nil {
-		return fmt.Errorf("音源尚未加载，无法初始化扬声器")
-	}
+	return beep.StreamerFunc(func(samples [][2]float64) (n int, ok bool) {
+		size := len(samples)
 
-	if !speakerStarted {
-		if err := speaker.Init(beep.SampleRate(PianoPlayer.SampleRate), int(PianoPlayer.BufferSize)); err != nil {
-			return fmt.Errorf("初始化扬声器失败: %w", err)
+		if cap(leftBuf) < size {
+			leftBuf = make([]float32, size)
+			rightBuf = make([]float32, size)
 		}
-		speakerStarted = true
-	}
 
-	PianoPlayer.Streamer = beep.StreamerFunc(func(samples [][2]float64) (n int, ok bool) {
-		left := make([]float32, len(samples))
-		right := make([]float32, len(samples))
+		left := leftBuf[:size]
+		right := rightBuf[:size]
+
+		clear(left)
+		clear(right)
 
 		synthMu.Lock()
 		if PianoPlayer != nil && PianoPlayer.Synth != nil {
@@ -167,8 +168,22 @@ func InitSpeaker() error {
 			samples[i][1] = float64(right[i])
 		}
 
-		return len(samples), true
+		return size, true
 	})
+}
+func InitSpeaker() error {
+	if PianoPlayer == nil || PianoPlayer.Synth == nil {
+		return fmt.Errorf("音源尚未加载，无法初始化扬声器")
+	}
+
+	if !speakerStarted {
+		if err := speaker.Init(beep.SampleRate(PianoPlayer.SampleRate), int(PianoPlayer.BufferSize)); err != nil {
+			return fmt.Errorf("初始化扬声器失败: %w", err)
+		}
+		speakerStarted = true
+	}
+
+	PianoPlayer.Streamer = newSynthStreamer()
 
 	volumeStreamer := effects.Volume{
 		Streamer: PianoPlayer.Streamer,
