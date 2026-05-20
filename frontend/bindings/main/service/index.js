@@ -12,7 +12,16 @@ export {
     Config,
     InMidiDevice,
     MidiDevices,
+    MidiHand,
+    MidiHandMode,
+    MidiPlayStatus,
+    MidiPlaybackMode,
+    MidiPlaybackOptions,
+    MidiPlayerState,
+    MidiPracticeNote,
+    MidiPracticeStep,
     OutMidiDevice,
     PedalSingal,
+    UserMidi,
     UserSoundFont
 } from "./models.js";

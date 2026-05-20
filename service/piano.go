@@ -302,6 +302,7 @@ func handleMidiMessage(deviceID int, msg midi.Message) {
 	case msg.GetNoteStart(&ch, &key, &vel):
 		midiKey := midi.Note(key).Value()
 		Keydown(int32(ch), int32(key), int32(vel))
+		MidiPlayer.HandleUserNoteOn(int(midiKey))
 
 		midiMu.Lock()
 		pedal := Midis.PedalStatus[deviceID]
@@ -412,7 +413,8 @@ func containsUint8(list []uint8, target uint8) bool {
 
 func (k *Keyboard) KeyboardPlay(key uint8) {
 	config := GetUserConfig()
-	Keydown(0, int32(key), config.Volume)
+	Keydown(int32(config.MidiChannel), int32(key), config.Volume)
+	MidiPlayer.HandleUserNoteOn(int(key))
 
 	midiMu.RLock()
 	selectedOut := Midis.SelectedOutDevice
@@ -428,9 +430,9 @@ func (k *Keyboard) KeyboardPlay(key uint8) {
 }
 
 func (k *Keyboard) KeyboardStop(key uint8) {
-	Keyup(0, int32(key))
-
 	config := GetUserConfig()
+	Keyup(int32(config.MidiChannel), int32(key))
+
 	midiMu.RLock()
 	selectedOut := Midis.SelectedOutDevice
 	outDevice, ok := Midis.OutMidiPool[selectedOut]
@@ -506,6 +508,7 @@ func (k *Keyboard) AllNotesOff() {
 	if App != nil {
 		App.Event.Emit("allNotesOff")
 	}
+	emitMidiVisualClear()
 }
 
 func ListenDevices() {

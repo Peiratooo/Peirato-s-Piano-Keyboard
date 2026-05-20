@@ -25,6 +25,22 @@ export const data = defineStore('data', {
             activeKey: {},
             // pressedKey：用户手指真实按住的音。和弦识别优先使用它，避免延音踏板污染和弦判断。
             pressedKey: {},
+            midiPlaybackKey: {},
+            midiPlaybackLeftKey: {},
+            midiHintKey: {},
+            midiHintLeftKey: {},
+            midiWindowOpen: false,
+            midiPlayerState: {
+                status: 'idle',
+                mode: 'play',
+                handMode: 'both',
+                durationMs: 0,
+                currentMs: 0,
+                leftMs: 0,
+                rightMs: 0,
+                speed: 1,
+                waiting: false,
+            },
 
             keyMapping: {},
             chordsName: {},
@@ -89,9 +105,26 @@ export const data = defineStore('data', {
             this.activeKey[key] = pressed
             this.pressedKey[key] = pressed
         },
+        setMidiVisualKey(key, hand, active, source = 'playback') {
+            const isLeft = hand === 'left'
+            const target = source === 'followHint'
+                ? (isLeft ? this.midiHintLeftKey : this.midiHintKey)
+                : (isLeft ? this.midiPlaybackLeftKey : this.midiPlaybackKey)
+            target[key] = active
+        },
+        clearMidiHints() {
+            this.midiHintKey = {}
+            this.midiHintLeftKey = {}
+        },
+        clearMidiVisualKeys() {
+            this.midiPlaybackKey = {}
+            this.midiPlaybackLeftKey = {}
+            this.clearMidiHints()
+        },
         clearAllKeys() {
             this.activeKey = {}
             this.pressedKey = {}
+            this.clearMidiVisualKeys()
         },
     },
 })

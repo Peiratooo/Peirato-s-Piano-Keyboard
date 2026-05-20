@@ -276,6 +276,7 @@ func InitSoundFont(sf UserSoundFont) error {
 	return SwitchSoundFont(sf)
 }
 
+// Keydown 程序内发出声音
 func Keydown(channel, key, velocity int32) {
 	synthMu.Lock()
 	defer synthMu.Unlock()

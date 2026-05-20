@@ -31,20 +31,20 @@ type Window struct {
 }
 
 type Config struct {
-	Colors       map[string]Color `json:"colors"`
-	KeyLabel     string           `json:"keyLabel"`
-	KeyboardType int              `json:"keyboardType"`
-	Velocity     uint8            `json:"velocity"`
-	Opacity      int              `json:"opacity"`
-	Version      string           `json:"version"`
-	ShowPedal    bool             `json:"showPedal"`
-	Volume       int32            `json:"volume"`
-	SampleRate   int32            `json:"sampleRate"`
-	BufferSize   int32            `json:"bufferSize"`
-	MidiChannel  uint8            `json:"midiChannel"`
-
-	ActiveSoundFontID string          `json:"activeSoundFontId"`
-	SoundFonts        []UserSoundFont `json:"soundFonts"`
+	Colors            map[string]Color `json:"colors"`
+	KeyLabel          string           `json:"keyLabel"`
+	KeyboardType      int              `json:"keyboardType"`
+	Velocity          uint8            `json:"velocity"`
+	Opacity           int              `json:"opacity"`
+	Version           string           `json:"version"`
+	ShowPedal         bool             `json:"showPedal"`
+	Volume            int32            `json:"volume"`
+	SampleRate        int32            `json:"sampleRate"`
+	BufferSize        int32            `json:"bufferSize"`
+	MidiChannel       uint8            `json:"midiChannel"`
+	ActiveSoundFontID string           `json:"activeSoundFontId"`
+	SoundFonts        []UserSoundFont  `json:"soundFonts"`
+	MidiStore         []UserMidi       `json:"midiStore"`
 }
 
 var DefaultConfig = Config{
@@ -160,6 +160,7 @@ func mergeConfigWithDefaults(config Config) Config {
 	merged.MidiChannel = config.MidiChannel
 	merged.SoundFonts = config.SoundFonts
 	merged.ActiveSoundFontID = config.ActiveSoundFontID
+	merged.MidiStore = config.MidiStore
 
 	for key, value := range config.Colors {
 		merged.Colors[key] = value

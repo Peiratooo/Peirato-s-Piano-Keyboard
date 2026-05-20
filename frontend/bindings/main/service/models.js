@@ -142,6 +142,13 @@ export class Config {
              */
             this["soundFonts"] = [];
         }
+        if (!("midiStore" in $$source)) {
+            /**
+             * @member
+             * @type {UserMidi[]}
+             */
+            this["midiStore"] = [];
+        }
 
         Object.assign(this, $$source);
     }
@@ -154,12 +161,16 @@ export class Config {
     static createFrom($$source = {}) {
         const $$createField0_0 = $$createType1;
         const $$createField12_0 = $$createType3;
+        const $$createField13_0 = $$createType5;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("colors" in $$parsedSource) {
             $$parsedSource["colors"] = $$createField0_0($$parsedSource["colors"]);
         }
         if ("soundFonts" in $$parsedSource) {
             $$parsedSource["soundFonts"] = $$createField12_0($$parsedSource["soundFonts"]);
+        }
+        if ("midiStore" in $$parsedSource) {
+            $$parsedSource["midiStore"] = $$createField13_0($$parsedSource["midiStore"]);
         }
         return new Config(/** @type {Partial<Config>} */($$parsedSource));
     }
@@ -258,9 +269,9 @@ export class MidiDevices {
      * @returns {MidiDevices}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType5;
-        const $$createField1_0 = $$createType7;
-        const $$createField4_0 = $$createType10;
+        const $$createField0_0 = $$createType7;
+        const $$createField1_0 = $$createType9;
+        const $$createField4_0 = $$createType12;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("inMidiPool" in $$parsedSource) {
             $$parsedSource["inMidiPool"] = $$createField0_0($$parsedSource["inMidiPool"]);
@@ -272,6 +283,390 @@ export class MidiDevices {
             $$parsedSource["pedalStatus"] = $$createField4_0($$parsedSource["pedalStatus"]);
         }
         return new MidiDevices(/** @type {Partial<MidiDevices>} */($$parsedSource));
+    }
+}
+
+/**
+ * @readonly
+ * @enum {string}
+ */
+export const MidiHand = {
+    /**
+     * The Go zero value for the underlying type of the enum.
+     */
+    $zero: "",
+
+    MidiHandUnknown: "unknown",
+    MidiHandLeft: "left",
+    MidiHandRight: "right",
+};
+
+/**
+ * @readonly
+ * @enum {string}
+ */
+export const MidiHandMode = {
+    /**
+     * The Go zero value for the underlying type of the enum.
+     */
+    $zero: "",
+
+    MidiHandModeLeft: "left",
+    MidiHandModeRight: "right",
+    MidiHandModeBoth: "both",
+};
+
+/**
+ * @readonly
+ * @enum {string}
+ */
+export const MidiPlayStatus = {
+    /**
+     * The Go zero value for the underlying type of the enum.
+     */
+    $zero: "",
+
+    MidiPlayIdle: "idle",
+    MidiPlayPlaying: "playing",
+    MidiPlayPaused: "paused",
+    MidiPlayError: "error",
+};
+
+/**
+ * @readonly
+ * @enum {string}
+ */
+export const MidiPlaybackMode = {
+    /**
+     * The Go zero value for the underlying type of the enum.
+     */
+    $zero: "",
+
+    MidiPlaybackModePlay: "play",
+    MidiPlaybackModeFollow: "follow",
+};
+
+export class MidiPlaybackOptions {
+    /**
+     * Creates a new MidiPlaybackOptions instance.
+     * @param {Partial<MidiPlaybackOptions>} [$$source = {}] - The source object to create the MidiPlaybackOptions.
+     */
+    constructor($$source = {}) {
+        if (!("midiId" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["midiId"] = "";
+        }
+        if (!("mode" in $$source)) {
+            /**
+             * @member
+             * @type {MidiPlaybackMode}
+             */
+            this["mode"] = MidiPlaybackMode.$zero;
+        }
+        if (!("handMode" in $$source)) {
+            /**
+             * @member
+             * @type {MidiHandMode}
+             */
+            this["handMode"] = MidiHandMode.$zero;
+        }
+        if (!("leftMs" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["leftMs"] = 0;
+        }
+        if (!("rightMs" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["rightMs"] = 0;
+        }
+        if (!("speed" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["speed"] = 0;
+        }
+        if (!("leadWindowMs" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["leadWindowMs"] = 0;
+        }
+        if (!("groupWindowMs" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["groupWindowMs"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new MidiPlaybackOptions instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {MidiPlaybackOptions}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new MidiPlaybackOptions(/** @type {Partial<MidiPlaybackOptions>} */($$parsedSource));
+    }
+}
+
+export class MidiPlayerState {
+    /**
+     * Creates a new MidiPlayerState instance.
+     * @param {Partial<MidiPlayerState>} [$$source = {}] - The source object to create the MidiPlayerState.
+     */
+    constructor($$source = {}) {
+        if (!("midiId" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["midiId"] = "";
+        }
+        if (!("status" in $$source)) {
+            /**
+             * @member
+             * @type {MidiPlayStatus}
+             */
+            this["status"] = MidiPlayStatus.$zero;
+        }
+        if (!("mode" in $$source)) {
+            /**
+             * @member
+             * @type {MidiPlaybackMode}
+             */
+            this["mode"] = MidiPlaybackMode.$zero;
+        }
+        if (!("handMode" in $$source)) {
+            /**
+             * @member
+             * @type {MidiHandMode}
+             */
+            this["handMode"] = MidiHandMode.$zero;
+        }
+        if (!("durationMs" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["durationMs"] = 0;
+        }
+        if (!("currentMs" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["currentMs"] = 0;
+        }
+        if (!("leftMs" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["leftMs"] = 0;
+        }
+        if (!("rightMs" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["rightMs"] = 0;
+        }
+        if (!("speed" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["speed"] = 0;
+        }
+        if (!("leadWindowMs" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["leadWindowMs"] = 0;
+        }
+        if (!("groupWindowMs" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["groupWindowMs"] = 0;
+        }
+        if (!("waiting" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["waiting"] = false;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {MidiPracticeStep | null | undefined}
+             */
+            this["currentStep"] = undefined;
+        }
+        if (!("mutedTracks" in $$source)) {
+            /**
+             * @member
+             * @type {{ [_ in `${number}`]?: boolean }}
+             */
+            this["mutedTracks"] = {};
+        }
+        if (!("mutedHands" in $$source)) {
+            /**
+             * @member
+             * @type {{ [_ in MidiHand]?: boolean }}
+             */
+            this["mutedHands"] = {};
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["error"] = undefined;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new MidiPlayerState instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {MidiPlayerState}
+     */
+    static createFrom($$source = {}) {
+        const $$createField12_0 = $$createType14;
+        const $$createField13_0 = $$createType15;
+        const $$createField14_0 = $$createType16;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("currentStep" in $$parsedSource) {
+            $$parsedSource["currentStep"] = $$createField12_0($$parsedSource["currentStep"]);
+        }
+        if ("mutedTracks" in $$parsedSource) {
+            $$parsedSource["mutedTracks"] = $$createField13_0($$parsedSource["mutedTracks"]);
+        }
+        if ("mutedHands" in $$parsedSource) {
+            $$parsedSource["mutedHands"] = $$createField14_0($$parsedSource["mutedHands"]);
+        }
+        return new MidiPlayerState(/** @type {Partial<MidiPlayerState>} */($$parsedSource));
+    }
+}
+
+export class MidiPracticeNote {
+    /**
+     * Creates a new MidiPracticeNote instance.
+     * @param {Partial<MidiPracticeNote>} [$$source = {}] - The source object to create the MidiPracticeNote.
+     */
+    constructor($$source = {}) {
+        if (!("note" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["note"] = 0;
+        }
+        if (!("velocity" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["velocity"] = 0;
+        }
+        if (!("hand" in $$source)) {
+            /**
+             * @member
+             * @type {MidiHand}
+             */
+            this["hand"] = MidiHand.$zero;
+        }
+        if (!("trackIndex" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["trackIndex"] = 0;
+        }
+        if (!("ms" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["ms"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new MidiPracticeNote instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {MidiPracticeNote}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new MidiPracticeNote(/** @type {Partial<MidiPracticeNote>} */($$parsedSource));
+    }
+}
+
+export class MidiPracticeStep {
+    /**
+     * Creates a new MidiPracticeStep instance.
+     * @param {Partial<MidiPracticeStep>} [$$source = {}] - The source object to create the MidiPracticeStep.
+     */
+    constructor($$source = {}) {
+        if (!("index" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["index"] = 0;
+        }
+        if (!("ms" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["ms"] = 0;
+        }
+        if (!("notes" in $$source)) {
+            /**
+             * @member
+             * @type {MidiPracticeNote[]}
+             */
+            this["notes"] = [];
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new MidiPracticeStep instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {MidiPracticeStep}
+     */
+    static createFrom($$source = {}) {
+        const $$createField2_0 = $$createType18;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("notes" in $$parsedSource) {
+            $$parsedSource["notes"] = $$createField2_0($$parsedSource["notes"]);
+        }
+        return new MidiPracticeStep(/** @type {Partial<MidiPracticeStep>} */($$parsedSource));
     }
 }
 
@@ -362,6 +757,83 @@ export class PedalSingal {
     }
 }
 
+export class UserMidi {
+    /**
+     * Creates a new UserMidi instance.
+     * @param {Partial<UserMidi>} [$$source = {}] - The source object to create the UserMidi.
+     */
+    constructor($$source = {}) {
+        if (!("id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["id"] = "";
+        }
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("path" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["path"] = "";
+        }
+        if (!("size" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["size"] = 0;
+        }
+        if (!("importedAt" in $$source)) {
+            /**
+             * @member
+             * @type {time$0.Time}
+             */
+            this["importedAt"] = null;
+        }
+        if (!("missing" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["missing"] = false;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {number | undefined}
+             */
+            this["durationMs"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {number | undefined}
+             */
+            this["trackCount"] = undefined;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new UserMidi instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {UserMidi}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new UserMidi(/** @type {Partial<UserMidi>} */($$parsedSource));
+    }
+}
+
 export class UserSoundFont {
     /**
      * Creates a new UserSoundFont instance.
@@ -444,10 +916,18 @@ const $$createType0 = Color.createFrom;
 const $$createType1 = $Create.Map($Create.Any, $$createType0);
 const $$createType2 = UserSoundFont.createFrom;
 const $$createType3 = $Create.Array($$createType2);
-const $$createType4 = InMidiDevice.createFrom;
-const $$createType5 = $Create.Map($Create.Any, $$createType4);
-const $$createType6 = OutMidiDevice.createFrom;
+const $$createType4 = UserMidi.createFrom;
+const $$createType5 = $Create.Array($$createType4);
+const $$createType6 = InMidiDevice.createFrom;
 const $$createType7 = $Create.Map($Create.Any, $$createType6);
-const $$createType8 = PedalSingal.createFrom;
-const $$createType9 = $Create.Nullable($$createType8);
-const $$createType10 = $Create.Map($Create.Any, $$createType9);
+const $$createType8 = OutMidiDevice.createFrom;
+const $$createType9 = $Create.Map($Create.Any, $$createType8);
+const $$createType10 = PedalSingal.createFrom;
+const $$createType11 = $Create.Nullable($$createType10);
+const $$createType12 = $Create.Map($Create.Any, $$createType11);
+const $$createType13 = MidiPracticeStep.createFrom;
+const $$createType14 = $Create.Nullable($$createType13);
+const $$createType15 = $Create.Map($Create.Any, $Create.Any);
+const $$createType16 = $Create.Map($Create.Any, $Create.Any);
+const $$createType17 = MidiPracticeNote.createFrom;
+const $$createType18 = $Create.Array($$createType17);

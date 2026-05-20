@@ -50,8 +50,11 @@ const visibleKeys = computed(() => {
 })
 
 function getKeyClass(item) {
-    if (store.activeKey[item.index]) {
+    if (store.activeKey[item.index] || store.midiPlaybackKey[item.index] || store.midiHintKey[item.index]) {
         return keyColorMap.right[item.color]
+    }
+    if (store.midiPlaybackLeftKey[item.index] || store.midiHintLeftKey[item.index]) {
+        return keyColorMap.left[item.color]
     }
     return ''
 }

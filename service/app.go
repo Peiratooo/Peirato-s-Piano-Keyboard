@@ -142,6 +142,7 @@ func (k *Keyboard) OpenMidiCenter() {
 	if MidiWin != nil {
 		MidiWin.Show()
 		MidiWin.Focus()
+		emitMidiWindowState(true)
 		return
 	}
 	MidiWin = App.Window.NewWithOptions(application.WebviewWindowOptions{
@@ -169,9 +170,12 @@ func (k *Keyboard) OpenMidiCenter() {
 	})
 	MidiWin.OnWindowEvent(events.Common.WindowClosing, func(e *application.WindowEvent) {
 		MidiWin = nil
+		_ = MidiPlayer.Reset()
+		emitMidiWindowState(false)
 	})
 	App.Window.Add(MidiWin)
 	MidiWin.Show()
+	emitMidiWindowState(true)
 }
 
 func (k *Keyboard) Quit() {
@@ -198,4 +202,14 @@ func (k *Keyboard) OpenSoundFontDialog() error {
 	}
 
 	return AddSoundFontByPath(path)
+}
+
+func (k *Keyboard) GetMidiWindowOpen() bool {
+	return MidiWin != nil
+}
+
+func emitMidiWindowState(open bool) {
+	if App != nil {
+		App.Event.Emit("midiWindowState", map[string]bool{"open": open})
+	}
 }

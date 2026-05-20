@@ -67,6 +67,11 @@ async function getMidiDevices() {
     store.loaded = true
 }
 
+async function getMidiWindowState() {
+    if (typeof Keyboard.GetMidiWindowOpen !== 'function') return
+    store.midiWindowOpen = await Keyboard.GetMidiWindowOpen()
+}
+
 async function changeDevice(deviceType, deviceID) {
     // 只有切换输入设备时才需要重启监听；输出设备切换只需要清音，避免不必要地打断输入监听。
     const isInputDevice = deviceType === 'in'
@@ -273,6 +278,35 @@ function registerBackendEvents() {
         setKeyColor()
         resize()
     })
+    on('midiWindowState', (event) => {
+        const payload = getEventPayload(event)
+        store.midiWindowOpen = !!payload?.open
+        if (!store.midiWindowOpen) {
+            store.clearMidiVisualKeys()
+        }
+    })
+    on('midiPlayerState', (event) => {
+        store.midiPlayerState = {
+            ...store.midiPlayerState,
+            ...getEventPayload(event),
+        }
+    })
+    on('midiPlaybackKey', (event) => {
+        const signal = getEventPayload(event)
+        if (!signal) return
+        store.setMidiVisualKey(signal.note, signal.hand, !!signal.active, 'playback')
+    })
+    on('midiFollowHint', (event) => {
+        const step = getEventPayload(event)
+        store.clearMidiHints()
+        if (!step?.notes?.length) return
+        for (const note of step.notes) {
+            store.setMidiVisualKey(note.note, note.hand, true, 'followHint')
+        }
+    })
+    on('midiVisualClear', () => {
+        store.clearMidiVisualKeys()
+    })
     on('allNotesOff', () => {
         store.clearAllKeys()
     })
@@ -308,6 +342,7 @@ onMounted(async () => {
     await initKeyboardConfig()
     await getConfig()
     await getMidiDevices()
+    await getMidiWindowState()
     await Keyboard.MidiListenerStart()
     registerBackendEvents()
     keyboardListener()

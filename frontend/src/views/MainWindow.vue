@@ -54,7 +54,7 @@
         </div>
 
         <div
-            v-if="store.loaded"
+            v-if="store.loaded && !store.midiWindowOpen"
             ref="chordRef"
             class="floating-card"
             :style="{ left: chordPos.x + 'px', top: chordPos.y + 'px' }"
