@@ -48,6 +48,7 @@ type MidiPlaybackOptions struct {
 	LeftMs  float64 `json:"leftMs"`
 	RightMs float64 `json:"rightMs"`
 	Speed   float64 `json:"speed"`
+	Loop    bool    `json:"loop"`
 
 	LeadWindowMs  float64 `json:"leadWindowMs"`
 	GroupWindowMs float64 `json:"groupWindowMs"`
@@ -63,6 +64,7 @@ type MidiPlayerState struct {
 	LeftMs        float64           `json:"leftMs"`
 	RightMs       float64           `json:"rightMs"`
 	Speed         float64           `json:"speed"`
+	Loop          bool              `json:"loop"`
 	LeadWindowMs  float64           `json:"leadWindowMs"`
 	GroupWindowMs float64           `json:"groupWindowMs"`
 	Waiting       bool              `json:"waiting"`
@@ -198,6 +200,7 @@ func (p *MidiPlayerRuntime) Start(midiFile *Midi, options MidiPlaybackOptions) e
 		LeftMs:        options.LeftMs,
 		RightMs:       options.RightMs,
 		Speed:         options.Speed,
+		Loop:          options.Loop,
 		LeadWindowMs:  options.LeadWindowMs,
 		GroupWindowMs: options.GroupWindowMs,
 		MutedTracks:   make(map[int]bool),
@@ -265,22 +268,25 @@ func (p *MidiPlayerRuntime) Tick() {
 
 	currentMs := p.calcCurrentMsLocked()
 	if currentMs >= p.state.RightMs {
-		p.stopLocked()
-		p.state.Status = MidiPlayIdle
-		p.state.CurrentMs = p.state.LeftMs
-		p.state.Waiting = false
-		p.state.CurrentStep = nil
-		p.eventIndex = findMidiEventIndexByMs(p.events, p.state.LeftMs)
-		p.baseMs = p.state.LeftMs
-		p.baseTime = time.Now()
-		p.hintActive = false
-		p.acceptedNotes = make(map[int]bool)
-		state = p.state
-		p.mu.Unlock()
-		AllSynthNotesOff()
-		emitMidiVisualClear()
-		emitMidiPlayerState(state)
-		return
+		if p.state.Loop {
+			p.resetToRangeStartLocked()
+			state = p.state
+			p.mu.Unlock()
+			AllSynthNotesOff()
+			emitMidiVisualClear()
+			emitMidiPlayerState(state)
+			return
+		} else {
+			p.stopLocked()
+			p.state.Status = MidiPlayIdle
+			p.resetToRangeStartLocked()
+			state = p.state
+			p.mu.Unlock()
+			AllSynthNotesOff()
+			emitMidiVisualClear()
+			emitMidiPlayerState(state)
+			return
+		}
 	}
 
 	if p.state.Mode == MidiPlaybackModeFollow {
@@ -585,14 +591,7 @@ func (p *MidiPlayerRuntime) Stop() error {
 	AllSynthNotesOff()
 	emitMidiVisualClear()
 	p.state.Status = MidiPlayIdle
-	p.state.CurrentMs = p.state.LeftMs
-	p.state.Waiting = false
-	p.state.CurrentStep = nil
-	p.eventIndex = findMidiEventIndexByMs(p.events, p.state.LeftMs)
-	p.baseMs = p.state.LeftMs
-	p.baseTime = time.Now()
-	p.hintActive = false
-	p.acceptedNotes = make(map[int]bool)
+	p.resetToRangeStartLocked()
 	emitMidiPlayerState(p.state)
 	return nil
 }
@@ -657,31 +656,98 @@ func (p *MidiPlayerRuntime) SetSpeed(speed float64) error {
 
 func (p *MidiPlayerRuntime) SetRange(leftMs float64, rightMs float64) error {
 	p.mu.Lock()
+	options := MidiPlaybackOptions{
+		MidiID:        p.state.MidiID,
+		Mode:          p.state.Mode,
+		HandMode:      p.state.Hand,
+		LeftMs:        leftMs,
+		RightMs:       rightMs,
+		Speed:         p.state.Speed,
+		Loop:          p.state.Loop,
+		LeadWindowMs:  p.state.LeadWindowMs,
+		GroupWindowMs: p.state.GroupWindowMs,
+	}
+	p.mu.Unlock()
+
+	return p.SetOptions(options)
+}
+
+func (p *MidiPlayerRuntime) SetOptions(options MidiPlaybackOptions) error {
+	p.mu.Lock()
 	defer p.mu.Unlock()
-	durationMs := p.state.DurationMs
-	leftMs = clampFloat(leftMs, 0, durationMs)
-	rightMs = clampFloat(rightMs, 0, durationMs)
-	if rightMs <= leftMs {
-		rightMs = leftMs + 100
-		if rightMs > durationMs {
-			rightMs = durationMs
+
+	if len(p.events) == 0 || p.state.DurationMs <= 0 {
+		return errors.New("MIDI 尚未加载")
+	}
+
+	currentMs := p.state.CurrentMs
+	if p.state.Status == MidiPlayPlaying && !p.state.Waiting {
+		currentMs = p.calcCurrentMsLocked()
+	}
+
+	if options.MidiID == "" {
+		options.MidiID = p.state.MidiID
+	}
+	options = normalizeMidiPlaybackOptions(options, p.state.DurationMs)
+
+	followSteps := make([]MidiPracticeStep, 0)
+	if options.Mode == MidiPlaybackModeFollow {
+		followSteps = buildMidiPracticeSteps(p.events, options)
+		if len(followSteps) == 0 {
+			return errors.New("当前范围和练习手没有可练习音符")
 		}
 	}
-	p.state.LeftMs = leftMs
-	p.state.RightMs = rightMs
-	if p.state.CurrentMs < leftMs || p.state.CurrentMs > rightMs {
-		AllSynthNotesOff()
-		emitMidiVisualClear()
-		p.state.CurrentMs = leftMs
-	}
-	p.eventIndex = findMidiEventIndexByMs(p.events, p.state.CurrentMs)
-	p.followIndex = findPracticeStepIndexByMs(p.followSteps, p.state.CurrentMs)
+
+	currentMs = clampFloat(currentMs, options.LeftMs, options.RightMs)
+
+	AllSynthNotesOff()
+	emitMidiVisualClear()
+
+	p.state.MidiID = options.MidiID
+	p.state.Mode = options.Mode
+	p.state.Hand = options.HandMode
+	p.state.LeftMs = options.LeftMs
+	p.state.RightMs = options.RightMs
+	p.state.Speed = options.Speed
+	p.state.Loop = options.Loop
+	p.state.LeadWindowMs = options.LeadWindowMs
+	p.state.GroupWindowMs = options.GroupWindowMs
+	p.state.CurrentMs = currentMs
+	p.state.Waiting = false
+	p.state.Error = ""
+
+	p.followSteps = followSteps
+	p.followIndex = findPracticeStepIndexByMs(p.followSteps, currentMs)
 	p.hintActive = false
 	p.acceptedNotes = make(map[int]bool)
-	p.baseMs = p.state.CurrentMs
+	if p.state.Mode == MidiPlaybackModeFollow && p.followIndex < len(p.followSteps) {
+		p.state.CurrentStep = cloneMidiPracticeStep(&p.followSteps[p.followIndex])
+	} else {
+		p.state.CurrentStep = nil
+	}
+
+	p.eventIndex = findMidiEventIndexByMs(p.events, currentMs)
+	p.baseMs = currentMs
 	p.baseTime = time.Now()
+
 	emitMidiPlayerState(p.state)
 	return nil
+}
+
+func (p *MidiPlayerRuntime) resetToRangeStartLocked() {
+	p.state.CurrentMs = p.state.LeftMs
+	p.state.Waiting = false
+	p.eventIndex = findMidiEventIndexByMs(p.events, p.state.LeftMs)
+	p.followIndex = findPracticeStepIndexByMs(p.followSteps, p.state.LeftMs)
+	p.hintActive = false
+	p.acceptedNotes = make(map[int]bool)
+	if p.state.Mode == MidiPlaybackModeFollow && p.followIndex < len(p.followSteps) {
+		p.state.CurrentStep = cloneMidiPracticeStep(&p.followSteps[p.followIndex])
+	} else {
+		p.state.CurrentStep = nil
+	}
+	p.baseMs = p.state.LeftMs
+	p.baseTime = time.Now()
 }
 
 func (p *MidiPlayerRuntime) SetTrackMuted(trackIndex int, muted bool) error {

@@ -39,6 +39,7 @@ export const data = defineStore('data', {
                 leftMs: 0,
                 rightMs: 0,
                 speed: 1,
+                loop: true,
                 waiting: false,
             },
 

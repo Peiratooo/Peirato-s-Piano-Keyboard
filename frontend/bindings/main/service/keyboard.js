@@ -260,6 +260,14 @@ export function SetMidiHandMuted(hand, muted) {
 }
 
 /**
+ * @param {$models.MidiPlaybackOptions} options
+ * @returns {$CancellablePromise<void>}
+ */
+export function SetMidiPlaybackOptions(options) {
+    return $Call.ByID(3850530461, options);
+}
+
+/**
  * @param {number} leftMs
  * @param {number} rightMs
  * @returns {$CancellablePromise<void>}
@@ -298,6 +306,14 @@ export function StartMidiPlayback(options) {
  */
 export function StopMidiPlayback() {
     return $Call.ByID(1771646923);
+}
+
+/**
+ * @param {$models.MidiPlaybackOptions} options
+ * @returns {$CancellablePromise<void>}
+ */
+export function SwitchMidiPlayback(options) {
+    return $Call.ByID(513865155, options);
 }
 
 // Private type creation functions

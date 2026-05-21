@@ -394,6 +394,13 @@ export class MidiPlaybackOptions {
              */
             this["speed"] = 0;
         }
+        if (!("loop" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["loop"] = false;
+        }
         if (!("leadWindowMs" in $$source)) {
             /**
              * @member
@@ -492,6 +499,13 @@ export class MidiPlayerState {
              */
             this["speed"] = 0;
         }
+        if (!("loop" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["loop"] = false;
+        }
         if (!("leadWindowMs" in $$source)) {
             /**
              * @member
@@ -551,18 +565,18 @@ export class MidiPlayerState {
      * @returns {MidiPlayerState}
      */
     static createFrom($$source = {}) {
-        const $$createField12_0 = $$createType14;
-        const $$createField13_0 = $$createType15;
-        const $$createField14_0 = $$createType16;
+        const $$createField13_0 = $$createType14;
+        const $$createField14_0 = $$createType15;
+        const $$createField15_0 = $$createType16;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("currentStep" in $$parsedSource) {
-            $$parsedSource["currentStep"] = $$createField12_0($$parsedSource["currentStep"]);
+            $$parsedSource["currentStep"] = $$createField13_0($$parsedSource["currentStep"]);
         }
         if ("mutedTracks" in $$parsedSource) {
-            $$parsedSource["mutedTracks"] = $$createField13_0($$parsedSource["mutedTracks"]);
+            $$parsedSource["mutedTracks"] = $$createField14_0($$parsedSource["mutedTracks"]);
         }
         if ("mutedHands" in $$parsedSource) {
-            $$parsedSource["mutedHands"] = $$createField14_0($$parsedSource["mutedHands"]);
+            $$parsedSource["mutedHands"] = $$createField15_0($$parsedSource["mutedHands"]);
         }
         return new MidiPlayerState(/** @type {Partial<MidiPlayerState>} */($$parsedSource));
     }

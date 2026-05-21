@@ -254,6 +254,10 @@ func (k *Keyboard) StartMidiPlayback(options MidiPlaybackOptions) error {
 	return MidiPlayer.Start(midiFile, options)
 }
 
+func (k *Keyboard) SwitchMidiPlayback(options MidiPlaybackOptions) error {
+	return k.StartMidiPlayback(options)
+}
+
 func (k *Keyboard) PauseMidiPlayback() error {
 	return MidiPlayer.Pause()
 }
@@ -280,6 +284,10 @@ func (k *Keyboard) SetMidiPlaybackSpeed(speed float64) error {
 
 func (k *Keyboard) SetMidiPlaybackRange(leftMs float64, rightMs float64) error {
 	return MidiPlayer.SetRange(leftMs, rightMs)
+}
+
+func (k *Keyboard) SetMidiPlaybackOptions(options MidiPlaybackOptions) error {
+	return MidiPlayer.SetOptions(options)
 }
 
 func (k *Keyboard) SetMidiTrackMuted(trackIndex int, muted bool) error {
