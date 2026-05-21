@@ -10,9 +10,9 @@ import (
 )
 
 const (
-	defaultMidiWindowMs = 80.0
-	playerTickInterval  = 2 * time.Millisecond
-	stateEmitInterval   = 33 * time.Millisecond
+	defaultMidiWindowMs = 100.0
+	playerTickInterval  = 3 * time.Millisecond
+	stateEmitInterval   = 50 * time.Millisecond
 )
 
 type MidiPlayStatus string
@@ -54,28 +54,22 @@ type MidiPlaybackOptions struct {
 }
 
 type MidiPlayerState struct {
-	MidiID string `json:"midiId"`
-
-	Status MidiPlayStatus   `json:"status"`
-	Mode   MidiPlaybackMode `json:"mode"`
-	Hand   MidiHandMode     `json:"handMode"`
-
-	DurationMs float64 `json:"durationMs"`
-	CurrentMs  float64 `json:"currentMs"`
-	LeftMs     float64 `json:"leftMs"`
-	RightMs    float64 `json:"rightMs"`
-	Speed      float64 `json:"speed"`
-
-	LeadWindowMs  float64 `json:"leadWindowMs"`
-	GroupWindowMs float64 `json:"groupWindowMs"`
-
-	Waiting     bool              `json:"waiting"`
-	CurrentStep *MidiPracticeStep `json:"currentStep,omitempty"`
-
-	MutedTracks map[int]bool      `json:"mutedTracks"`
-	MutedHands  map[MidiHand]bool `json:"mutedHands"`
-
-	Error string `json:"error,omitempty"`
+	MidiID        string            `json:"midiId"`
+	Status        MidiPlayStatus    `json:"status"`
+	Mode          MidiPlaybackMode  `json:"mode"`
+	Hand          MidiHandMode      `json:"handMode"`
+	DurationMs    float64           `json:"durationMs"`
+	CurrentMs     float64           `json:"currentMs"`
+	LeftMs        float64           `json:"leftMs"`
+	RightMs       float64           `json:"rightMs"`
+	Speed         float64           `json:"speed"`
+	LeadWindowMs  float64           `json:"leadWindowMs"`
+	GroupWindowMs float64           `json:"groupWindowMs"`
+	Waiting       bool              `json:"waiting"`
+	CurrentStep   *MidiPracticeStep `json:"currentStep,omitempty"`
+	MutedTracks   map[int]bool      `json:"mutedTracks"`
+	MutedHands    map[MidiHand]bool `json:"mutedHands"`
+	Error         string            `json:"error,omitempty"`
 }
 
 type MidiPracticeNote struct {
@@ -260,9 +254,8 @@ func (p *MidiPlayerRuntime) Tick() {
 	var state MidiPlayerState
 	var hintStep *MidiPracticeStep
 	var clearHint bool
-	var clearVisual bool
+
 	var emitState bool
-	var stopPlayback bool
 
 	p.mu.Lock()
 	if p.state.Status != MidiPlayPlaying {
@@ -283,7 +276,6 @@ func (p *MidiPlayerRuntime) Tick() {
 		p.hintActive = false
 		p.acceptedNotes = make(map[int]bool)
 		state = p.state
-		stopPlayback = true
 		p.mu.Unlock()
 		AllSynthNotesOff()
 		emitMidiVisualClear()
@@ -303,7 +295,7 @@ func (p *MidiPlayerRuntime) Tick() {
 		p.state.CurrentMs = currentMs
 	}
 
-	if time.Since(p.lastStateEmit) >= stateEmitInterval || hintStep != nil || clearHint || stopPlayback {
+	if time.Since(p.lastStateEmit) >= stateEmitInterval || hintStep != nil || clearHint {
 		state = p.state
 		p.lastStateEmit = time.Now()
 		emitState = true
@@ -318,9 +310,6 @@ func (p *MidiPlayerRuntime) Tick() {
 	}
 	for _, event := range dueEvents {
 		dispatchMidiEvent(event, true)
-	}
-	if clearVisual {
-		emitMidiVisualClear()
 	}
 	if emitState {
 		emitMidiPlayerState(state)
@@ -747,35 +736,48 @@ func (p *MidiPlayerRuntime) startLocked() {
 	if p.ticker != nil {
 		return
 	}
-	p.stopCh = make(chan struct{})
-	p.ticker = time.NewTicker(playerTickInterval)
-	go p.loop()
+
+	ticker := time.NewTicker(playerTickInterval)
+	stopCh := make(chan struct{})
+
+	p.ticker = ticker
+	p.stopCh = stopCh
+
+	go p.loop(ticker, stopCh)
 }
 
 func (p *MidiPlayerRuntime) stopLocked() {
 	if p.ticker == nil {
 		return
 	}
-	p.ticker.Stop()
-	p.ticker = nil
-	select {
-	case <-p.stopCh:
-	default:
-		close(p.stopCh)
-	}
-}
 
-func (p *MidiPlayerRuntime) loop() {
-	for {
+	ticker := p.ticker
+	stopCh := p.stopCh
+
+	p.ticker = nil
+	p.stopCh = nil
+
+	ticker.Stop()
+
+	if stopCh != nil {
 		select {
-		case <-p.ticker.C:
-			p.Tick()
-		case <-p.stopCh:
-			return
+		case <-stopCh:
+		default:
+			close(stopCh)
 		}
 	}
 }
 
+func (p *MidiPlayerRuntime) loop(ticker *time.Ticker, stopCh <-chan struct{}) {
+	for {
+		select {
+		case <-ticker.C:
+			p.Tick()
+		case <-stopCh:
+			return
+		}
+	}
+}
 func findMidiEventIndexByMs(events []MidiEvent, ms float64) int {
 	return sort.Search(len(events), func(i int) bool {
 		return events[i].Ms >= ms

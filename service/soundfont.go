@@ -272,10 +272,6 @@ func LoadSoundFont(sf UserSoundFont, sampleRate, bufferSize int32) error {
 	return nil
 }
 
-func InitSoundFont(sf UserSoundFont) error {
-	return SwitchSoundFont(sf)
-}
-
 // Keydown 程序内发出声音
 func Keydown(channel, key, velocity int32) {
 	synthMu.Lock()
