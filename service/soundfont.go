@@ -104,27 +104,6 @@ func SwitchSoundFont(sf UserSoundFont) error {
 	return EnsureSpeakerStarted()
 }
 
-func BuildDefaultSoundFont() (UserSoundFont, error) {
-	sf, err := BuildSoundFontFromPath(defaultSoundFontPath)
-	if err != nil {
-		return UserSoundFont{}, fmt.Errorf("默认音源不可用: %w", err)
-	}
-	return sf, nil
-}
-
-func SwitchToDefaultSoundFont() error {
-	sf, err := BuildDefaultSoundFont()
-	if err != nil {
-		return err
-	}
-
-	if err := SwitchSoundFont(sf); err != nil {
-		return fmt.Errorf("加载默认音源失败: %w", err)
-	}
-
-	return nil
-}
-
 func FindSoundFontByID(items []UserSoundFont, id string) (int, UserSoundFont, bool) {
 	id = strings.TrimSpace(id)
 	if id == "" {
@@ -139,6 +118,15 @@ func FindSoundFontByID(items []UserSoundFont, id string) (int, UserSoundFont, bo
 
 	return -1, UserSoundFont{}, false
 }
+
+func ClearSoundFont() {
+	AllSynthNotesOff()
+
+	synthMu.Lock()
+	PianoPlayer = nil
+	synthMu.Unlock()
+}
+
 func newSynthStreamer() beep.Streamer {
 	var leftBuf []float32
 	var rightBuf []float32
@@ -378,7 +366,7 @@ func (k *Keyboard) RemoveSoundFontByID(id string) error {
 
 	config := GetUserConfig()
 
-	index, removed, ok := FindSoundFontByID(config.SoundFonts, id)
+	index, _, ok := FindSoundFontByID(config.SoundFonts, id)
 	if !ok {
 		return fmt.Errorf("音源不存在")
 	}
@@ -387,14 +375,7 @@ func (k *Keyboard) RemoveSoundFontByID(id string) error {
 
 	if config.ActiveSoundFontID == id {
 		config.ActiveSoundFontID = ""
-
-		if err := SwitchToDefaultSoundFont(); err != nil {
-			if saveErr := SaveConfig(config); saveErr != nil {
-				return saveErr
-			}
-
-			return fmt.Errorf("已删除音源 %s，但恢复默认音源失败: %w", removed.Name, err)
-		}
+		ClearSoundFont()
 	}
 
 	return SaveConfig(config)
@@ -406,11 +387,8 @@ func (k *Keyboard) SelectSoundFontByID(id string) error {
 	config := GetUserConfig()
 
 	if id == "" {
-		if err := SwitchToDefaultSoundFont(); err != nil {
-			return err
-		}
-
 		config.ActiveSoundFontID = ""
+		ClearSoundFont()
 
 		return SaveConfig(config)
 	}
@@ -524,5 +502,13 @@ func InitSoundFontFromConfig() error {
 		}
 	}
 
-	return SwitchToDefaultSoundFont()
+	if strings.TrimSpace(config.ActiveSoundFontID) != "" {
+		config.ActiveSoundFontID = ""
+		if err := SaveConfig(config); err != nil {
+			return err
+		}
+	}
+
+	ClearSoundFont()
+	return nil
 }

@@ -20,50 +20,16 @@
         <div class="soundfont-toolbar">
             <div>
                 <div class="label">音源库</div>
-                <div class="desc">已导入 {{ soundFonts.length }} 个用户音源。当前使用状态会直接显示在下方列表中。</div>
+                <div class="desc">{{ activeSoundFontText }}</div>
             </div>
-            <n-button
-                size="small"
-                tertiary
-                :loading="loadingAction === 'default'"
-                :disabled="!store.config.activeSoundFontId || isBusy"
-                @click="selectSoundFont('')"
-            >
-                恢复默认音源
-            </n-button>
         </div>
 
         <div class="soundfont-list">
-            <div class="soundfont-item default-item" :class="{active: !store.config.activeSoundFontId}">
-                <div class="soundfont-icon">
-                    <span>SF2</span>
-                </div>
-                <div class="soundfont-item-main">
-                    <div class="item-title-line">
-                        <span class="label">默认音源</span>
-                        <n-tag v-if="!store.config.activeSoundFontId" size="small" type="success" :bordered="false">正在使用</n-tag>
-                    </div>
-                    <div class="desc mono path-text">assets/Yamaha-Grand-Lite-v2.0.sf2</div>
-                    <div class="item-meta">轻量、即开即用，适合作为默认钢琴音色。</div>
-                </div>
-                <div class="soundfont-actions">
-                    <n-button
-                        size="small"
-                        secondary
-                        :loading="loadingAction === 'default'"
-                        :disabled="!store.config.activeSoundFontId || isBusy"
-                        @click="selectSoundFont('')"
-                    >
-                        使用
-                    </n-button>
-                </div>
-            </div>
-
             <div v-if="!soundFonts.length" class="empty-library">
                 <div class="empty-orb">+</div>
                 <div>
                     <div class="label">还没有导入用户音源</div>
-                    <div class="desc">可以导入 Grand Piano、Electric Piano 或其他 .sf2 文件，打造自己的练习音色。</div>
+                    <div class="desc">未导入音源时软件会正常运行，但不会通过内置音源发声。</div>
                 </div>
                 <n-button size="small" type="primary" secondary :loading="loadingAction === 'add'" :disabled="isBusy" @click="addSoundFont">选择 .sf2 文件</n-button>
             </div>
@@ -125,6 +91,11 @@ const soundFontError = ref('')
 const loadingAction = ref('')
 const soundFonts = computed(() => store.config.soundFonts || [])
 const isBusy = computed(() => Boolean(loadingAction.value))
+const activeSoundFontText = computed(() => {
+    if (!soundFonts.value.length) return '当前未启用内置音源。导入并选择 .sf2 后才会发声。'
+    if (!store.config.activeSoundFontId) return `已导入 ${soundFonts.value.length} 个用户音源，当前未启用内置音源。`
+    return `已导入 ${soundFonts.value.length} 个用户音源。当前使用状态会直接显示在下方列表中。`
+})
 
 async function syncConfigFromBackend() {
     store.config = {...store.config, ...await Keyboard.SendConfig()}
@@ -137,8 +108,10 @@ async function addSoundFont() {
         soundFontError.value = ''
         await Keyboard.OpenSoundFontDialog()
         await syncConfigFromBackend()
+        window.$notify?.success?.('音源已导入', '已加入音源库，可在列表中选择使用。')
     } catch (error) {
-        soundFontError.value = String(error?.message || error)
+        if (isUserCancelled(error)) return
+        showSoundFontError('音源导入失败', error)
     } finally {
         loadingAction.value = ''
     }
@@ -147,12 +120,13 @@ async function addSoundFont() {
 async function selectSoundFont(id) {
     if (isBusy.value) return
     try {
-        loadingAction.value = id ? `select:${id}` : 'default'
+        loadingAction.value = `select:${id}`
         soundFontError.value = ''
         await Keyboard.SelectSoundFontByID(id)
         await syncConfigFromBackend()
+        window.$notify?.success?.('音源已切换', '新的 SoundFont 已应用到播放和练习。')
     } catch (error) {
-        soundFontError.value = String(error?.message || error)
+        showSoundFontError('音源切换失败', error)
         await syncConfigFromBackend()
     } finally {
         loadingAction.value = ''
@@ -166,8 +140,9 @@ async function removeSoundFont(id) {
         soundFontError.value = ''
         await Keyboard.RemoveSoundFontByID(id)
         await syncConfigFromBackend()
+        window.$notify?.success?.('音源已移除', '该 SoundFont 已从音源库移除。')
     } catch (error) {
-        soundFontError.value = String(error?.message || error)
+        showSoundFontError('移除音源失败', error)
         await syncConfigFromBackend()
     } finally {
         loadingAction.value = ''
@@ -182,10 +157,24 @@ async function refreshSoundFonts() {
         await Keyboard.RefreshSoundFonts()
         await syncConfigFromBackend()
     } catch (error) {
-        soundFontError.value = String(error?.message || error)
+        showSoundFontError('刷新音源失败', error)
     } finally {
         loadingAction.value = ''
     }
+}
+
+function showSoundFontError(title, error) {
+    soundFontError.value = formatError(error)
+    window.$notify?.error?.(title, soundFontError.value)
+}
+
+function formatError(error) {
+    return String(error?.message || error || '未知错误')
+}
+
+function isUserCancelled(error) {
+    const message = formatError(error).toLowerCase()
+    return message.includes('cancel') || message.includes('取消') || message.includes('未选择')
 }
 
 function formatSize(size) {

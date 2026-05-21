@@ -8,10 +8,7 @@ import (
 	"sync"
 )
 
-const (
-	appName              = "Peirato's Piano Keyboard"
-	defaultSoundFontPath = "./assets/Yamaha-Grand-Lite-v2.0.sf2"
-)
+const appName = "Peirato's Piano Keyboard"
 
 var (
 	configFilePath = "config.json"
@@ -226,24 +223,6 @@ func GetUserConfig() Config {
 	configMu.RLock()
 	defer configMu.RUnlock()
 	return UserConfig
-}
-
-func ResolveSoundFontPath() UserSoundFont {
-	config := GetUserConfig()
-	path := defaultSoundFontPath
-	if config.ActiveSoundFontID != "" {
-		for _, sf := range config.SoundFonts {
-			if sf.ID == config.ActiveSoundFontID {
-				path = sf.Path
-				break
-			}
-		}
-	}
-	sf, err := BuildSoundFontFromPath(path)
-	if err != nil {
-		sf, _ = BuildSoundFontFromPath(defaultSoundFontPath)
-	}
-	return sf
 }
 
 func (k *Keyboard) SendConfig() Config {

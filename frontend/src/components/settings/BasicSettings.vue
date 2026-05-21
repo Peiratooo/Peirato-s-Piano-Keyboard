@@ -56,9 +56,7 @@
                 修改采样率或缓冲频率后，重新加载音源或重启软件可确保底层音频设备完全按新参数初始化。
             </div>
 
-            <div class="setting-actions">
-                <n-button type="info" size="small" @click="resetConfig">恢复默认设置</n-button>
-            </div>
+
         </div>
     </section>
 </template>
@@ -69,7 +67,6 @@ import {NButton, NInputNumber, NSelect, NSlider} from 'naive-ui'
 
 const store = inject('store')
 const changeConfig = inject('changeConfig')
-const resetConfig = inject('resetConfig')
 
 const sampleRateOptions = [
     {label: '22050 Hz · 轻量', value: 22050},

@@ -327,10 +327,16 @@ async function refreshMidiStore() {
 }
 
 async function importMidi() {
-    const item = await Keyboard.OpenMidiFileDialog()
-    await refreshMidiStore()
-    if (item?.id) {
-        await selectMidi(item)
+    try {
+        const item = await Keyboard.OpenMidiFileDialog()
+        await refreshMidiStore()
+        if (item?.id) {
+            await selectMidi(item)
+            window.$notify?.success?.('MIDI 已导入', item.name || '文件已加入 MIDI 列表')
+        }
+    } catch (error) {
+        if (isUserCancelled(error)) return
+        showErrorNotice('MIDI 导入失败', error)
     }
 }
 
@@ -338,20 +344,24 @@ async function selectMidi(item) {
     if (!item?.id) return
     if (item.id === selectedId.value) return
 
-    const shouldSwitchNow = playerState.value.status === 'playing'
-    const loaded = await Keyboard.LoadMidiByID(item.id)
-    selectedId.value = loaded.id
-    options.midiId = loaded.id
-    options.leftMs = 0
-    options.rightMs = loaded.durationMs || 0
-    localCurrentMs.value = 0
+    try {
+        const shouldSwitchNow = playerState.value.status === 'playing'
+        const loaded = await Keyboard.LoadMidiByID(item.id)
+        selectedId.value = loaded.id
+        options.midiId = loaded.id
+        options.leftMs = 0
+        options.rightMs = loaded.durationMs || 0
+        localCurrentMs.value = 0
 
-    if (shouldSwitchNow) {
-        await runPlaybackCommand(() => Keyboard.SwitchMidiPlayback(buildPlaybackOptions({
-            midiId: loaded.id,
-            leftMs: 0,
-            rightMs: loaded.durationMs || 0,
-        })))
+        if (shouldSwitchNow) {
+            await runPlaybackCommand(() => Keyboard.SwitchMidiPlayback(buildPlaybackOptions({
+                midiId: loaded.id,
+                leftMs: 0,
+                rightMs: loaded.durationMs || 0,
+            })), '切换 MIDI 失败')
+        }
+    } catch (error) {
+        showErrorNotice('MIDI 加载失败', error)
     }
 }
 
@@ -391,7 +401,7 @@ async function toggleTransport() {
         await Keyboard.ResumeMidiPlayback()
         return
     }
-    await runPlaybackCommand(() => Keyboard.StartMidiPlayback(buildPlaybackOptions()))
+    await runPlaybackCommand(() => Keyboard.StartMidiPlayback(buildPlaybackOptions()), 'MIDI 播放失败')
 }
 
 async function stopPlayback() {
@@ -412,7 +422,7 @@ async function setPlaybackOption(key, value) {
 
 async function syncPlaybackOptions() {
     if (!isPlaybackActive.value) return true
-    return runPlaybackCommand(() => Keyboard.SetMidiPlaybackOptions(buildPlaybackOptions()))
+    return runPlaybackCommand(() => Keyboard.SetMidiPlaybackOptions(buildPlaybackOptions()), '播放设置未生效')
 }
 
 function buildPlaybackOptions(overrides = {}) {
@@ -430,18 +440,32 @@ function buildPlaybackOptions(overrides = {}) {
     }
 }
 
-async function runPlaybackCommand(command) {
+async function runPlaybackCommand(command, title = '操作失败') {
     try {
         await command()
         return true
     } catch (error) {
-        window.$message?.error?.(error?.message || String(error))
+        showErrorNotice(title, error)
         return false
     }
 }
 
+function showErrorNotice(title, error) {
+    window.$notify?.error?.(title, formatError(error))
+}
+
+function formatError(error) {
+    return String(error?.message || error || '未知错误')
+}
+
+function isUserCancelled(error) {
+    const message = formatError(error).toLowerCase()
+    return message.includes('cancel') || message.includes('取消') || message.includes('未选择')
+}
+
 function startSeekDrag(event) {
     if (drag.type || !selectedId.value || durationMs.value <= 0) return
+    if (event?.target?.closest?.('.anchor')) return
     event?.preventDefault?.()
     event?.stopPropagation?.()
     drag.type = 'seek'
@@ -531,7 +555,7 @@ async function finishDrag() {
 function debounceSeek(ms) {
     window.clearTimeout(seekDebounceTimer)
     seekDebounceTimer = window.setTimeout(() => {
-        runPlaybackCommand(() => Keyboard.SeekMidiPlayback(ms))
+        runPlaybackCommand(() => Keyboard.SeekMidiPlayback(ms), '跳转播放位置失败')
     }, SEEK_DEBOUNCE_MS)
 }
 
@@ -759,7 +783,7 @@ button {
     align-items: center;
     gap: 8px;
     margin-bottom: 6px;
-    padding: 7px 8px;
+    padding: 8px;
     overflow: hidden;
     border: 1px solid transparent;
     border-radius: 14px;
@@ -865,7 +889,7 @@ button {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 9px;
+    gap: 8px;
     color: var(--muted);
     border: 1px dashed rgba(116, 132, 154, 0.28);
     border-radius: 16px;
@@ -886,15 +910,13 @@ button {
     min-width: 0;
     display: grid;
     grid-template-rows: auto minmax(0, 1fr);
-    gap: 12px;
-    padding: 14px;
+
     overflow: hidden;
 }
 
 .compact-topbar,
 .player-panel {
-    border: 1px solid rgba(255, 255, 255, 0.8);
-    border-radius: 20px;
+
     background: var(--surface);
     box-shadow: 0 14px 34px rgba(16, 36, 68, 0.07);
     backdrop-filter: blur(20px);
@@ -903,6 +925,7 @@ button {
 .compact-topbar {
     min-height: 70px;
     display: grid;
+    border-bottom: 1px solid rgba(148, 164, 184, 0.2);
     grid-template-columns: minmax(180px, 1fr) auto;
     align-items: center;
     gap: 14px;
@@ -1224,7 +1247,7 @@ button {
 }
 
 .anchor {
-    z-index: 5;
+    z-index: 9;
     width: 20px;
     height: 54px;
     border-radius: 10px;
@@ -1267,7 +1290,7 @@ button {
 }
 
 .playhead {
-    z-index: 7;
+    z-index: 6;
     width: 24px;
     height: 70px;
     background: transparent;
