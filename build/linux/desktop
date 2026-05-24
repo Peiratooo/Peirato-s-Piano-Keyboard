@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Name=Peirato's Piano Keyboard
+Comment=A lightweight desktop piano keyboard for MIDI playback and practice.
+# The Exec line includes %u to pass the URL to the application
+Exec=/usr/local/bin/pp_keyboard %u
+Terminal=false
+Type=Application
+Icon=pp_keyboard
+Categories=Utility;
+StartupWMClass=pp_keyboard
+
+ 

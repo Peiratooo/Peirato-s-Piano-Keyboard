@@ -82,9 +82,9 @@ Peirato's Piano 是一个 Wails v3 桌面应用：
 
 Go 后端发声：
 
-- `KeyboardPlay()` 使用配置里的默认 velocity。
-- `KeyboardPlayWithVelocity()` 调用 `Keydown()` 让内置音源发声，并向选中的外部 MIDI 输出设备发送 `NoteOn`。
-- `KeyboardStop()` 调用 `Keyup()` 停止内置音源，并向外部 MIDI 输出发送 `NoteOff`。
+- `KeyboardPlay()` 使用配置里的默认 velocity，并按当前输出目标发声。
+- 输出目标互斥：`无` 不发音，`软件音源` 只触发内置音源，外部 MIDI 设备只发送 MIDI 消息。
+- `KeyboardStop()` 按当前输出目标停止音符。
 - `AllNotesOff()` 同时清理内置音源、外部 MIDI 输出和前端高亮。
 
 ## 5. MIDI 设备流程
@@ -102,7 +102,7 @@ Go 后端发声：
 - `ListenDevices()` 无限循环，每 3 秒调用 `ListenMidiDevices()`。
 - `ListenMidiDevices()` 调用 `midi.GetInPorts()` / `midi.GetOutPorts()`，再分别交给 `CompareInDevices()` 和 `CompareOutDevices()`。
 - `CompareInDevices()` 会添加新输入设备、删除已拔出设备，并在没有选择时自动选择最后一个输入设备。
-- `CompareOutDevices()` 会打开新输出设备、删除已拔出设备，并在没有选择时自动选择最后一个输出设备。
+- `CompareOutDevices()` 会打开新输出设备、删除已拔出设备，但不会自动选择系统 MIDI 输出；默认输出目标是软件音源。
 - 扫描完成后通过 Wails 事件 `devices` 把快照推给前端。
 
 输入监听：

@@ -58,6 +58,11 @@ var (
 	midiListenerStop func()
 )
 
+const (
+	midiOutputNone          = -1
+	midiOutputSoftwareSynth = -2
+)
+
 var Midis = MidiDevices{
 	InMidiPool: map[int]InMidiDevice{
 		-1: {
@@ -66,13 +71,17 @@ var Midis = MidiDevices{
 		},
 	},
 	OutMidiPool: map[int]OutMidiDevice{
-		-1: {
+		midiOutputNone: {
 			Name:  "无",
-			Value: -1,
+			Value: midiOutputNone,
+		},
+		midiOutputSoftwareSynth: {
+			Name:  "软件音源",
+			Value: midiOutputSoftwareSynth,
 		},
 	},
 	SelectedInDevice:  -1,
-	SelectedOutDevice: -1,
+	SelectedOutDevice: midiOutputSoftwareSynth,
 	PedalStatus:       make(map[int]*PedalSingal),
 	Listener: Listener{
 		Down:    make(chan bool),
@@ -202,13 +211,14 @@ func CompareOutDevices(outports midi.OutPorts) {
 	midiMu.Lock()
 	defer midiMu.Unlock()
 
-	lastID := -1
-	alive := map[int]bool{-1: true}
+	alive := map[int]bool{
+		midiOutputNone:          true,
+		midiOutputSoftwareSynth: true,
+	}
 
 	for _, port := range outports {
 		deviceID := port.Number()
 		alive[deviceID] = true
-		lastID = deviceID
 
 		if _, ok := Midis.OutMidiPool[deviceID]; ok {
 			continue
@@ -226,16 +236,12 @@ func CompareOutDevices(outports midi.OutPorts) {
 		}
 	}
 
-	if Midis.SelectedOutDevice == -1 && lastID != -1 {
-		Midis.SelectedOutDevice = lastID
-	}
-
 	for id, device := range Midis.OutMidiPool {
 		if alive[id] {
 			continue
 		}
 		if id == Midis.SelectedOutDevice {
-			Midis.SelectedOutDevice = -1
+			Midis.SelectedOutDevice = midiOutputSoftwareSynth
 			go (&Keyboard{}).AllNotesOff()
 		}
 		if id != -1 && device.Device != nil {
@@ -301,7 +307,7 @@ func handleMidiMessage(deviceID int, msg midi.Message) {
 
 	case msg.GetNoteStart(&ch, &key, &vel):
 		midiKey := midi.Note(key).Value()
-		Keydown(int32(ch), int32(key), int32(vel))
+		playSelectedOutputNoteOn(ch, key, int32(vel), vel)
 		MidiPlayer.HandleUserNoteOn(int(midiKey))
 
 		midiMu.Lock()
@@ -339,7 +345,7 @@ func handleMidiMessage(deviceID int, msg midi.Message) {
 
 		if shouldReleaseNow {
 			emitKeyboardEvent("up", midiKey, 0, ch)
-			Keyup(int32(ch), int32(key))
+			playSelectedOutputNoteOff(ch, key)
 		}
 
 	case msg.GetControlChange(&ch, &con, &vel):
@@ -351,6 +357,8 @@ func handlePedalMessage(deviceID int, channel, controller, velocity uint8) {
 	if controller != 64 && controller != 66 && controller != 67 {
 		return
 	}
+
+	sendSelectedOutputControlChange(channel, controller, velocity)
 
 	var releaseKeys []uint8
 
@@ -387,7 +395,7 @@ func handlePedalMessage(deviceID int, channel, controller, velocity uint8) {
 
 	for _, key := range releaseKeys {
 		emitKeyboardEvent("up", key, 0, channel)
-		Keyup(int32(channel), int32(key))
+		playSelectedOutputNoteOff(channel, key)
 	}
 
 	if App != nil {
@@ -413,38 +421,13 @@ func containsUint8(list []uint8, target uint8) bool {
 
 func (k *Keyboard) KeyboardPlay(key uint8) {
 	config := GetUserConfig()
-	Keydown(int32(config.MidiChannel), int32(key), config.Volume)
 	MidiPlayer.HandleUserNoteOn(int(key))
-
-	midiMu.RLock()
-	selectedOut := Midis.SelectedOutDevice
-	outDevice, ok := Midis.OutMidiPool[selectedOut]
-	midiMu.RUnlock()
-	if !ok || selectedOut == -1 || outDevice.Device == nil {
-		return
-	}
-	noteOn := midi.NoteOn(config.MidiChannel, key, config.Velocity)
-	if err := outDevice.Device.Send(noteOn); err != nil {
-		fmt.Println("发送 MIDI NoteOn 失败:", err)
-	}
+	playSelectedOutputNoteOn(config.MidiChannel, key, config.Volume, config.Velocity)
 }
 
 func (k *Keyboard) KeyboardStop(key uint8) {
 	config := GetUserConfig()
-	Keyup(int32(config.MidiChannel), int32(key))
-
-	midiMu.RLock()
-	selectedOut := Midis.SelectedOutDevice
-	outDevice, ok := Midis.OutMidiPool[selectedOut]
-	midiMu.RUnlock()
-	if !ok || selectedOut == -1 || outDevice.Device == nil {
-		return
-	}
-
-	noteOff := midi.NoteOff(config.MidiChannel, key)
-	if err := outDevice.Device.Send(noteOff); err != nil {
-		fmt.Println("发送 MIDI NoteOff 失败:", err)
-	}
+	playSelectedOutputNoteOff(config.MidiChannel, key)
 }
 
 func (k *Keyboard) MidiListenerStop() {
@@ -494,7 +477,7 @@ func (k *Keyboard) AllNotesOff() {
 	outDevice, ok := Midis.OutMidiPool[selectedOut]
 	midiMu.RUnlock()
 
-	if ok && selectedOut != -1 && outDevice.Device != nil {
+	if ok && selectedOut != midiOutputNone && selectedOut != midiOutputSoftwareSynth && outDevice.Device != nil {
 		for channel := uint8(0); channel < 16; channel++ {
 			// CC 123 = All Notes Off，CC 120 = All Sound Off。
 			_ = outDevice.Device.Send(midi.ControlChange(channel, 123, 0))
@@ -509,6 +492,58 @@ func (k *Keyboard) AllNotesOff() {
 		App.Event.Emit("allNotesOff")
 	}
 	emitMidiVisualClear()
+}
+
+func playSelectedOutputNoteOn(channel uint8, note uint8, softwareVelocity int32, externalVelocity uint8) {
+	selectedOut, outDevice, ok := currentOutputDevice()
+	switch selectedOut {
+	case midiOutputNone:
+		return
+	case midiOutputSoftwareSynth:
+		Keydown(int32(channel), int32(note), softwareVelocity)
+	default:
+		if !ok || outDevice.Device == nil {
+			return
+		}
+		if err := outDevice.Device.Send(midi.NoteOn(channel, note, externalVelocity)); err != nil {
+			fmt.Println("发送 MIDI NoteOn 失败:", err)
+		}
+	}
+}
+
+func playSelectedOutputNoteOff(channel uint8, note uint8) {
+	selectedOut, outDevice, ok := currentOutputDevice()
+	switch selectedOut {
+	case midiOutputNone:
+		return
+	case midiOutputSoftwareSynth:
+		Keyup(int32(channel), int32(note))
+	default:
+		if !ok || outDevice.Device == nil {
+			return
+		}
+		if err := outDevice.Device.Send(midi.NoteOff(channel, note)); err != nil {
+			fmt.Println("发送 MIDI NoteOff 失败:", err)
+		}
+	}
+}
+
+func sendSelectedOutputControlChange(channel uint8, controller uint8, value uint8) {
+	selectedOut, outDevice, ok := currentOutputDevice()
+	if selectedOut == midiOutputNone || selectedOut == midiOutputSoftwareSynth || !ok || outDevice.Device == nil {
+		return
+	}
+	if err := outDevice.Device.Send(midi.ControlChange(channel, controller, value)); err != nil {
+		fmt.Println("发送 MIDI ControlChange 失败:", err)
+	}
+}
+
+func currentOutputDevice() (int, OutMidiDevice, bool) {
+	midiMu.RLock()
+	defer midiMu.RUnlock()
+	selectedOut := Midis.SelectedOutDevice
+	outDevice, ok := Midis.OutMidiPool[selectedOut]
+	return selectedOut, outDevice, ok
 }
 
 func ListenDevices() {
