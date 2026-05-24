@@ -6,12 +6,12 @@ version: '3'
 # This information is used to generate the build assets.
 info:
   companyName: "Peirato" # The name of the company
-  productName: "Peirato's Piano" # The name of the application
+  productName: "Peirato's Piano Keyboard" # The name of the application
   productIdentifier: "com.peirato.piano" # The unique product identifier
   description: "A simple keyboard" # The application description
   copyright: "(c) 2025, Peirato" # Copyright text
   comments: "A simple piano keyboard" # Comments
-  version: "1.0.1" # The application version
+  version: "1.2.0" # The application version
 
 # Dev mode configuration
 dev_mode:

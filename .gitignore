@@ -149,3 +149,4 @@ vite.config.ts.timestamp-*
 /frontend/node_modules/
 /bin/
 /.codex
+/.task
