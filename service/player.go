@@ -5,8 +5,6 @@ import (
 	"sort"
 	"sync"
 	"time"
-
-	gomidi "gitlab.com/gomidi/midi/v2"
 )
 
 const (
@@ -875,40 +873,16 @@ func dispatchMidiEvent(event MidiEvent, emitVisual bool) {
 
 	switch event.Type {
 	case MidiEventNoteOn:
-		Keydown(int32(channel), int32(event.Note), int32(event.Velocity))
-		sendExternalMidiNoteOn(channel, uint8(event.Note), uint8(event.Velocity))
+		playSelectedOutputNoteOn(channel, uint8(event.Note), int32(event.Velocity), uint8(event.Velocity))
 		if emitVisual {
 			emitMidiPlaybackKey(event, channel, true)
 		}
 	case MidiEventNoteOff:
-		Keyup(int32(channel), int32(event.Note))
-		sendExternalMidiNoteOff(channel, uint8(event.Note))
+		playSelectedOutputNoteOff(channel, uint8(event.Note))
 		if emitVisual {
 			emitMidiPlaybackKey(event, channel, false)
 		}
 	}
-}
-
-func sendExternalMidiNoteOn(channel uint8, note uint8, velocity uint8) {
-	midiMu.RLock()
-	selectedOut := Midis.SelectedOutDevice
-	outDevice, ok := Midis.OutMidiPool[selectedOut]
-	midiMu.RUnlock()
-	if !ok || selectedOut == -1 || outDevice.Device == nil {
-		return
-	}
-	_ = outDevice.Device.Send(gomidi.NoteOn(channel, note, velocity))
-}
-
-func sendExternalMidiNoteOff(channel uint8, note uint8) {
-	midiMu.RLock()
-	selectedOut := Midis.SelectedOutDevice
-	outDevice, ok := Midis.OutMidiPool[selectedOut]
-	midiMu.RUnlock()
-	if !ok || selectedOut == -1 || outDevice.Device == nil {
-		return
-	}
-	_ = outDevice.Device.Send(gomidi.NoteOff(channel, note))
 }
 
 func emitMidiPlayerState(state MidiPlayerState) {

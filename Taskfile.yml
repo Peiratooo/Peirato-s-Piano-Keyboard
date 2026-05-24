@@ -1,34 +1,42 @@
 version: '3'
 
+vars:
+  APP_NAME: "pp_keyboard"
+  BIN_DIR: "bin"
+  CGO_ENABLED: "1"
+  PACKAGE_MANAGER: '{{.PACKAGE_MANAGER | default "npm"}}'
+  VITE_PORT: '{{.WAILS_VITE_PORT | default 9245}}'
+
 includes:
   common: ./build/Taskfile.yml
   windows: ./build/windows/Taskfile.yml
   darwin: ./build/darwin/Taskfile.yml
   linux: ./build/linux/Taskfile.yml
-
-vars:
-  APP_NAME: "app"
-  BIN_DIR: "bin"
-  VITE_PORT: '{{.WAILS_VITE_PORT | default 9245}}'
-
+  ios: ./build/ios/Taskfile.yml
+  android: ./build/android/Taskfile.yml
 
 tasks:
   build:
     summary: Builds the application
     cmds:
       - task: "{{OS}}:build"
+        vars:
+          CGO_ENABLED: "{{.CGO_ENABLED}}"
 
   release:
     summary: Builds the release application
     cmds:
       - task: "{{OS}}:build"
         vars:
+          CGO_ENABLED: "{{.CGO_ENABLED}}"
           PRODUCTION: "true"
 
   package:
     summary: Packages a production build of the application
     cmds:
       - task: "{{OS}}:package"
+        vars:
+          CGO_ENABLED: "{{.CGO_ENABLED}}"
 
   run:
     summary: Runs the application
@@ -40,3 +48,27 @@ tasks:
     cmds:
       - wails3 dev -config ./build/config.yml -port {{.VITE_PORT}}
 
+  setup:docker:
+    summary: Builds Docker image for cross-compilation (~800MB download)
+    cmds:
+      - task: common:setup:docker
+
+  build:server:
+    summary: Builds the application in server mode (no GUI, HTTP server only)
+    cmds:
+      - task: common:build:server
+
+  run:server:
+    summary: Runs the application in server mode
+    cmds:
+      - task: common:run:server
+
+  build:docker:
+    summary: Builds a Docker image for server mode deployment
+    cmds:
+      - task: common:build:docker
+
+  run:docker:
+    summary: Builds and runs the Docker image
+    cmds:
+      - task: common:run:docker

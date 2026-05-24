@@ -3,38 +3,73 @@
 #
 # The lines below are called `modelines`. See `:help modeline`
 
-name: "wails.exe"
+name: "pp_keyboard"
 arch: ${GOARCH}
 platform: "linux"
-version: "0.1.0"
+version: "1.2.0"
 section: "default"
 priority: "extra"
 maintainer: ${GIT_COMMITTER_NAME} <${GIT_COMMITTER_EMAIL}>
-description: "My Product Description"
-vendor: "My Company"
+description: "A lightweight desktop piano keyboard for MIDI playback and practice."
+vendor: "Peirato"
 homepage: "https://wails.io"
 license: "MIT"
 release: "1"
 
 contents:
-  - src: "./bin/wails.exe"
-    dst: "/usr/local/bin/wails.exe"
+  - src: "./bin/pp_keyboard"
+    dst: "/usr/local/bin/pp_keyboard"
   - src: "./build/appicon.png"
-    dst: "/usr/share/icons/hicolor/128x128/apps/wails.exe.png"
-  - src: "./build/linux/wails.exe.desktop"
-    dst: "/usr/share/applications/wails.exe.desktop"
+    dst: "/usr/share/icons/hicolor/128x128/apps/pp_keyboard.png"
+  - src: "./build/linux/pp_keyboard.desktop"
+    dst: "/usr/share/applications/pp_keyboard.desktop"
 
+# Default dependencies for the GTK4 + WebKitGTK 6.0 stack (Ubuntu 24.04+ / Debian 13+)
 depends:
-  - gtk3
-  - libwebkit2gtk
+  - libgtk-4-1
+  - libwebkitgtk-6.0-4
 
+# Distribution-specific overrides for different package formats
+overrides:
+  # RPM packages for Fedora / RHEL / AlmaLinux / Rocky Linux
+  rpm:
+    depends:
+      - gtk4
+      - webkitgtk6.0
+
+  # Arch Linux packages
+  archlinux:
+    depends:
+      - gtk4
+      - webkitgtk-6.0
+
+# scripts section to ensure desktop database is updated after install
+scripts:
+  postinstall: "./build/linux/nfpm/scripts/postinstall.sh"
+  # You can also add preremove, postremove if needed
+  # preremove: "./build/linux/nfpm/scripts/preremove.sh"
+  # postremove: "./build/linux/nfpm/scripts/postremove.sh"
+
+# If you build your app with -tags gtk3 (legacy WebKit2GTK 4.1 stack — supported through v3.0.x, removed in v3.1),
+# replace the depends/overrides above with these:
+#
+# depends:
+#   - libgtk-3-0
+#   - libwebkit2gtk-4.1-0
+# overrides:
+#   rpm:
+#     depends:
+#       - gtk3
+#       - webkit2gtk4.1
+#   archlinux:
+#     depends:
+#       - gtk3
+#       - webkit2gtk-4.1
+#
 # replaces:
 #   - foobar
 # provides:
 #   - bar
-# depends:
-#   - gtk3
-#   - libwebkit2gtk
 # recommends:
 #   - whatever
 # suggests:
@@ -43,8 +78,3 @@ depends:
 #   - not-foo
 #   - not-bar
 # changelog: "changelog.yaml"
-# scripts:
-#   preinstall: ./build/linux/nfpm/scripts/preinstall.sh
-#   postinstall: ./build/linux/nfpm/scripts/postinstall.sh
-#   preremove: ./build/linux/nfpm/scripts/preremove.sh
-#   postremove: ./build/linux/nfpm/scripts/postremove.sh

@@ -1,12 +1,13 @@
-import {defineConfig} from 'vite'
+import { defineConfig } from "vite";
+import wails from "@wailsio/runtime/plugins/vite";
 import vue from '@vitejs/plugin-vue'
 
-// https://vite.dev/config/
+// https://vitejs.dev/config/
 export default defineConfig({
-    plugins: [vue()],
     server: {
-        host: '0.0.0.0',
-        port: 9245,
+        host: "127.0.0.1",
+        port: Number(process.env.WAILS_VITE_PORT) || 9245,
         strictPort: true,
     },
-})
+    plugins: [vue(),wails("./bindings")],
+});

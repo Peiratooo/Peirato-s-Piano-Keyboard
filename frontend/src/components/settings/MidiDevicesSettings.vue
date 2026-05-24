@@ -19,7 +19,7 @@
             <div class="setting-row vertical">
                 <div>
                     <div class="label">输出 MIDI 设备</div>
-                    <div class="desc">电脑键盘或鼠标按下时，可以同步发送 MIDI 到外部设备。</div>
+                    <div class="desc">选择发声目标：不发音、仅软件音源，或仅发送到指定外部 MIDI 设备。</div>
                 </div>
                 <n-select
                     size="small"
@@ -45,14 +45,26 @@ const store = inject('store')
 const changeDevice = inject('changeDevice')
 
 const inDeviceOptions = computed(() => buildDeviceOptions(store.devices.inMidiPool))
-const outDeviceOptions = computed(() => buildDeviceOptions(store.devices.outMidiPool))
+const outDeviceOptions = computed(() => buildDeviceOptions(store.devices.outMidiPool, true))
 
-function buildDeviceOptions(pool = {}) {
+function buildDeviceOptions(pool = {}, isOutput = false) {
     return Object.entries(pool)
-        .map(([key, device]) => ({
-            label: device.name || `MIDI 设备 ${key}`,
-            value: Number(device.value ?? key),
-        }))
-        .sort((a, b) => a.label.localeCompare(b.label, 'zh-Hans-CN'))
+        .map(([key, device]) => {
+            const value = Number(device.value ?? key)
+            const specialOutput = isOutput ? getSpecialOutputOption(value) : null
+            return {
+                label: specialOutput?.label || device.name || `MIDI 设备 ${key}`,
+                value,
+                order: specialOutput?.order ?? 10,
+            }
+        })
+        .sort((a, b) => a.order - b.order || a.label.localeCompare(b.label, 'zh-Hans-CN'))
+        .map(({label, value}) => ({label, value}))
+}
+
+function getSpecialOutputOption(value) {
+    if (value === -1) return {label: '无（不发音）', order: 0}
+    if (value === -2) return {label: '软件音源', order: 1}
+    return null
 }
 </script>

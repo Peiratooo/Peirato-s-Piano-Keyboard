@@ -150,3 +150,8 @@ vite.config.ts.timestamp-*
 /bin/
 /.codex
 /.task
+/bin
+/launcher
+/web
+/.builder
+/.task

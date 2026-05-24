@@ -1,15 +1,15 @@
 {
 	"fixed": {
-		"file_version": "1.0.0"
+		"file_version": "1.2.0"
 	},
 	"info": {
 		"0000": {
-			"ProductVersion": "1.0.0",
+			"ProductVersion": "1.2.0",
 			"CompanyName": "Peirato",
-			"FileDescription": "Peirato's Keyboard",
+			"FileDescription": "A lightweight desktop piano keyboard for MIDI playback and practice.",
 			"LegalCopyright": "(c) 2025, Peirato",
-			"ProductName": "Peirato's Keyboard",
-			"Comments": "A simple keyboard"
+			"ProductName": "Peirato's Piano Keyboard",
+			"Comments": "A simple and lightweight piano keyboard for desktop practice."
 		}
 	}
 }
