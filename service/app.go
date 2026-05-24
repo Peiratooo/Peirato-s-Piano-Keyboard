@@ -56,6 +56,7 @@ func Run(assets embed.FS) {
 		Mac: application.MacWindow{
 			InvisibleTitleBarHeight: 50,
 			TitleBar:                application.MacTitleBarHidden,
+			Backdrop:                application.MacBackdropTransparent,
 		},
 		Windows: application.WindowsWindow{
 			BackdropType:                      0,
