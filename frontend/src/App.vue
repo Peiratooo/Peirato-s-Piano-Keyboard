@@ -41,6 +41,7 @@ const isMainWindow = computed(() => route.path === '/')
 
 const pressedComputerKeys = new Set()
 const unsubscribeBackendEvents = []
+const keyboardLabelSkipKeys = ['k', 'K', 'l', 'L', ';', "'", '\\', '|', '`', '~', '[', '{', ']', '}', 'p', 'P']
 let unsubscribeKeyboardListener = null
 let unsubscribeResizeListener = null
 
@@ -96,22 +97,28 @@ const FeedbackBridge = defineComponent({
 
 async function getConfig() {
     const defaultConfig = await Keyboard.GetDefaultConfig()
-    store.config = {...store.config, ...defaultConfig}
+    applyConfig(defaultConfig)
 
     const config = await Keyboard.SendConfig()
-    store.config = {...store.config, ...config}
+    applyConfig(config)
     setKeyColor()
 }
 
 function changeConfig() {
-    Keyboard.ReceiveConfig(store.config)
+    return Keyboard.ReceiveConfig(store.config)
 }
 
 function resetConfig() {
     Keyboard.ResetConfig().then((config) => {
-        store.config = {...store.config, ...config}
+        applyConfig(config)
         setKeyColor()
     })
+}
+
+function applyConfig(config) {
+    if (!config) return
+    store.config = {...store.config, ...config}
+    updateKeyboardMappingLabels()
 }
 
 async function getMidiDevices() {
@@ -159,33 +166,44 @@ async function changeDevice(deviceType, deviceID) {
 // ========================
 
 async function initKeyboardConfig() {
-    const skipKey = ['k', 'K', 'l', 'L', ';', "'", '\\', '|', '`', '~', '[', '{', ']', '}', 'p', 'P']
     const keyboardData = await (await fetch('/keyboard_config.json')).json()
-    const keyMappingData = await (await fetch('/case-1.json')).json()
     const chordNames = await (await fetch('/ChordNames.json')).json()
 
-    for (const key in keyMappingData) {
-        keyMappingData[key] -= 12
-    }
-    store.keyMapping['case-1'] = keyMappingData
     store.chordsName = chordNames
-
-    const reverseMapping = {}
-    for (const key in keyMappingData) {
-        if (skipKey.includes(key)) continue
-        if (!(keyMappingData[key] in reverseMapping)) {
-            reverseMapping[keyMappingData[key]] = key
-        }
-    }
 
     for (const item of keyboardData) {
         item.octave_key = item.note === 'C' ? item.note + item.octave : ''
-        item.keyboard = item.index in reverseMapping ? reverseMapping[item.index] : ''
+        item.keyboard = ''
         if (item.pitch === 0) item.pitch = null
     }
 
     store.keyboardConfig = keyboardData
+    updateKeyboardMappingLabels()
     store.keyboardLoaded = true
+}
+
+function updateKeyboardMappingLabels() {
+    if (!store.keyboardConfig.length) return
+
+    const reverseMapping = {}
+    const mapping = store.activeKeyMapping || {}
+    for (const key in mapping) {
+        if (keyboardLabelSkipKeys.includes(key)) continue
+        const midiKey = Number(mapping[key])
+        if (!Number.isFinite(midiKey)) continue
+        if (!(midiKey in reverseMapping)) {
+            reverseMapping[midiKey] = formatComputerKeyLabel(key)
+        }
+    }
+
+    for (const item of store.keyboardConfig) {
+        item.keyboard = item.index in reverseMapping ? reverseMapping[item.index] : ''
+    }
+}
+
+function formatComputerKeyLabel(key) {
+    if (key === ' ') return 'Space'
+    return key
 }
 
 function darkenHexColor(hex, factor = 0.7) {
@@ -243,10 +261,11 @@ function keyboardListener() {
     const handleKeydown = (event) => {
         // 设置中心窗口会有输入控件，避免用户打字时触发钢琴。
         if (window.location.hash.includes('/control') || window.location.hash.includes('/midi')) return
-        const mapping = store.keyMapping['case-1'] || {}
+        const mapping = store.activeKeyMapping || {}
         if (!pressedComputerKeys.has(event.key) && event.key in mapping) {
+            const midiKey = Number(mapping[event.key])
+            if (!Number.isFinite(midiKey)) return
             pressedComputerKeys.add(event.key)
-            const midiKey = mapping[event.key]
             Keyboard.KeyboardPlay(midiKey)
             store.setKeyState(midiKey, true)
         }
@@ -254,10 +273,11 @@ function keyboardListener() {
 
     const handleKeyup = (event) => {
         if (window.location.hash.includes('/control') || window.location.hash.includes('/midi')) return
-        const mapping = store.keyMapping['case-1'] || {}
+        const mapping = store.activeKeyMapping || {}
         if (event.key in mapping) {
             pressedComputerKeys.delete(event.key)
-            const midiKey = mapping[event.key]
+            const midiKey = Number(mapping[event.key])
+            if (!Number.isFinite(midiKey)) return
             Keyboard.KeyboardStop(midiKey)
             store.setKeyState(midiKey, false)
         }
@@ -333,7 +353,7 @@ function registerBackendEvents() {
         }
     })
     on('configChanged', (event) => {
-        store.config = {...store.config, ...getEventPayload(event)}
+        applyConfig(getEventPayload(event))
         setKeyColor()
         resize()
     })
@@ -426,6 +446,8 @@ provide('setKeyColor', setKeyColor)
 provide('changeConfig', changeConfig)
 provide('changeKeyboardType', changeKeyboardType)
 provide('resetConfig', resetConfig)
+provide('applyConfig', applyConfig)
+provide('updateKeyboardMappingLabels', updateKeyboardMappingLabels)
 provide('Keyboard', Keyboard)
 provide('resize', resize)
 </script>

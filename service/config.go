@@ -28,20 +28,22 @@ type Window struct {
 }
 
 type Config struct {
-	Colors            map[string]Color `json:"colors"`
-	KeyLabel          string           `json:"keyLabel"`
-	KeyboardType      int              `json:"keyboardType"`
-	Velocity          uint8            `json:"velocity"`
-	Opacity           int              `json:"opacity"`
-	Version           string           `json:"version"`
-	ShowPedal         bool             `json:"showPedal"`
-	Volume            int32            `json:"volume"`
-	SampleRate        int32            `json:"sampleRate"`
-	BufferSize        int32            `json:"bufferSize"`
-	MidiChannel       uint8            `json:"midiChannel"`
-	ActiveSoundFontID string           `json:"activeSoundFontId"`
-	SoundFonts        []UserSoundFont  `json:"soundFonts"`
-	MidiStore         []UserMidi       `json:"midiStore"`
+	Colors                map[string]Color `json:"colors"`
+	KeyLabel              string           `json:"keyLabel"`
+	KeyboardType          int              `json:"keyboardType"`
+	Velocity              uint8            `json:"velocity"`
+	Opacity               int              `json:"opacity"`
+	Version               string           `json:"version"`
+	ShowPedal             bool             `json:"showPedal"`
+	Volume                int32            `json:"volume"`
+	SampleRate            int32            `json:"sampleRate"`
+	BufferSize            int32            `json:"bufferSize"`
+	MidiChannel           uint8            `json:"midiChannel"`
+	ActiveSoundFontID     string           `json:"activeSoundFontId"`
+	SoundFonts            []UserSoundFont  `json:"soundFonts"`
+	MidiStore             []UserMidi       `json:"midiStore"`
+	ActiveKeymapProfileID string           `json:"activeKeymapProfileId"`
+	KeymapProfiles        []KeymapProfile  `json:"keymapProfiles"`
 }
 
 var DefaultConfig = Config{
@@ -75,17 +77,19 @@ var DefaultConfig = Config{
 			Color: "#1054e7",
 		},
 	},
-	KeyLabel:          "octave_key",
-	KeyboardType:      0,
-	Velocity:          80,
-	Volume:            80,
-	SampleRate:        44100,
-	BufferSize:        2048,
-	Opacity:           100,
-	ShowPedal:         true,
-	MidiChannel:       0,
-	SoundFonts:        []UserSoundFont{},
-	ActiveSoundFontID: "",
+	KeyLabel:              "octave_key",
+	KeyboardType:          0,
+	Velocity:              80,
+	Volume:                80,
+	SampleRate:            44100,
+	BufferSize:            2048,
+	Opacity:               100,
+	ShowPedal:             true,
+	MidiChannel:           0,
+	SoundFonts:            []UserSoundFont{},
+	ActiveSoundFontID:     "",
+	ActiveKeymapProfileID: defaultKeymapProfileID,
+	KeymapProfiles:        []KeymapProfile{defaultKeymapProfile()},
 }
 
 var UserConfig = cloneDefaultConfig()
@@ -96,6 +100,7 @@ func cloneDefaultConfig() Config {
 	for key, value := range DefaultConfig.Colors {
 		config.Colors[key] = value
 	}
+	config.KeymapProfiles = cloneKeymapProfiles(DefaultConfig.KeymapProfiles)
 	return config
 }
 
@@ -158,6 +163,8 @@ func mergeConfigWithDefaults(config Config) Config {
 	merged.SoundFonts = config.SoundFonts
 	merged.ActiveSoundFontID = config.ActiveSoundFontID
 	merged.MidiStore = config.MidiStore
+	merged.ActiveKeymapProfileID = config.ActiveKeymapProfileID
+	merged.KeymapProfiles = cloneKeymapProfiles(config.KeymapProfiles)
 
 	for key, value := range config.Colors {
 		merged.Colors[key] = value
@@ -185,7 +192,7 @@ func normalizeConfigRanges(config Config) Config {
 	if config.MidiChannel > 15 {
 		config.MidiChannel = DefaultConfig.MidiChannel
 	}
-	return config
+	return normalizeKeymapConfig(config)
 }
 
 func SaveConfig(config Config) error {

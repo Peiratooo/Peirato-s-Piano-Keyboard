@@ -21,7 +21,7 @@
             <div class="setting-row">
                 <div>
                     <div class="label">琴键标签</div>
-                    <div class="desc">显示八度、音名、唱名或电脑键盘映射。</div>
+                    <div class="desc">显示八度、音名、唱名或当前按键方案。</div>
                 </div>
                 <n-select v-model:value="store.config.keyLabel" :options="store.labelMap" size="small" @update:value="changeConfig" />
             </div>

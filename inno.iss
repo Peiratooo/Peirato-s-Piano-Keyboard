@@ -52,6 +52,9 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "C:\Users\Peirato\Desktop\PeiratoPiano\wails\bin\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "C:\Users\Peirato\Desktop\PeiratoPiano\wails\bin\PeiratoPiano.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "C:\Users\Peirato\Desktop\PeiratoPiano\wails\bin\assets\*"; DestDir: "{app}\assets"; Flags: ignoreversion
+Source: "C:\Users\Peirato\Desktop\Peirato-s-Piano\libgcc_s_seh-1.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "C:\Users\Peirato\Desktop\Peirato-s-Piano\libstdc++-6.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "C:\Users\Peirato\Desktop\Peirato-s-Piano\libwinpthread-1.dll"; DestDir: "{app}"; Flags: ignoreversion
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
 [Registry]

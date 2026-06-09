@@ -13,6 +13,8 @@ const safeConfig = {
     midiChannel: 0,
     activeSoundFontId: '',
     soundFonts: [],
+    activeKeymapProfileId: 'default',
+    keymapProfiles: [],
     version: '',
 }
 
@@ -20,6 +22,7 @@ export const data = defineStore('data', {
     state: () => {
         return {
             keyboard: [],
+            keyboardConfig: [],
 
             // activeKey：当前正在亮起/正在发声的音。它会受到延音踏板影响。
             activeKey: {},
@@ -100,7 +103,21 @@ export const data = defineStore('data', {
             showAuthor:false,
         }
     },
-    getters: {},
+    getters: {
+        activeKeymapProfile(state) {
+            const profiles = state.config.keymapProfiles || []
+            return profiles.find((profile) => profile.id === state.config.activeKeymapProfileId) || profiles[0] || null
+        },
+        activeKeyMapping() {
+            return this.activeKeymapProfile?.mapping || {}
+        },
+        keymapProfileOptions(state) {
+            return (state.config.keymapProfiles || []).map((profile) => ({
+                label: profile.name || '未命名方案',
+                value: profile.id,
+            }))
+        },
+    },
     actions: {
         setKeyState(key, pressed) {
             this.activeKey[key] = pressed

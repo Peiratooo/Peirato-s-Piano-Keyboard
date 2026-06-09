@@ -149,6 +149,20 @@ export class Config {
              */
             this["midiStore"] = [];
         }
+        if (!("activeKeymapProfileId" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["activeKeymapProfileId"] = "";
+        }
+        if (!("keymapProfiles" in $$source)) {
+            /**
+             * @member
+             * @type {KeymapProfile[]}
+             */
+            this["keymapProfiles"] = [];
+        }
 
         Object.assign(this, $$source);
     }
@@ -162,6 +176,7 @@ export class Config {
         const $$createField0_0 = $$createType1;
         const $$createField12_0 = $$createType3;
         const $$createField13_0 = $$createType5;
+        const $$createField15_0 = $$createType7;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("colors" in $$parsedSource) {
             $$parsedSource["colors"] = $$createField0_0($$parsedSource["colors"]);
@@ -171,6 +186,9 @@ export class Config {
         }
         if ("midiStore" in $$parsedSource) {
             $$parsedSource["midiStore"] = $$createField13_0($$parsedSource["midiStore"]);
+        }
+        if ("keymapProfiles" in $$parsedSource) {
+            $$parsedSource["keymapProfiles"] = $$createField15_0($$parsedSource["keymapProfiles"]);
         }
         return new Config(/** @type {Partial<Config>} */($$parsedSource));
     }
@@ -208,6 +226,52 @@ export class InMidiDevice {
     static createFrom($$source = {}) {
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         return new InMidiDevice(/** @type {Partial<InMidiDevice>} */($$parsedSource));
+    }
+}
+
+export class KeymapProfile {
+    /**
+     * Creates a new KeymapProfile instance.
+     * @param {Partial<KeymapProfile>} [$$source = {}] - The source object to create the KeymapProfile.
+     */
+    constructor($$source = {}) {
+        if (!("id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["id"] = "";
+        }
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("mapping" in $$source)) {
+            /**
+             * @member
+             * @type {{ [_ in string]?: number }}
+             */
+            this["mapping"] = {};
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new KeymapProfile instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {KeymapProfile}
+     */
+    static createFrom($$source = {}) {
+        const $$createField2_0 = $$createType8;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("mapping" in $$parsedSource) {
+            $$parsedSource["mapping"] = $$createField2_0($$parsedSource["mapping"]);
+        }
+        return new KeymapProfile(/** @type {Partial<KeymapProfile>} */($$parsedSource));
     }
 }
 
@@ -269,9 +333,9 @@ export class MidiDevices {
      * @returns {MidiDevices}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType7;
-        const $$createField1_0 = $$createType9;
-        const $$createField4_0 = $$createType12;
+        const $$createField0_0 = $$createType10;
+        const $$createField1_0 = $$createType12;
+        const $$createField4_0 = $$createType15;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("inMidiPool" in $$parsedSource) {
             $$parsedSource["inMidiPool"] = $$createField0_0($$parsedSource["inMidiPool"]);
@@ -565,9 +629,9 @@ export class MidiPlayerState {
      * @returns {MidiPlayerState}
      */
     static createFrom($$source = {}) {
-        const $$createField13_0 = $$createType14;
-        const $$createField14_0 = $$createType15;
-        const $$createField15_0 = $$createType16;
+        const $$createField13_0 = $$createType17;
+        const $$createField14_0 = $$createType18;
+        const $$createField15_0 = $$createType19;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("currentStep" in $$parsedSource) {
             $$parsedSource["currentStep"] = $$createField13_0($$parsedSource["currentStep"]);
@@ -675,7 +739,7 @@ export class MidiPracticeStep {
      * @returns {MidiPracticeStep}
      */
     static createFrom($$source = {}) {
-        const $$createField2_0 = $$createType18;
+        const $$createField2_0 = $$createType21;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("notes" in $$parsedSource) {
             $$parsedSource["notes"] = $$createField2_0($$parsedSource["notes"]);
@@ -932,16 +996,19 @@ const $$createType2 = UserSoundFont.createFrom;
 const $$createType3 = $Create.Array($$createType2);
 const $$createType4 = UserMidi.createFrom;
 const $$createType5 = $Create.Array($$createType4);
-const $$createType6 = InMidiDevice.createFrom;
-const $$createType7 = $Create.Map($Create.Any, $$createType6);
-const $$createType8 = OutMidiDevice.createFrom;
-const $$createType9 = $Create.Map($Create.Any, $$createType8);
-const $$createType10 = PedalSingal.createFrom;
-const $$createType11 = $Create.Nullable($$createType10);
+const $$createType6 = KeymapProfile.createFrom;
+const $$createType7 = $Create.Array($$createType6);
+const $$createType8 = $Create.Map($Create.Any, $Create.Any);
+const $$createType9 = InMidiDevice.createFrom;
+const $$createType10 = $Create.Map($Create.Any, $$createType9);
+const $$createType11 = OutMidiDevice.createFrom;
 const $$createType12 = $Create.Map($Create.Any, $$createType11);
-const $$createType13 = MidiPracticeStep.createFrom;
+const $$createType13 = PedalSingal.createFrom;
 const $$createType14 = $Create.Nullable($$createType13);
-const $$createType15 = $Create.Map($Create.Any, $Create.Any);
-const $$createType16 = $Create.Map($Create.Any, $Create.Any);
-const $$createType17 = MidiPracticeNote.createFrom;
-const $$createType18 = $Create.Array($$createType17);
+const $$createType15 = $Create.Map($Create.Any, $$createType14);
+const $$createType16 = MidiPracticeStep.createFrom;
+const $$createType17 = $Create.Nullable($$createType16);
+const $$createType18 = $Create.Map($Create.Any, $Create.Any);
+const $$createType19 = $Create.Map($Create.Any, $Create.Any);
+const $$createType20 = MidiPracticeNote.createFrom;
+const $$createType21 = $Create.Array($$createType20);

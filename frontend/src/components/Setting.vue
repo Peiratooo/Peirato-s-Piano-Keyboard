@@ -17,6 +17,7 @@
             <BasicSettings v-if="store.controlMenu === 'basic'" />
             <MidiDevicesSettings v-else-if="store.controlMenu === 'devices'" />
             <KeyboardDisplaySettings v-else-if="store.controlMenu === 'keyboard'" />
+            <KeyboardMappingSettings v-else-if="store.controlMenu === 'keymap'" />
             <AppearanceSettings v-else-if="store.controlMenu === 'appearance'" />
             <SoundFont v-else-if="store.controlMenu === 'soundfont'" />
             <AboutSettings v-else-if="store.controlMenu === 'about'" />
@@ -29,6 +30,7 @@ import {inject, onBeforeUnmount} from 'vue'
 import BasicSettings from './settings/BasicSettings.vue'
 import MidiDevicesSettings from './settings/MidiDevicesSettings.vue'
 import KeyboardDisplaySettings from './settings/KeyboardDisplaySettings.vue'
+import KeyboardMappingSettings from './settings/KeyboardMappingSettings.vue'
 import AppearanceSettings from './settings/AppearanceSettings.vue'
 import SoundFont from './settings/SoundFont.vue'
 import AboutSettings from './settings/AboutSettings.vue'
@@ -40,6 +42,7 @@ const menus = [
     {key: 'basic', label: '基础设置', icon: '⌘'},
     {key: 'devices', label: 'MIDI 设备', icon: '🎛'},
     {key: 'keyboard', label: '键盘显示', icon: '🎹'},
+    {key: 'keymap', label: '按键方案', icon: '⌨'},
     {key: 'appearance', label: '外观主题', icon: '🎨'},
     {key: 'soundfont', label: '音源管理', icon: '🎧'},
     {key: 'about', label: '关于软件', icon: 'i'},

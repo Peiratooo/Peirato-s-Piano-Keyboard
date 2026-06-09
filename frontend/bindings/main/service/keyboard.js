@@ -11,12 +11,21 @@ import { Call as $Call, CancellablePromise as $CancellablePromise, Create as $Cr
 import * as $models from "./models.js";
 
 /**
+ * @returns {$CancellablePromise<$models.Config>}
+ */
+export function AddKeymapProfile() {
+    return $Call.ByID(165268854).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType0($result);
+    }));
+}
+
+/**
  * @param {string} path
  * @returns {$CancellablePromise<$models.UserMidi>}
  */
 export function AddMidiByPath(path) {
     return $Call.ByID(2389891245, path).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType0($result);
+        return $$createType1($result);
     }));
 }
 
@@ -25,6 +34,18 @@ export function AddMidiByPath(path) {
  */
 export function AllNotesOff() {
     return $Call.ByID(480015276);
+}
+
+/**
+ * @param {string} profileID
+ * @param {string} computerKey
+ * @param {number} midiKey
+ * @returns {$CancellablePromise<$models.Config>}
+ */
+export function BindKeymapKey(profileID, computerKey, midiKey) {
+    return $Call.ByID(136368830, profileID, computerKey, midiKey).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType0($result);
+    }));
 }
 
 /**
@@ -37,11 +58,28 @@ export function ChangeDevice(deviceType, deviceID) {
 }
 
 /**
+ * @param {string} id
+ * @returns {$CancellablePromise<$models.Config>}
+ */
+export function DeleteKeymapProfile(id) {
+    return $Call.ByID(3422352740, id).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType0($result);
+    }));
+}
+
+/**
+ * @returns {$CancellablePromise<void>}
+ */
+export function ExportActiveKeymapProfile() {
+    return $Call.ByID(2228204477);
+}
+
+/**
  * @returns {$CancellablePromise<$models.Config>}
  */
 export function GetDefaultConfig() {
     return $Call.ByID(1562366532).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType1($result);
+        return $$createType0($result);
     }));
 }
 
@@ -80,6 +118,15 @@ export function GetMidiWindowOpen() {
 }
 
 /**
+ * @returns {$CancellablePromise<$models.Config>}
+ */
+export function ImportKeymapProfile() {
+    return $Call.ByID(2341426418).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType0($result);
+    }));
+}
+
+/**
  * @param {number} key
  * @returns {$CancellablePromise<void>}
  */
@@ -101,7 +148,7 @@ export function KeyboardStop(key) {
  */
 export function LoadMidiByID(id) {
     return $Call.ByID(3752586122, id).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType0($result);
+        return $$createType1($result);
     }));
 }
 
@@ -138,7 +185,7 @@ export function OpenMidiCenter() {
  */
 export function OpenMidiFileDialog() {
     return $Call.ByID(687900044).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType0($result);
+        return $$createType1($result);
     }));
 }
 
@@ -187,6 +234,17 @@ export function RefreshSoundFonts() {
 }
 
 /**
+ * @param {string} profileID
+ * @param {string} computerKey
+ * @returns {$CancellablePromise<$models.Config>}
+ */
+export function RemoveKeymapBinding(profileID, computerKey) {
+    return $Call.ByID(3554048733, profileID, computerKey).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType0($result);
+    }));
+}
+
+/**
  * @param {string} id
  * @returns {$CancellablePromise<void>}
  */
@@ -203,11 +261,22 @@ export function RemoveSoundFontByID(id) {
 }
 
 /**
+ * @param {string} id
+ * @param {string} name
+ * @returns {$CancellablePromise<$models.Config>}
+ */
+export function RenameKeymapProfile(id, name) {
+    return $Call.ByID(2430728735, id, name).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType0($result);
+    }));
+}
+
+/**
  * @returns {$CancellablePromise<$models.Config>}
  */
 export function ResetConfig() {
     return $Call.ByID(2912551192).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType1($result);
+        return $$createType0($result);
     }));
 }
 
@@ -235,6 +304,16 @@ export function SeekMidiPlayback(ms) {
 
 /**
  * @param {string} id
+ * @returns {$CancellablePromise<$models.Config>}
+ */
+export function SelectKeymapProfile(id) {
+    return $Call.ByID(3625811701, id).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType0($result);
+    }));
+}
+
+/**
+ * @param {string} id
  * @returns {$CancellablePromise<void>}
  */
 export function SelectSoundFontByID(id) {
@@ -246,7 +325,7 @@ export function SelectSoundFontByID(id) {
  */
 export function SendConfig() {
     return $Call.ByID(1326898251).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType1($result);
+        return $$createType0($result);
     }));
 }
 
@@ -317,8 +396,8 @@ export function SwitchMidiPlayback(options) {
 }
 
 // Private type creation functions
-const $$createType0 = $models.UserMidi.createFrom;
-const $$createType1 = $models.Config.createFrom;
+const $$createType0 = $models.Config.createFrom;
+const $$createType1 = $models.UserMidi.createFrom;
 const $$createType2 = $models.MidiDevices.createFrom;
 const $$createType3 = $models.MidiPlayerState.createFrom;
-const $$createType4 = $Create.Array($$createType0);
+const $$createType4 = $Create.Array($$createType1);

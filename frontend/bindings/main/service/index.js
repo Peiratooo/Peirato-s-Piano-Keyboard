@@ -11,6 +11,7 @@ export {
     Color,
     Config,
     InMidiDevice,
+    KeymapProfile,
     MidiDevices,
     MidiHand,
     MidiHandMode,
