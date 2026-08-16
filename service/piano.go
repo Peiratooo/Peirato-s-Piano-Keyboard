@@ -307,7 +307,7 @@ func handleMidiMessage(deviceID int, msg midi.Message) {
 
 	case msg.GetNoteStart(&ch, &key, &vel):
 		midiKey := midi.Note(key).Value()
-		playSelectedOutputNoteOn(ch, key, int32(vel), vel)
+		playSelectedOutputNoteOn(ch, key, vel)
 		MidiPlayer.HandleUserNoteOn(int(midiKey))
 
 		midiMu.Lock()
@@ -324,7 +324,7 @@ func handleMidiMessage(deviceID int, msg midi.Message) {
 
 	case msg.GetNoteEnd(&ch, &key):
 		midiKey := midi.Note(key).Value()
-		shouldReleaseNow := true
+		shouldReleaseVisualNow := true
 
 		midiMu.Lock()
 		pedal := Midis.PedalStatus[deviceID]
@@ -334,7 +334,7 @@ func handleMidiMessage(deviceID int, msg midi.Message) {
 		}
 		delete(pedal.DownKeys, midiKey)
 		if pedal.DamperPedal {
-			shouldReleaseNow = false
+			shouldReleaseVisualNow = false
 			if !containsUint8(pedal.DamperPedalKeys, midiKey) {
 				pedal.DamperPedalKeys = append(pedal.DamperPedalKeys, midiKey)
 			}
@@ -342,26 +342,27 @@ func handleMidiMessage(deviceID int, msg midi.Message) {
 		midiMu.Unlock()
 
 		emitKeyboardEvent("pressedUp", midiKey, 0, ch)
-
-		if shouldReleaseNow {
+		playSelectedOutputNoteOff(ch, key)
+		if shouldReleaseVisualNow {
 			emitKeyboardEvent("up", midiKey, 0, ch)
-			playSelectedOutputNoteOff(ch, key)
 		}
 
 	case msg.GetControlChange(&ch, &con, &vel):
 		handlePedalMessage(deviceID, ch, con, vel)
+
+	case msg.GetProgramChange(&ch, &con):
+		playSelectedOutputProgramChange(ch, con)
 	}
 }
 
 func handlePedalMessage(deviceID int, channel, controller, velocity uint8) {
+	playSelectedOutputControlChange(channel, controller, velocity)
+
 	if controller != 64 && controller != 66 && controller != 67 {
 		return
 	}
 
-	sendSelectedOutputControlChange(channel, controller, velocity)
-
 	var releaseKeys []uint8
-
 	midiMu.Lock()
 	pedal := Midis.PedalStatus[deviceID]
 	if pedal == nil {
@@ -371,7 +372,7 @@ func handlePedalMessage(deviceID int, channel, controller, velocity uint8) {
 
 	switch controller {
 	case 64:
-		pedal.DamperPedal = velocity > 0
+		pedal.DamperPedal = velocity >= 64
 		if !pedal.DamperPedal {
 			for _, sustainedKey := range pedal.DamperPedalKeys {
 				if _, stillDown := pedal.DownKeys[sustainedKey]; !stillDown {
@@ -393,13 +394,11 @@ func handlePedalMessage(deviceID int, channel, controller, velocity uint8) {
 	}
 	midiMu.Unlock()
 
-	for _, key := range releaseKeys {
-		emitKeyboardEvent("up", key, 0, channel)
-		playSelectedOutputNoteOff(channel, key)
-	}
-
 	if App != nil {
 		App.Event.Emit("pedal", pedalSnapshot)
+	}
+	for _, key := range releaseKeys {
+		emitKeyboardEvent("up", key, 0, channel)
 	}
 }
 
@@ -422,7 +421,14 @@ func containsUint8(list []uint8, target uint8) bool {
 func (k *Keyboard) KeyboardPlay(key uint8) {
 	config := GetUserConfig()
 	MidiPlayer.HandleUserNoteOn(int(key))
-	playSelectedOutputNoteOn(config.MidiChannel, key, config.Volume, config.Velocity)
+	if selectedOut, _, _ := currentOutputDevice(); selectedOut == midiOutputSoftwareSynth {
+		// A MIDI file can leave CC7/CC11 at zero on the configured channel.
+		// Restore the interactive piano channel before a computer/mouse key press.
+		ProcessSynthMidiMessage(int32(config.MidiChannel), midiCommandControlChange, midiCCChannelVolume, 127)
+		ProcessSynthMidiMessage(int32(config.MidiChannel), midiCommandControlChange, midiCCPan, 64)
+		ProcessSynthMidiMessage(int32(config.MidiChannel), midiCommandControlChange, midiCCExpression, 127)
+	}
+	playSelectedOutputNoteOn(config.MidiChannel, key, config.Velocity)
 }
 
 func (k *Keyboard) KeyboardStop(key uint8) {
@@ -471,7 +477,6 @@ func (k *Keyboard) ChangeDevice(deviceType string, deviceID int) bool {
 func (k *Keyboard) AllNotesOff() {
 	AllSynthNotesOff()
 
-	config := GetUserConfig()
 	midiMu.RLock()
 	selectedOut := Midis.SelectedOutDevice
 	outDevice, ok := Midis.OutMidiPool[selectedOut]
@@ -479,12 +484,17 @@ func (k *Keyboard) AllNotesOff() {
 
 	if ok && selectedOut != midiOutputNone && selectedOut != midiOutputSoftwareSynth && outDevice.Device != nil {
 		for channel := uint8(0); channel < 16; channel++ {
-			// CC 123 = All Notes Off，CC 120 = All Sound Off。
-			_ = outDevice.Device.Send(midi.ControlChange(channel, 123, 0))
-			_ = outDevice.Device.Send(midi.ControlChange(channel, 120, 0))
+			// Reset sustain, controllers, and sounding notes so seek/pause/loop
+			// transitions cannot leave an external synth holding a note.
+			_ = outDevice.Device.Send(midi.ControlChange(channel, midiCCSustain, 0))
+			_ = outDevice.Device.Send(midi.ControlChange(channel, midiCCResetControllers, 0))
+			_ = outDevice.Device.Send(midi.ControlChange(channel, midiCCAllNotesOff, 0))
+			_ = outDevice.Device.Send(midi.ControlChange(channel, midiCCAllSoundOff, 0))
 		}
-		for key := uint8(0); key < 128; key++ {
-			_ = outDevice.Device.Send(midi.NoteOff(config.MidiChannel, key))
+		for channel := uint8(0); channel < 16; channel++ {
+			for key := uint8(0); key < 128; key++ {
+				_ = outDevice.Device.Send(midi.NoteOff(channel, key))
+			}
 		}
 	}
 
@@ -494,18 +504,40 @@ func (k *Keyboard) AllNotesOff() {
 	emitMidiVisualClear()
 }
 
-func playSelectedOutputNoteOn(channel uint8, note uint8, softwareVelocity int32, externalVelocity uint8) {
+const (
+	midiCommandNoteOff       = 0x80
+	midiCommandNoteOn        = 0x90
+	midiCommandControlChange = 0xB0
+	midiCommandProgramChange = 0xC0
+
+	midiCCChannelVolume    = 7
+	midiCCPan              = 10
+	midiCCExpression       = 11
+	midiCCSustain          = 64
+	midiCCReverbSend       = 91
+	midiCCChorusSend       = 93
+	midiCCAllSoundOff      = 120
+	midiCCResetControllers = 121
+	midiCCAllNotesOff      = 123
+
+	midiPercussionChannel = 9
+)
+
+func playSelectedOutputNoteOn(channel, note, velocity uint8) {
 	selectedOut, outDevice, ok := currentOutputDevice()
 	switch selectedOut {
 	case midiOutputNone:
 		return
 	case midiOutputSoftwareSynth:
-		Keydown(int32(channel), int32(note), softwareVelocity)
+		if channel == midiPercussionChannel {
+			return
+		}
+		ProcessSynthMidiMessage(int32(channel), midiCommandNoteOn, int32(note), int32(velocity))
 	default:
 		if !ok || outDevice.Device == nil {
 			return
 		}
-		if err := outDevice.Device.Send(midi.NoteOn(channel, note, externalVelocity)); err != nil {
+		if err := outDevice.Device.Send(midi.NoteOn(channel, note, velocity)); err != nil {
 			fmt.Println("发送 MIDI NoteOn 失败:", err)
 		}
 	}
@@ -517,7 +549,7 @@ func playSelectedOutputNoteOff(channel uint8, note uint8) {
 	case midiOutputNone:
 		return
 	case midiOutputSoftwareSynth:
-		Keyup(int32(channel), int32(note))
+		ProcessSynthMidiMessage(int32(channel), midiCommandNoteOff, int32(note), 0)
 	default:
 		if !ok || outDevice.Device == nil {
 			return
@@ -528,13 +560,30 @@ func playSelectedOutputNoteOff(channel uint8, note uint8) {
 	}
 }
 
-func sendSelectedOutputControlChange(channel uint8, controller uint8, value uint8) {
+func playSelectedOutputControlChange(channel, controller, value uint8) {
+	selectedOut, outDevice, ok := currentOutputDevice()
+	switch selectedOut {
+	case midiOutputNone:
+		return
+	case midiOutputSoftwareSynth:
+		ProcessSynthMidiMessage(int32(channel), midiCommandControlChange, int32(controller), int32(value))
+	default:
+		if !ok || outDevice.Device == nil {
+			return
+		}
+		if err := outDevice.Device.Send(midi.ControlChange(channel, controller, value)); err != nil {
+			fmt.Println("发送 MIDI ControlChange 失败:", err)
+		}
+	}
+}
+
+func playSelectedOutputProgramChange(channel, program uint8) {
 	selectedOut, outDevice, ok := currentOutputDevice()
 	if selectedOut == midiOutputNone || selectedOut == midiOutputSoftwareSynth || !ok || outDevice.Device == nil {
 		return
 	}
-	if err := outDevice.Device.Send(midi.ControlChange(channel, controller, value)); err != nil {
-		fmt.Println("发送 MIDI ControlChange 失败:", err)
+	if err := outDevice.Device.Send(midi.ProgramChange(channel, program)); err != nil {
+		fmt.Println("发送 MIDI ProgramChange 失败:", err)
 	}
 }
 

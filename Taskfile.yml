@@ -6,6 +6,7 @@ vars:
   CGO_ENABLED: "1"
   PACKAGE_MANAGER: '{{.PACKAGE_MANAGER | default "npm"}}'
   VITE_PORT: '{{.WAILS_VITE_PORT | default 9245}}'
+  PRODUCTION: "true"
 
 includes:
   common: ./build/Taskfile.yml
@@ -21,15 +22,18 @@ tasks:
     cmds:
       - task: "{{OS}}:build"
         vars:
+          APP_NAME: "{{.APP_NAME}}"
           CGO_ENABLED: "{{.CGO_ENABLED}}"
+          PRODUCTION: "{{.PRODUCTION}}"
 
   release:
     summary: Builds the release application
     cmds:
       - task: "{{OS}}:build"
         vars:
+          APP_NAME: "{{.APP_NAME}}"
           CGO_ENABLED: "{{.CGO_ENABLED}}"
-          PRODUCTION: "true"
+          PRODUCTION: "{{.PRODUCTION}}"
 
   package:
     summary: Packages a production build of the application

@@ -221,6 +221,7 @@ func SaveConfig(config Config) error {
 	UserConfig = nextConfig
 
 	configMu.Unlock()
+	SetMasterVolume(nextConfig.Volume)
 	EmitConfigChanged()
 
 	return nil
@@ -251,6 +252,9 @@ func (k *Keyboard) ResetConfig() Config {
 	resetConfig := cloneDefaultConfig()
 	resetConfig.Version = GetUserConfig().Version
 	_ = SaveConfig(resetConfig)
+	if err := SwitchDefaultSoundFont(); err != nil {
+		ClearSoundFont()
+	}
 	return resetConfig
 }
 

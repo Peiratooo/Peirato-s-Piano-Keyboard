@@ -73,6 +73,17 @@
                         <button :class="{ active: options.handMode === 'both' }" type="button" @click="setPlaybackOption('handMode', 'both')">双</button>
                     </div>
 
+                    <button
+                        class="loop-toggle"
+                        :class="{ active: options.loop }"
+                        type="button"
+                        :title="options.loop ? '播放结束后循环' : '播放结束后停止'"
+                        @click="setPlaybackOption('loop', !options.loop)"
+                    >
+                        <UiIcon name="repeat" :size="14" />
+                        {{ options.loop ? '循环播放' : '播完停止' }}
+                    </button>
+
                     <label class="speed-control">
                         <UiIcon name="speed" :size="15" />
                         <input
@@ -222,6 +233,12 @@ const ICONS = {
         ['path', { d: 'M4 14a8 8 0 1 1 16 0' }],
         ['path', { d: 'm12 14 4-4' }],
         ['path', { d: 'M12 20h.01' }],
+    ],
+    repeat: [
+        ['path', { d: 'M17 2l4 4-4 4' }],
+        ['path', { d: 'M3 11V9a3 3 0 0 1 3-3h15' }],
+        ['path', { d: 'M7 22l-4-4 4-4' }],
+        ['path', { d: 'M21 13v2a3 3 0 0 1-3 3H3' }],
     ],
 }
 
@@ -433,7 +450,7 @@ function buildPlaybackOptions(overrides = {}) {
         speed: options.speed,
         leftMs: options.leftMs,
         rightMs: normalizedRightMs.value,
-        loop: true,
+        loop: options.loop,
         leadWindowMs: DEFAULT_WINDOW_MS,
         groupWindowMs: DEFAULT_WINDOW_MS,
         ...overrides,
@@ -1009,6 +1026,34 @@ button {
     min-width: 30px;
     justify-content: center;
     padding: 0 8px;
+}
+
+.loop-toggle {
+    height: 34px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 11px;
+    border: 1px solid rgba(148, 164, 184, 0.2);
+    border-radius: 13px;
+    color: #475467;
+    background: rgba(255, 255, 255, 0.72);
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 760;
+    transition: 150ms ease;
+}
+
+.loop-toggle:hover {
+    color: var(--blue-dark);
+    background: rgba(20, 120, 255, 0.08);
+}
+
+.loop-toggle.active {
+    color: #fff;
+    border-color: transparent;
+    background: linear-gradient(135deg, #1687ff, #0759d6);
+    box-shadow: 0 8px 18px rgba(20, 120, 255, 0.2);
 }
 
 .speed-control {

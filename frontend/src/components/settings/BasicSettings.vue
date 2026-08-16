@@ -5,7 +5,7 @@
             <div class="setting-row">
                 <div>
                     <div class="label">钢琴音量</div>
-                    <div class="desc">控制内置 SoundFont 合成器的默认触键音量。</div>
+                    <div class="desc">控制内置 SoundFont 合成器的总体播放音量。</div>
                 </div>
                 <n-slider v-model:value="store.config.volume" :min="0" :max="100" @dragend="changeConfig" :tooltip="false" />
             </div>

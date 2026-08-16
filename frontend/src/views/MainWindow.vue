@@ -2,14 +2,14 @@
     <div
         ref="containerRef"
         class="container"
-        @mouseenter="store.showSetting = true"
-        @mouseleave="store.showSetting = false"
+        @mouseenter="showToolbar"
+        @mouseleave="scheduleHideToolbar"
     >
         <div class="drag-area">
             <transition enter-active-class="blurFadeIN" leave-active-class="blurFadeOUT">
                 <div
                     class="panel main-panel"
-                    v-if="store.showSetting || true"
+                    v-if="store.showSetting"
                     :style="{left: store.menuBar ? '0' : '-128px'}"
                 >
                     <button class="icon-button quit" title="退出" @click="Keyboard.Quit">
@@ -96,6 +96,23 @@ const chordPos = ref({
 })
 
 let draggingType = null
+let toolbarHideTimer = null
+
+function showToolbar() {
+    if (toolbarHideTimer !== null) {
+        clearTimeout(toolbarHideTimer)
+        toolbarHideTimer = null
+    }
+    store.showSetting = true
+}
+
+function scheduleHideToolbar() {
+    if (toolbarHideTimer !== null) clearTimeout(toolbarHideTimer)
+    toolbarHideTimer = setTimeout(() => {
+        store.showSetting = false
+        toolbarHideTimer = null
+    }, 1000)
+}
 
 function getContainerRect() {
     const el = containerRef.value
@@ -215,6 +232,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+    if (toolbarHideTimer !== null) clearTimeout(toolbarHideTimer)
     window.removeEventListener('resize', handleResize)
     window.removeEventListener('mousemove', handleDragging)
     window.removeEventListener('mouseup', stopDragging)
@@ -270,6 +288,7 @@ onBeforeUnmount(() => {
     backdrop-filter: blur(8px);
     cursor: auto;
     transition: 200ms;
+    z-index: 2;
 }
 
 .main-panel {

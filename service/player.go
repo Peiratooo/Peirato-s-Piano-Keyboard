@@ -9,7 +9,7 @@ import (
 
 const (
 	defaultMidiWindowMs = 100.0
-	playerTickInterval  = 3 * time.Millisecond
+	playerTickInterval  = 1 * time.Millisecond
 	stateEmitInterval   = 50 * time.Millisecond
 )
 
@@ -868,12 +868,14 @@ func clampFloat(value float64, minValue float64, maxValue float64) float64 {
 }
 
 func dispatchMidiEvent(event MidiEvent, emitVisual bool) {
-	config := GetUserConfig()
-	channel := config.MidiChannel
+	if event.Channel < 0 || event.Channel > 15 {
+		return
+	}
+	channel := uint8(event.Channel)
 
 	switch event.Type {
 	case MidiEventNoteOn:
-		playSelectedOutputNoteOn(channel, uint8(event.Note), int32(event.Velocity), uint8(event.Velocity))
+		playSelectedOutputNoteOn(channel, uint8(event.Note), uint8(clampMidiByte(event.Velocity)))
 		if emitVisual {
 			emitMidiPlaybackKey(event, channel, true)
 		}
@@ -882,7 +884,21 @@ func dispatchMidiEvent(event MidiEvent, emitVisual bool) {
 		if emitVisual {
 			emitMidiPlaybackKey(event, channel, false)
 		}
+	case MidiEventControlChange:
+		playSelectedOutputControlChange(channel, uint8(clampMidiByte(event.Controller)), uint8(clampMidiByte(event.Value)))
+	case MidiEventProgramChange:
+		playSelectedOutputProgramChange(channel, uint8(clampMidiByte(event.Program)))
 	}
+}
+
+func clampMidiByte(value int) int {
+	if value < 0 {
+		return 0
+	}
+	if value > 127 {
+		return 127
+	}
+	return value
 }
 
 func emitMidiPlayerState(state MidiPlayerState) {
