@@ -1,10 +1,12 @@
 package service
 
 import (
+	"bytes"
 	"crypto/md5"
 	"encoding/hex"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -13,7 +15,6 @@ import (
 	"time"
 
 	"github.com/gopxl/beep/v2"
-	"github.com/gopxl/beep/v2/effects"
 	"github.com/gopxl/beep/v2/speaker"
 	"github.com/sinshu/go-meltysynth/meltysynth"
 )
@@ -38,10 +39,41 @@ type UserSoundFont struct {
 }
 
 var (
-	PianoPlayer    *Synthesizer
-	synthMu        sync.Mutex
-	speakerStarted bool
+	PianoPlayer              *Synthesizer
+	synthMu                  sync.Mutex
+	speakerStarted           bool
+	embeddedDefaultSoundFont []byte
 )
+
+const embeddedDefaultSoundFontName = "Upright Piano KW"
+
+// SetEmbeddedDefaultSoundFont supplies the bundled piano SoundFont before startup.
+func SetEmbeddedDefaultSoundFont(data []byte) {
+	embeddedDefaultSoundFont = append([]byte(nil), data...)
+}
+
+func masterVolumeGain(volume int32) float32 {
+	if volume <= 0 {
+		return 0
+	}
+	if volume > 100 {
+		volume = 100
+	}
+
+	// Keep MeltySynth's 0.5 headroom while mapping the user control in dB.
+	// 50 ~= -12 dB, 80 ~= -5 dB, 100 = the synth's unity reference.
+	db := -24.0 + 24.0*float64(volume)/100.0
+	return float32(0.5 * math.Pow(10, db/20.0))
+}
+
+func SetMasterVolume(volume int32) {
+	synthMu.Lock()
+	defer synthMu.Unlock()
+
+	if PianoPlayer != nil && PianoPlayer.Synth != nil {
+		PianoPlayer.Synth.MasterVolume = masterVolumeGain(volume)
+	}
+}
 
 func ValidateSoundFont(path string) error {
 	path = strings.TrimSpace(path)
@@ -104,6 +136,21 @@ func SwitchSoundFont(sf UserSoundFont) error {
 	return EnsureSpeakerStarted()
 }
 
+func SwitchDefaultSoundFont() error {
+	if len(embeddedDefaultSoundFont) == 0 {
+		return fmt.Errorf("内置默认音源不可用")
+	}
+
+	config := normalizeConfigRanges(GetUserConfig())
+	AllSynthNotesOff()
+
+	if err := LoadSoundFontData(embeddedDefaultSoundFontName, embeddedDefaultSoundFont, config.SampleRate, config.BufferSize); err != nil {
+		return err
+	}
+
+	return EnsureSpeakerStarted()
+}
+
 func FindSoundFontByID(items []UserSoundFont, id string) (int, UserSoundFont, bool) {
 	id = strings.TrimSpace(id)
 	if id == "" {
@@ -121,6 +168,9 @@ func FindSoundFontByID(items []UserSoundFont, id string) (int, UserSoundFont, bo
 
 func ClearSoundFont() {
 	AllSynthNotesOff()
+	if speakerStarted {
+		speaker.Clear()
+	}
 
 	synthMu.Lock()
 	PianoPlayer = nil
@@ -169,18 +219,13 @@ func InitSpeaker() error {
 			return fmt.Errorf("初始化扬声器失败: %w", err)
 		}
 		speakerStarted = true
+	} else {
+		speaker.Clear()
 	}
 
 	PianoPlayer.Streamer = newSynthStreamer()
 
-	volumeStreamer := effects.Volume{
-		Streamer: PianoPlayer.Streamer,
-		Base:     7,
-		Volume:   1,
-		Silent:   false,
-	}
-
-	speaker.Play(&volumeStreamer)
+	speaker.Play(PianoPlayer.Streamer)
 
 	return nil
 }
@@ -236,7 +281,19 @@ func LoadSoundFont(sf UserSoundFont, sampleRate, bufferSize int32) error {
 	}
 	defer sf2.Close()
 
-	soundfont, err := meltysynth.NewSoundFont(sf2)
+	return loadSoundFont(sf2, path, sampleRate, bufferSize)
+}
+
+func LoadSoundFontData(name string, data []byte, sampleRate, bufferSize int32) error {
+	if len(data) == 0 {
+		return fmt.Errorf("音源数据为空")
+	}
+
+	return loadSoundFont(bytes.NewReader(data), name, sampleRate, bufferSize)
+}
+
+func loadSoundFont(reader io.Reader, path string, sampleRate, bufferSize int32) error {
+	soundfont, err := meltysynth.NewSoundFont(reader)
 	if err != nil {
 		return fmt.Errorf("解析音源失败: %w", err)
 	}
@@ -247,6 +304,8 @@ func LoadSoundFont(sf UserSoundFont, sampleRate, bufferSize int32) error {
 	if err != nil {
 		return fmt.Errorf("创建合成器失败: %w", err)
 	}
+
+	synthesizer.MasterVolume = masterVolumeGain(GetUserConfig().Volume)
 
 	synthMu.Lock()
 	PianoPlayer = &Synthesizer{
@@ -283,6 +342,17 @@ func Keyup(channel, key int32) {
 	PianoPlayer.Synth.NoteOff(channel, key)
 }
 
+func ProcessSynthMidiMessage(channel, command, data1, data2 int32) {
+	synthMu.Lock()
+	defer synthMu.Unlock()
+
+	if PianoPlayer == nil || PianoPlayer.Synth == nil {
+		return
+	}
+
+	PianoPlayer.Synth.ProcessMidiMessage(channel, command, data1, data2)
+}
+
 func AllSynthNotesOff() {
 	synthMu.Lock()
 	defer synthMu.Unlock()
@@ -292,6 +362,14 @@ func AllSynthNotesOff() {
 	}
 
 	for channel := int32(0); channel < 16; channel++ {
+		// Reset channel state that a MIDI file may have left muted or panned.
+		PianoPlayer.Synth.ProcessMidiMessage(channel, midiCommandControlChange, midiCCChannelVolume, 127)
+		PianoPlayer.Synth.ProcessMidiMessage(channel, midiCommandControlChange, midiCCPan, 64)
+		PianoPlayer.Synth.ProcessMidiMessage(channel, midiCommandControlChange, midiCCExpression, 127)
+		PianoPlayer.Synth.ProcessMidiMessage(channel, midiCommandControlChange, midiCCSustain, 0)
+		PianoPlayer.Synth.ProcessMidiMessage(channel, midiCommandControlChange, midiCCAllSoundOff, 0)
+		PianoPlayer.Synth.ProcessMidiMessage(channel, midiCommandControlChange, midiCCResetControllers, 0)
+		PianoPlayer.Synth.ProcessMidiMessage(channel, midiCommandControlChange, midiCCAllNotesOff, 0)
 		for key := int32(0); key < 128; key++ {
 			PianoPlayer.Synth.NoteOff(channel, key)
 		}
@@ -375,7 +453,13 @@ func (k *Keyboard) RemoveSoundFontByID(id string) error {
 
 	if config.ActiveSoundFontID == id {
 		config.ActiveSoundFontID = ""
-		ClearSoundFont()
+		if err := SwitchDefaultSoundFont(); err != nil {
+			ClearSoundFont()
+			if saveErr := SaveConfig(config); saveErr != nil {
+				return saveErr
+			}
+			return err
+		}
 	}
 
 	return SaveConfig(config)
@@ -387,8 +471,10 @@ func (k *Keyboard) SelectSoundFontByID(id string) error {
 	config := GetUserConfig()
 
 	if id == "" {
+		if err := SwitchDefaultSoundFont(); err != nil {
+			return err
+		}
 		config.ActiveSoundFontID = ""
-		ClearSoundFont()
 
 		return SaveConfig(config)
 	}
@@ -509,6 +595,10 @@ func InitSoundFontFromConfig() error {
 		}
 	}
 
-	ClearSoundFont()
+	if err := SwitchDefaultSoundFont(); err != nil {
+		ClearSoundFont()
+		return err
+	}
+
 	return nil
 }

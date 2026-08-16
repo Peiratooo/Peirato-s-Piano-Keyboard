@@ -6,10 +6,6 @@
 // @ts-ignore: Unused imports
 import { Create as $Create } from "@wailsio/runtime";
 
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as time$0 from "../../time/models.js";
-
 export class Color {
     /**
      * Creates a new Color instance.
@@ -872,9 +868,9 @@ export class UserMidi {
         if (!("importedAt" in $$source)) {
             /**
              * @member
-             * @type {time$0.Time}
+             * @type {string}
              */
-            this["importedAt"] = null;
+            this["importedAt"] = "0001-01-01T00:00:00.000Z";
         }
         if (!("missing" in $$source)) {
             /**
@@ -949,16 +945,16 @@ export class UserSoundFont {
         if (!("createdAt" in $$source)) {
             /**
              * @member
-             * @type {time$0.Time}
+             * @type {string}
              */
-            this["createdAt"] = null;
+            this["createdAt"] = "0001-01-01T00:00:00.000Z";
         }
         if (!("lastUsedAt" in $$source)) {
             /**
              * @member
-             * @type {time$0.Time}
+             * @type {string}
              */
-            this["lastUsedAt"] = null;
+            this["lastUsedAt"] = "0001-01-01T00:00:00.000Z";
         }
         if (!("missing" in $$source)) {
             /**

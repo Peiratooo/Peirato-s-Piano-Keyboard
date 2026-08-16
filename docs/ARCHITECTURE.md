@@ -30,9 +30,9 @@ Peirato's Piano 是一个 Wails v3 桌面应用：
 
 2. `main.go` 执行 `service.InitSoundFont(service.ResolveSoundFontPath())`。
    - `ResolveSoundFontPath()` 优先使用用户配置里的 `SoundFontPath`。
-   - 路径无效时回退到 `./assets/Yamaha-Grand-Lite-v2.0.sf2`。
+   - 默认使用程序内置的 Upright Piano KW SF2；用户配置里的自定义音源有效时优先使用。
    - `InitSoundFont()` 调用 `LoadSoundFont()` 加载 sf2，再调用 `InitSpeaker()` 初始化本地扬声器。
-   - 音源失败不会阻止窗口启动，只会进入“无内置发声”状态。
+   - 音源失败不会阻止窗口启动；内置音源可用时会继续回退到默认音源。
 
 3. `service.Run(assets)` 创建 Wails 应用。
    - `application.NewService(&Keyboard{})` 把 `Keyboard` 的公开方法暴露给前端。
@@ -82,7 +82,7 @@ Peirato's Piano 是一个 Wails v3 桌面应用：
 
 Go 后端发声：
 
-- `KeyboardPlay()` 使用配置里的默认 velocity，并按当前输出目标发声。
+- `KeyboardPlay()` 使用配置里的默认 velocity，并按当前输出目标发声；`Volume` 只控制软件合成器 master gain。
 - 输出目标互斥：`无` 不发音，`软件音源` 只触发内置音源，外部 MIDI 设备只发送 MIDI 消息。
 - `KeyboardStop()` 按当前输出目标停止音符。
 - `AllNotesOff()` 同时清理内置音源、外部 MIDI 输出和前端高亮。
@@ -109,9 +109,9 @@ Go 后端发声：
 
 - `MidiListenerStart()` 对当前输入设备调用 `midi.ListenTo()`。
 - `handleMidiMessage()` 解析 NoteOn、NoteOff、ControlChange。
-- NoteOn 会调用 `Keydown()` 内置发声，并发出 `down` 和 `pressedDown` 事件。
-- NoteOff 会根据延音踏板状态决定是否马上 `Keyup()`，并发出 `pressedUp`，必要时发出 `up`。
-- `handlePedalMessage()` 处理 64 延音、66 持音、67 柔音，并通过 `pedal` 事件推送前端。
+- NoteOn 会按原始 MIDI channel 进入统一输出路由，并发出 `down` 和 `pressedDown` 事件。
+- NoteOff 会把消息交给软件合成器/外部 MIDI 设备；MeltySynth 自己根据 CC64 管理延音，同时前端按踏板状态更新 `up`。
+- `handlePedalMessage()` 将全部 Control Change 转发到当前输出，另处理 64 延音、66 持音、67 柔音并通过 `pedal` 事件推送前端。
 
 前端接收：
 
@@ -125,8 +125,8 @@ Go 后端发声：
 
 - `LoadSoundFont(path, sampleRate, bufferSize)` 读取并解析 `.sf2`，创建 `meltysynth.Synthesizer`。
 - `InitSpeaker()` 使用 `beep/speaker` 初始化音频输出，并注册实时渲染 streamer。
-- `Keydown(channel, key, velocity)` 调用 synthesizer 的 `NoteOn()`。
-- `Keyup(channel, key)` 调用 `NoteOff()`。
+- `ProcessSynthMidiMessage(channel, command, data1, data2)` 统一转发 Note、Control Change 等 MIDI 消息到 synthesizer。
+- `InitSpeaker()` 直接播放合成器 streamer，不再叠加固定增益；Volume 通过 dB master gain 映射并保留合成器 headroom。
 - `AllSynthNotesOff()` 遍历 16 个 channel 和 128 个 key，确保内置音源不残留声音。
 
 设置中心音源操作：
@@ -261,10 +261,10 @@ MIDI 文件解析在 `service/midi_file.go`：
 
 检查点：
 
-1. 默认音源是否存在：`assets/Yamaha-Grand-Lite-v2.0.sf2`。
+1. 默认内置 Upright Piano KW 音源是否加载成功。
 2. 用户配置里的 `soundFontPath` 是否还存在。
 3. 设置中心音源页的 `soundFontInfo.error`。
-4. 失败后程序仍可打开，但本地内置发声不可用。
+4. 失败后程序仍可打开，并记录音源加载错误。
 
 ### MIDI 设备不可用
 

@@ -14,8 +14,17 @@
             @mousedown.prevent="pressKey(item.index)"
             @mouseup="releaseKey(item.index)"
         >
-            <div class="label" v-if="store.config.keyLabel !== '' && item[store.config.keyLabel]">
-                {{ item[store.config.keyLabel] }}
+            <div class="label" v-if="store.config.keyLabel !== '' && item[store.config.keyLabel]" :class="{'pitch-label': store.config.keyLabel === 'pitch'}">
+                <template v-if="store.config.keyLabel === 'pitch'">
+                    <span v-if="pitchMarkCount(item) > 0 && pitchMarksAbove(item)" class="pitch-marks above" aria-hidden="true">
+                        <span v-for="mark in pitchMarkCount(item)" :key="`above-${item.index}-${mark}`" class="pitch-mark"></span>
+                    </span>
+                    <span class="pitch-number">{{ item[store.config.keyLabel] }}</span>
+                    <span v-if="pitchMarkCount(item) > 0 && !pitchMarksAbove(item)" class="pitch-marks below" aria-hidden="true">
+                        <span v-for="mark in pitchMarkCount(item)" :key="`below-${item.index}-${mark}`" class="pitch-mark"></span>
+                    </span>
+                </template>
+                <template v-else>{{ item[store.config.keyLabel] }}</template>
             </div>
         </div>
     </div>
@@ -57,6 +66,14 @@ function getKeyClass(item) {
         return keyColorMap.left[item.color]
     }
     return ''
+}
+
+function pitchMarkCount(item) {
+    return Math.abs(Number(item.octave) - 4)
+}
+
+function pitchMarksAbove(item) {
+    return Number(item.octave) > 4
 }
 
 function pressKey(key) {
@@ -122,6 +139,31 @@ onBeforeUnmount(() => {
     display: flex;
     justify-content: center;
     opacity: 0.5;
+}
+
+.pitch-label {
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    line-height: 1;
+}
+
+.pitch-marks {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+
+.pitch-marks.below {
+    margin-top: 1px;
+}
+
+.pitch-mark {
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: currentColor;
 }
 
 .black .label {

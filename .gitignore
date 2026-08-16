@@ -155,3 +155,4 @@ vite.config.ts.timestamp-*
 /web
 /.builder
 /.task
+/builder

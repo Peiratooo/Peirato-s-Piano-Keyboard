@@ -25,11 +25,36 @@
         </div>
 
         <div class="soundfont-list">
+            <div class="soundfont-item" :class="{active: !store.config.activeSoundFontId}">
+                <div class="soundfont-icon default-icon">
+                    <span>SF2</span>
+                </div>
+                <div class="soundfont-item-main">
+                    <div class="item-title-line">
+                        <span class="label">Upright Piano KW</span>
+                        <n-tag v-if="!store.config.activeSoundFontId" size="small" type="success" :bordered="false">正在使用</n-tag>
+                        <n-tag size="small" type="info" :bordered="false">内置</n-tag>
+                    </div>
+                    <div class="desc">默认音源</div>
+                </div>
+                <div class="soundfont-actions">
+                    <n-button
+                        size="small"
+                        secondary
+                        :loading="loadingAction === 'select:'"
+                        :disabled="!store.config.activeSoundFontId || isBusy"
+                        @click="selectSoundFont('')"
+                    >
+                        使用
+                    </n-button>
+                </div>
+            </div>
+
             <div v-if="!soundFonts.length" class="empty-library">
                 <div class="empty-orb">+</div>
                 <div>
                     <div class="label">还没有导入用户音源</div>
-                    <div class="desc">未导入音源时软件会正常运行，但不会通过内置音源发声。</div>
+                    <div class="desc">当前使用内置 Upright Piano KW；你也可以导入自己的 .sf2 音源。</div>
                 </div>
                 <n-button size="small" type="primary" secondary :loading="loadingAction === 'add'" :disabled="isBusy" @click="addSoundFont">选择 .sf2 文件</n-button>
             </div>
@@ -92,8 +117,7 @@ const loadingAction = ref('')
 const soundFonts = computed(() => store.config.soundFonts || [])
 const isBusy = computed(() => Boolean(loadingAction.value))
 const activeSoundFontText = computed(() => {
-    if (!soundFonts.value.length) return '当前未启用内置音源。导入并选择 .sf2 后才会发声。'
-    if (!store.config.activeSoundFontId) return `已导入 ${soundFonts.value.length} 个用户音源，当前未启用内置音源。`
+    if (!store.config.activeSoundFontId) return `当前使用内置 Upright Piano KW，可直接弹奏。已导入 ${soundFonts.value.length} 个用户音源。`
     return `已导入 ${soundFonts.value.length} 个用户音源。当前使用状态会直接显示在下方列表中。`
 })
 

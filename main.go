@@ -9,14 +9,18 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
+//go:embed soundfont/UprightPianoKW.sf2
+var defaultSoundFont []byte
+
 func main() {
 	//service.PRODUCTION = false // 生产环境模式默认开启，开发时可以改为 false 查看 DevTools。
 
 	// 启动顺序一定要可控：配置 -> 音源 -> 窗口 -> MIDI 设备扫描。
 	// 旧版本这里使用多个 goroutine 并发初始化，容易出现配置未加载、音源未准备好、窗口还没创建就发事件的问题。
-	if err := service.LoadConfig("1.2.1"); err != nil {
+	if err := service.LoadConfig("1.2.2"); err != nil {
 		log.Println("加载配置失败，已使用默认配置:", err)
 	}
+	service.SetEmbeddedDefaultSoundFont(defaultSoundFont)
 
 	if err := service.InitSoundFontFromConfig(); err != nil {
 		// 音源加载失败时允许程序继续启动，用户后续可以在设置中心重新选择音源。

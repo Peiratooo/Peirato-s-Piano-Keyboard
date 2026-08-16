@@ -9,9 +9,9 @@ info:
   productName: "Peirato's Piano Keyboard" # The official application name
   productIdentifier: "com.peirato.piano" # The unique product identifier
   description: "A lightweight desktop piano keyboard for MIDI playback and practice." # The application description
-  copyright: "(c) 2025, Peirato" # Copyright text
+  copyright: "(c) 2026, Peirato" # Copyright text
   comments: "A simple and lightweight piano keyboard for desktop practice." # Comments
-  version: "1.2.0" # The application version
+  version: "1.2.2" # The application version
   # cfBundleIconName: "appicon" # The macOS icon name in Assets.car icon bundles (optional)
   #                               # Should match the name of your .icon file without the extension
   #                               # If not set and Assets.car exists, defaults to "appicon"
