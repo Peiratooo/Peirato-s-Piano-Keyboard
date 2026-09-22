@@ -28,8 +28,10 @@ type Window struct {
 }
 
 type Config struct {
+	Revision              uint64           `json:"revision"`
 	Colors                map[string]Color `json:"colors"`
 	KeyLabel              string           `json:"keyLabel"`
+	KeyTonic              int              `json:"keyTonic"`
 	KeyboardType          int              `json:"keyboardType"`
 	Velocity              uint8            `json:"velocity"`
 	Opacity               int              `json:"opacity"`
@@ -95,13 +97,19 @@ var DefaultConfig = Config{
 var UserConfig = cloneDefaultConfig()
 
 func cloneDefaultConfig() Config {
-	config := DefaultConfig
-	config.Colors = make(map[string]Color, len(DefaultConfig.Colors))
-	for key, value := range DefaultConfig.Colors {
-		config.Colors[key] = value
+	return cloneConfig(DefaultConfig)
+}
+
+func cloneConfig(source Config) Config {
+	result := source
+	result.Colors = make(map[string]Color, len(source.Colors))
+	for key, value := range source.Colors {
+		result.Colors[key] = value
 	}
-	config.KeymapProfiles = cloneKeymapProfiles(DefaultConfig.KeymapProfiles)
-	return config
+	result.SoundFonts = append([]UserSoundFont{}, source.SoundFonts...)
+	result.MidiStore = append([]UserMidi{}, source.MidiStore...)
+	result.KeymapProfiles = cloneKeymapProfiles(source.KeymapProfiles)
+	return result
 }
 
 // LoadConfig 负责读取用户配置，并自动补齐旧配置里缺失的新字段。
@@ -131,16 +139,22 @@ func LoadConfig(version string) error {
 	}
 
 	if err := json.Unmarshal(data, &config); err != nil {
+		backup, backupErr := os.ReadFile(configFilePath + ".bak")
 		config = cloneDefaultConfig()
-		config.Version = version
-		UserConfig = config
-		return fmt.Errorf("解析配置文件失败: %w", err)
+		if backupErr != nil || json.Unmarshal(backup, &config) != nil {
+			config.Version = version
+			UserConfig = config
+			return fmt.Errorf("配置与备份均无法读取: %w", err)
+		}
 	}
 
 	config = mergeConfigWithDefaults(config)
 	config.Version = version
 
 	config = normalizeConfigRanges(config)
+	configMu.Lock()
+	UserConfig = cloneConfig(config)
+	configMu.Unlock()
 
 	return SaveConfig(config)
 }
@@ -149,8 +163,10 @@ func LoadConfig(version string) error {
 // 例如用户旧配置没有 midiChannel / soundFontPath 时，这里会补上安全默认值。
 func mergeConfigWithDefaults(config Config) Config {
 	merged := cloneDefaultConfig()
+	merged.Revision = config.Revision
 
 	merged.KeyLabel = config.KeyLabel
+	merged.KeyTonic = config.KeyTonic
 	merged.KeyboardType = config.KeyboardType
 	merged.Velocity = config.Velocity
 	merged.Opacity = config.Opacity
@@ -160,9 +176,9 @@ func mergeConfigWithDefaults(config Config) Config {
 	merged.SampleRate = config.SampleRate
 	merged.BufferSize = config.BufferSize
 	merged.MidiChannel = config.MidiChannel
-	merged.SoundFonts = config.SoundFonts
+	merged.SoundFonts = append([]UserSoundFont{}, config.SoundFonts...)
 	merged.ActiveSoundFontID = config.ActiveSoundFontID
-	merged.MidiStore = config.MidiStore
+	merged.MidiStore = append([]UserMidi{}, config.MidiStore...)
 	merged.ActiveKeymapProfileID = config.ActiveKeymapProfileID
 	merged.KeymapProfiles = cloneKeymapProfiles(config.KeymapProfiles)
 
@@ -174,6 +190,12 @@ func mergeConfigWithDefaults(config Config) Config {
 }
 
 func normalizeConfigRanges(config Config) Config {
+	if config.KeyTonic < 0 || config.KeyTonic > 11 {
+		config.KeyTonic = 0
+	}
+	if config.KeyboardType < 0 || config.KeyboardType > 5 {
+		config.KeyboardType = DefaultConfig.KeyboardType
+	}
 	if config.Opacity < 20 || config.Opacity > 100 {
 		config.Opacity = DefaultConfig.Opacity
 	}
@@ -197,7 +219,12 @@ func normalizeConfigRanges(config Config) Config {
 
 func SaveConfig(config Config) error {
 	configMu.Lock()
+	if config.Revision != UserConfig.Revision {
+		configMu.Unlock()
+		return fmt.Errorf("设置已被其他窗口修改，请刷新后重试")
+	}
 	nextConfig := mergeConfigWithDefaults(config)
+	nextConfig.Revision++
 
 	data, err := json.MarshalIndent(nextConfig, "", "  ")
 	if err != nil {
@@ -213,7 +240,13 @@ func SaveConfig(config Config) error {
 		}
 	}
 
-	if err := os.WriteFile(configFilePath, data, 0644); err != nil {
+	if previous, err := os.ReadFile(configFilePath); err == nil && json.Valid(previous) {
+		if err = writeAtomicFile(configFilePath+".bak", previous, 0600); err != nil {
+			configMu.Unlock()
+			return fmt.Errorf("备份配置失败: %w", err)
+		}
+	}
+	if err := writeAtomicFile(configFilePath, data, 0600); err != nil {
 		configMu.Unlock()
 		return fmt.Errorf("写入配置文件失败: %w", err)
 	}
@@ -230,7 +263,7 @@ func SaveConfig(config Config) error {
 func GetUserConfig() Config {
 	configMu.RLock()
 	defer configMu.RUnlock()
-	return UserConfig
+	return cloneConfig(UserConfig)
 }
 
 func (k *Keyboard) SendConfig() Config {
@@ -248,14 +281,17 @@ func (k *Keyboard) ReceiveConfig(config Config) (bool, string) {
 	return true, ""
 }
 
-func (k *Keyboard) ResetConfig() Config {
-	resetConfig := cloneDefaultConfig()
-	resetConfig.Version = GetUserConfig().Version
-	_ = SaveConfig(resetConfig)
-	if err := SwitchDefaultSoundFont(); err != nil {
-		ClearSoundFont()
-	}
-	return resetConfig
+func (k *Keyboard) ResetConfig() (Config, error) {
+	err := withSoundFontChange(func() error {
+		current := GetUserConfig()
+		resetConfig := cloneDefaultConfig()
+		resetConfig.Version, resetConfig.Revision = current.Version, current.Revision
+		if err := SwitchDefaultSoundFont(); err != nil {
+			return err
+		}
+		return SaveConfig(resetConfig)
+	})
+	return GetUserConfig(), err
 }
 
 func EmitConfigChanged() {

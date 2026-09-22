@@ -2,18 +2,17 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 
 #define MyAppName "Peirato's Piano"
-#define MyAppVersion "1.1.0"
+#define MyAppVersion "1.2.3"
 #define MyAppPublisher "Peirato"
 #define MyAppURL "https://piano.peirato.com/"
-#define MyAppExeName "Peirato's Piano Launcher.exe"
+#define MyAppExeName "Peirato-s-Piano-Keyboard.exe"
 #define MyAppAssocName MyAppName + " File"
 #define MyAppAssocExt ".myp"
 #define MyAppAssocKey StringChange(MyAppAssocName, " ", "") + MyAppAssocExt
 
 [Setup]
 ; NOTE: The value of AppId uniquely identifies this application. Do not use the same AppId value in installers for other applications.
-; (To generate a new GUID, click Tools | Generate GUID inside the IDE.)
-AppId={{E0B1F5D5-E77A-ABFE-7306-C97FF12FD963}
+AppId=com.peirato.piano
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 ;AppVerName={#MyAppName} {#MyAppVersion}
@@ -35,9 +34,9 @@ ChangesAssociations=yes
 DisableProgramGroupPage=yes
 ; Uncomment the following line to run in non administrative install mode (install for current user only).
 ;PrivilegesRequired=lowest
-OutputDir=C:\Users\Peirato\Desktop\PeiratoPiano\wails\bin
+OutputDir=bin
 OutputBaseFilename=Peirato's Piano Setup
-SetupIconFile=C:\Users\Peirato\Desktop\PeiratoPiano\wails\build\windows\icon.ico
+SetupIconFile=assets\installer.ico
 SolidCompression=yes
 WizardStyle=modern
 
@@ -49,12 +48,13 @@ Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.i
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "C:\Users\Peirato\Desktop\PeiratoPiano\wails\bin\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
-Source: "C:\Users\Peirato\Desktop\PeiratoPiano\wails\bin\PeiratoPiano.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "C:\Users\Peirato\Desktop\PeiratoPiano\wails\bin\assets\*"; DestDir: "{app}\assets"; Flags: ignoreversion
-Source: "C:\Users\Peirato\Desktop\Peirato-s-Piano\libgcc_s_seh-1.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "C:\Users\Peirato\Desktop\Peirato-s-Piano\libstdc++-6.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "C:\Users\Peirato\Desktop\Peirato-s-Piano\libwinpthread-1.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "bin\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "bin\pp_keyboard.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "bin\updater.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "docs\licenses\*"; DestDir: "{app}\licenses"; Flags: ignoreversion
+Source: "libgcc_s_seh-1.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "libstdc++-6.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "libwinpthread-1.dll"; DestDir: "{app}"; Flags: ignoreversion
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
 [Registry]

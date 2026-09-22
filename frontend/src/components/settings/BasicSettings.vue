@@ -33,7 +33,7 @@
 
             <div class="setting-row">
                 <div>
-                    <div class="label">缓冲频率</div>
+                    <div class="label">缓冲大小</div>
                     <div class="desc">数值越小响应越快，数值越大越稳定；设备性能较弱时建议调高。</div>
                 </div>
                 <n-select
@@ -53,7 +53,7 @@
             </div>
 
             <div class="tip-box">
-                修改采样率或缓冲频率后，重新加载音源或重启软件可确保底层音频设备完全按新参数初始化。
+                采样率和缓冲大小在重启软件后生效；重新加载音源不会改变当前音频设备参数。
             </div>
 
 

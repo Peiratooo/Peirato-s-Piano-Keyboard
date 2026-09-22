@@ -45,6 +45,9 @@ tasks:
         vars:
           ARCH: '{{.ARCH}}'
       - go build {{.BUILD_FLAGS}} -o "{{.BIN_DIR}}/{{.APP_NAME}}.exe"
+      - go -C launcher build -trimpath -ldflags="-w -s -H windowsgui" -o "../{{.BIN_DIR}}/Peirato-s-Piano-Keyboard.exe" .
+      - cmd: powershell -NoProfile -Command "Copy-Item -LiteralPath assets/updater/updater-windows-amd64.bin -Destination '{{.BIN_DIR}}/updater.exe'"
+        platforms: [windows]
       - cmd: powershell Remove-item *.syso
         platforms: [windows]
       - cmd: rm -f *.syso

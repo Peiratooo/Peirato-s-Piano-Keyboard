@@ -18,11 +18,14 @@ var RuntimeMidiCache = NewMidiRuntimeCache()
 type MidiRuntimeCache struct {
 	mu    sync.RWMutex
 	items map[string]*Midi
+	used  map[string]uint64
+	clock uint64
 }
 
 func NewMidiRuntimeCache() *MidiRuntimeCache {
 	return &MidiRuntimeCache{
 		items: make(map[string]*Midi),
+		used:  make(map[string]uint64),
 	}
 }
 
@@ -361,12 +364,14 @@ func GetOrParse(userMidi UserMidi) (*Midi, error) {
 
 	cacheKey := buildMidiCacheKey(userMidi, info)
 
-	RuntimeMidiCache.mu.RLock()
+	RuntimeMidiCache.mu.Lock()
 	if midiFile, ok := RuntimeMidiCache.items[cacheKey]; ok {
-		RuntimeMidiCache.mu.RUnlock()
+		RuntimeMidiCache.clock++
+		RuntimeMidiCache.used[cacheKey] = RuntimeMidiCache.clock
+		RuntimeMidiCache.mu.Unlock()
 		return midiFile, nil
 	}
-	RuntimeMidiCache.mu.RUnlock()
+	RuntimeMidiCache.mu.Unlock()
 
 	midiFile, err := ParseUserMidi(userMidi)
 	if err != nil {
@@ -375,6 +380,9 @@ func GetOrParse(userMidi UserMidi) (*Midi, error) {
 
 	RuntimeMidiCache.mu.Lock()
 	RuntimeMidiCache.items[cacheKey] = midiFile
+	RuntimeMidiCache.clock++
+	RuntimeMidiCache.used[cacheKey] = RuntimeMidiCache.clock
+	evictMidiCacheLocked(RuntimeMidiCache, cacheKey)
 	RuntimeMidiCache.mu.Unlock()
 
 	return midiFile, nil
@@ -385,6 +393,7 @@ func ClearMidiCache() {
 	defer RuntimeMidiCache.mu.Unlock()
 
 	RuntimeMidiCache.items = make(map[string]*Midi)
+	RuntimeMidiCache.used = make(map[string]uint64)
 }
 
 func RemoveMidiCacheByID(id string) {
@@ -394,7 +403,40 @@ func RemoveMidiCacheByID(id string) {
 	for key, midiFile := range RuntimeMidiCache.items {
 		if midiFile.ID == id {
 			delete(RuntimeMidiCache.items, key)
+			delete(RuntimeMidiCache.used, key)
 		}
+	}
+}
+
+// Bound both entry count and parsed event count. Oversized songs still play,
+// but are not retained after use. Caller holds cache.mu.
+func evictMidiCacheLocked(cache *MidiRuntimeCache, newest string) {
+	const maxEntries = 16
+	const maxEvents = 500000
+	total := 0
+	for key, item := range cache.items {
+		if len(item.Events) > maxEvents {
+			delete(cache.items, key)
+			delete(cache.used, key)
+			continue
+		}
+		total += len(item.Events)
+	}
+	for len(cache.items) > maxEntries || total > maxEvents {
+		oldest := ""
+		var stamp uint64 = ^uint64(0)
+		for key := range cache.items {
+			if cache.used[key] < stamp {
+				oldest = key
+				stamp = cache.used[key]
+			}
+		}
+		if oldest == "" {
+			break
+		}
+		total -= len(cache.items[oldest].Events)
+		delete(cache.items, oldest)
+		delete(cache.used, oldest)
 	}
 }
 

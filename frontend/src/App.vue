@@ -34,12 +34,12 @@ import {
 import {Events, WML} from '@wailsio/runtime'
 import {Keyboard} from '../bindings/main/service'
 import {data} from './store'
+import {createComputerKeyboard} from './services/computerKeyboard'
 
 const store = data()
 const route = useRoute()
 const isMainWindow = computed(() => route.path === '/')
 
-const pressedComputerKeys = new Set()
 const unsubscribeBackendEvents = []
 const keyboardLabelSkipKeys = ['k', 'K', 'l', 'L', ';', "'", '\\', '|', '`', '~', '[', '{', ']', '}', 'p', 'P']
 let unsubscribeKeyboardListener = null
@@ -104,20 +104,60 @@ async function getConfig() {
     setKeyColor()
 }
 
+let confirmedConfig = null
+let pendingConfig = {}
+let savingConfig = {}
+let configSaveTask = null
+const copyConfig = value => JSON.parse(JSON.stringify(value))
+
 function changeConfig() {
-    return Keyboard.ReceiveConfig(store.config)
+    for (const [key, value] of Object.entries(store.config)) {
+        if (key === 'revision' || key === 'version') continue
+        if (JSON.stringify(value) !== JSON.stringify(({...confirmedConfig, ...savingConfig, ...pendingConfig})[key])) {
+            pendingConfig[key] = copyConfig(value)
+        }
+    }
+    if (!configSaveTask) configSaveTask = savePendingConfig().finally(() => { configSaveTask = null })
+    return configSaveTask
 }
 
-function resetConfig() {
-    Keyboard.ResetConfig().then((config) => {
+async function savePendingConfig() {
+    while (Object.keys(pendingConfig).length) {
+        const changes = pendingConfig
+        pendingConfig = {}
+        savingConfig = changes
+        try {
+            const latest = await Keyboard.SendConfig()
+            const [ok, error] = await Keyboard.ReceiveConfig({...latest, ...changes})
+            if (!ok) throw new Error(error)
+            const saved = await Keyboard.SendConfig()
+            savingConfig = {}
+            applyConfig(saved)
+        } catch (error) {
+            savingConfig = {}
+            pendingConfig = {...changes, ...pendingConfig}
+            store.config = {...store.config, ...pendingConfig}
+            window.$message?.error(`设置未保存：${String(error)}。修改已保留，请重试。`)
+            return false
+        }
+    }
+    return true
+}
+
+async function resetConfig() {
+    if (configSaveTask && !await configSaveTask) return
+    try {
+        const config = await Keyboard.ResetConfig()
+        pendingConfig = {}
         applyConfig(config)
         setKeyColor()
-    })
+    } catch (error) { window.$message?.error(`恢复默认设置失败：${String(error)}`) }
 }
 
 function applyConfig(config) {
-    if (!config) return
-    store.config = {...store.config, ...config}
+    if (!config || (confirmedConfig && config.revision < confirmedConfig.revision)) return
+    confirmedConfig = copyConfig(config)
+    store.config = {...store.config, ...config, ...savingConfig, ...pendingConfig}
     updateKeyboardMappingLabels()
 }
 
@@ -139,26 +179,12 @@ async function getMidiWindowState() {
 }
 
 async function changeDevice(deviceType, deviceID) {
-    // 只有切换输入设备时才需要重启监听；输出设备切换只需要清音，避免不必要地打断输入监听。
-    const isInputDevice = deviceType === 'in'
-    if (isInputDevice) {
-        await Keyboard.MidiListenerStop()
-    }
-
-    const changed = await Keyboard.ChangeDevice(deviceType, Number(deviceID))
-    if (!changed) {
-        window.$message?.error?.('设备切换失败')
-        if (isInputDevice) await Keyboard.MidiListenerStart()
-        return
-    }
-
-    if (isInputDevice) {
-        await Keyboard.MidiListenerStart()
-    } else {
-        await Keyboard.AllNotesOff()
-    }
-
-    await getMidiDevices()
+    try {
+        if (!await Keyboard.ChangeDevice(deviceType, Number(deviceID))) {
+            window.$message?.error('设备切换失败')
+        }
+        await getMidiDevices()
+    } catch (error) { window.$message?.error(String(error)) }
 }
 
 // ========================
@@ -257,42 +283,22 @@ function changeKeyboardType() {
 
 function keyboardListener() {
     unsubscribeKeyboardListener?.()
-
-    const handleKeydown = (event) => {
-        // 设置中心窗口会有输入控件，避免用户打字时触发钢琴。
-        if (window.location.hash.includes('/control') || window.location.hash.includes('/midi')) return
-        const mapping = store.activeKeyMapping || {}
-        if (!pressedComputerKeys.has(event.key) && event.key in mapping) {
-            const midiKey = Number(mapping[event.key])
-            if (!Number.isFinite(midiKey)) return
-            pressedComputerKeys.add(event.key)
-            Keyboard.KeyboardPlay(midiKey)
-            store.setKeyState(midiKey, true)
-        }
-    }
-
-    const handleKeyup = (event) => {
-        if (window.location.hash.includes('/control') || window.location.hash.includes('/midi')) return
-        const mapping = store.activeKeyMapping || {}
-        if (event.key in mapping) {
-            pressedComputerKeys.delete(event.key)
-            const midiKey = Number(mapping[event.key])
-            if (!Number.isFinite(midiKey)) return
-            Keyboard.KeyboardStop(midiKey)
-            store.setKeyState(midiKey, false)
-        }
-    }
-
-    window.addEventListener('keydown', handleKeydown)
-    window.addEventListener('keyup', handleKeyup)
-
+    const input = createComputerKeyboard({
+        mapping: () => store.activeKeyMapping || {},
+        enabled: () => isMainWindow.value,
+        press: note => { store.setKeyState(note, true); Keyboard.KeyboardPlay(note) },
+        release: note => { store.setKeyState(note, false); Keyboard.KeyboardStop(note) },
+    })
+    window.addEventListener('keydown', input.keydown)
+    window.addEventListener('keyup', input.keyup)
+    window.addEventListener('blur', input.clear)
     unsubscribeKeyboardListener = () => {
-        window.removeEventListener('keydown', handleKeydown)
-        window.removeEventListener('keyup', handleKeyup)
-        pressedComputerKeys.clear()
+        input.clear()
+        window.removeEventListener('keydown', input.keydown)
+        window.removeEventListener('keyup', input.keyup)
+        window.removeEventListener('blur', input.clear)
     }
 }
-
 function updateScaleByWindowHeight() {
     if (window.innerHeight < 220) {
         store.scale = 0.8
@@ -326,12 +332,12 @@ function registerBackendEvents() {
     on('pressedDown', (event) => {
         const signal = getEventPayload(event)
         if (!signal) return
-        store.pressedKey[signal.value] = true
+        store.backendPressedKey[signal.value] = true
     })
     on('pressedUp', (event) => {
         const signal = getEventPayload(event)
         if (!signal) return
-        store.pressedKey[signal.value] = false
+        store.backendPressedKey[signal.value] = false
     })
     on('pedal', (event) => {
         if (store.devices.selectedInDevice === -1) return
@@ -432,6 +438,11 @@ onMounted(async () => {
     store.menuBar = false
     store.keyboardMenu = false
     store.showSetting = false
+    if (isMainWindow.value && import.meta.env.PROD) {
+        Keyboard.CheckUpdate().then(info => {
+            if (info.available) window.$notify?.info('发现新版本', `${info.version} 已可用，请在设置中心「关于」中安装并重启。`)
+        }).catch(() => { /* Offline startup must not interrupt playing. */ })
+    }
 })
 
 onBeforeUnmount(() => {
