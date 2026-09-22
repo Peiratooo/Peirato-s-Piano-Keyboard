@@ -223,6 +223,11 @@ wails3 task release
 
 核心模块概览：
 
+本轮更新集成、验证结果及待优化问题见 [2026-09-13 审计报告](./docs/AUDIT-2026-09-13.md)。
+后续修复与release 更新协议见 [1.2.3 更新记录](./docs/DUAL-UPDATER-1.2.3.md)。
+数字唱名可在「设置中心 → 键盘显示」选择调性；更新入口在「关于软件」。
+构建环境要求 Go 1.26.5+，内置 updater 可通过 `go run ./cmd/updater-builder` 重新生成。
+
 ```text
 main.go                         程序入口
 service/app.go                  Wails 应用与窗口创建

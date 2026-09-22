@@ -42,6 +42,9 @@ var (
 	PianoPlayer              *Synthesizer
 	synthMu                  sync.Mutex
 	speakerStarted           bool
+	speakerSampleRate        int32
+	speakerBufferSize        int32
+	soundFontChangeMu        sync.Mutex
 	embeddedDefaultSoundFont []byte
 )
 
@@ -219,6 +222,8 @@ func InitSpeaker() error {
 			return fmt.Errorf("初始化扬声器失败: %w", err)
 		}
 		speakerStarted = true
+		speakerSampleRate = PianoPlayer.SampleRate
+		speakerBufferSize = PianoPlayer.BufferSize
 	} else {
 		speaker.Clear()
 	}
@@ -298,6 +303,10 @@ func loadSoundFont(reader io.Reader, path string, sampleRate, bufferSize int32) 
 		return fmt.Errorf("解析音源失败: %w", err)
 	}
 
+	// Audio device parameters remain fixed until restart.
+	if speakerStarted {
+		sampleRate, bufferSize = speakerSampleRate, speakerBufferSize
+	}
 	settings := meltysynth.NewSynthesizerSettings(sampleRate)
 
 	synthesizer, err := meltysynth.NewSynthesizer(soundfont, settings)
@@ -437,6 +446,10 @@ func AddSoundFontByPath(path string) error {
 }
 
 func (k *Keyboard) RemoveSoundFontByID(id string) error {
+	return withSoundFontChange(func() error { return k.removeSoundFontByID(id) })
+}
+
+func (k *Keyboard) removeSoundFontByID(id string) error {
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return fmt.Errorf("音源 ID 不能为空")
@@ -454,10 +467,6 @@ func (k *Keyboard) RemoveSoundFontByID(id string) error {
 	if config.ActiveSoundFontID == id {
 		config.ActiveSoundFontID = ""
 		if err := SwitchDefaultSoundFont(); err != nil {
-			ClearSoundFont()
-			if saveErr := SaveConfig(config); saveErr != nil {
-				return saveErr
-			}
 			return err
 		}
 	}
@@ -466,6 +475,10 @@ func (k *Keyboard) RemoveSoundFontByID(id string) error {
 }
 
 func (k *Keyboard) SelectSoundFontByID(id string) error {
+	return withSoundFontChange(func() error { return k.selectSoundFontByID(id) })
+}
+
+func (k *Keyboard) selectSoundFontByID(id string) error {
 	id = strings.TrimSpace(id)
 
 	config := GetUserConfig()
@@ -600,5 +613,22 @@ func InitSoundFontFromConfig() error {
 		return err
 	}
 
+	return nil
+}
+
+// Preserve the previous live instrument when switching or saving fails.
+func withSoundFontChange(change func() error) error {
+	soundFontChangeMu.Lock()
+	defer soundFontChangeMu.Unlock()
+	synthMu.Lock()
+	previous := PianoPlayer
+	synthMu.Unlock()
+	if err := change(); err != nil {
+		synthMu.Lock()
+		PianoPlayer = previous
+		synthMu.Unlock()
+		SetMasterVolume(GetUserConfig().Volume)
+		return err
+	}
 	return nil
 }

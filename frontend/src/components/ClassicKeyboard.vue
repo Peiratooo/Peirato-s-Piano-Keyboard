@@ -32,21 +32,11 @@
 
 <script setup>
 import {computed, inject, onBeforeUnmount, onMounted, reactive} from 'vue'
+import {numberedPitch, keyVisualClass} from '../services/keyDisplay'
 
 const store = inject('store')
 const Keyboard = inject('Keyboard')
 const resize = inject('resize')
-
-const keyColorMap = {
-    right: {
-        black: 'b-active',
-        white: 'w-active',
-    },
-    left: {
-        black: 'b-l-active',
-        white: 'w-l-active',
-    }
-}
 
 const mouse = reactive({
     down: false,
@@ -55,17 +45,12 @@ const mouse = reactive({
 
 const visibleKeys = computed(() => {
     const range = store.keyboardRange[store.config.keyboardType]
-    return store.keyboardConfig.slice(range[0], range[1])
+    return store.keyboardConfig.slice(range[0], range[1]).map(item => store.config.keyLabel === 'pitch'
+        ? {...item, ...numberedPitch(item.index, store.config.keyTonic ?? 0)} : item)
 })
 
 function getKeyClass(item) {
-    if (store.activeKey[item.index] || store.midiPlaybackKey[item.index] || store.midiHintKey[item.index]) {
-        return keyColorMap.right[item.color]
-    }
-    if (store.midiPlaybackLeftKey[item.index] || store.midiHintLeftKey[item.index]) {
-        return keyColorMap.left[item.color]
-    }
-    return ''
+    return keyVisualClass(store, item)
 }
 
 function pitchMarkCount(item) {
@@ -78,7 +63,7 @@ function pitchMarksAbove(item) {
 
 function pressKey(key) {
     mouse.down = true
-    if (mouse.currentKey === key && store.pressedKey[key]) return
+    if (mouse.currentKey === key) return
 
     releaseKey(mouse.currentKey)
     mouse.currentKey = key
@@ -87,7 +72,8 @@ function pressKey(key) {
 }
 
 function releaseKey(key) {
-    if (key === -1 || key === undefined || !store.pressedKey[key]) return
+    if (key === -1 || key === undefined || mouse.currentKey !== key) return
+    mouse.currentKey = -1
     store.setKeyState(key, false)
     Keyboard.KeyboardStop(key)
 }
@@ -107,12 +93,14 @@ onMounted(() => {
     resize()
     window.addEventListener('resize', resize)
     window.addEventListener('mouseup', releaseMouseKey)
+    window.addEventListener('blur', releaseMouseKey)
 })
 
 onBeforeUnmount(() => {
     releaseMouseKey()
     window.removeEventListener('resize', resize)
     window.removeEventListener('mouseup', releaseMouseKey)
+    window.removeEventListener('blur', releaseMouseKey)
 })
 </script>
 
@@ -234,6 +222,14 @@ onBeforeUnmount(() => {
 
 .A:first-child {
     margin: 0;
+}
+
+.w-sustained {
+    background-color: color-mix(in srgb, var(--whiteKey) 38%, #f6f6f6);
+}
+
+.b-sustained {
+    background-color: color-mix(in srgb, var(--blackKey) 38%, #333);
 }
 
 .B, .D, .E, .A, .G {

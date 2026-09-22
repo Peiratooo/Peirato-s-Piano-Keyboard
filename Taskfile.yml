@@ -1,6 +1,7 @@
 version: '3'
 
 vars:
+  WAILS3: 'go run github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-alpha.90'
   APP_NAME: "pp_keyboard"
   BIN_DIR: "bin"
   CGO_ENABLED: "1"
@@ -17,6 +18,11 @@ includes:
   android: ./build/android/Taskfile.yml
 
 tasks:
+  updater:build:
+    summary: Rebuild precompiled updaters from the pinned simple-updater module
+    cmds:
+      - go run ./cmd/updater-builder
+
   build:
     summary: Builds the application
     cmds:

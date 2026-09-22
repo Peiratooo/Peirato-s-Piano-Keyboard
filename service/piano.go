@@ -35,12 +35,33 @@ type OutMidiDevice struct {
 }
 
 type PedalSingal struct {
-	DeviceID        int             `json:"deviceID"`
-	DamperPedal     bool            `json:"damperPedal"`    // 延音踏板 64
-	SostenutoPedal  bool            `json:"sostenutoPedal"` // 持音踏板 66
-	SoftPedal       bool            `json:"softPedal"`      // 柔音踏板 67
-	DamperPedalKeys []uint8         `json:"-"`
-	DownKeys        map[uint8]uint8 `json:"-"` // key -> channel
+	DeviceID        int                  `json:"deviceID"`
+	DamperPedal     bool                 `json:"damperPedal"`    // 延音踏板 64
+	SostenutoPedal  bool                 `json:"sostenutoPedal"` // 持音踏板 66
+	SoftPedal       bool                 `json:"softPedal"`      // 柔音踏板 67
+	DamperPedalKeys map[channelNote]bool `json:"-"`
+	DownKeys        map[channelNote]bool `json:"-"`
+	Channels        map[uint8]bool       `json:"-"`
+}
+
+type channelNote struct{ Channel, Note uint8 }
+
+// Called with midiMu held. Frontend highlights aggregate every input/channel.
+func noteVisualState(note uint8) (pressed, active bool) {
+	for _, pedal := range Midis.PedalStatus {
+		for key := range pedal.DownKeys {
+			if key.Note == note {
+				pressed = true
+				active = true
+			}
+		}
+		for key := range pedal.DamperPedalKeys {
+			if key.Note == note {
+				active = true
+			}
+		}
+	}
+	return
 }
 
 type MidiDevices struct {
@@ -56,6 +77,8 @@ type MidiDevices struct {
 var (
 	midiMu           sync.RWMutex
 	midiListenerStop func()
+	inputEventsMu    sync.Mutex
+	deviceChangeMu   sync.Mutex
 )
 
 const (
@@ -98,8 +121,9 @@ func newPedalSignal(deviceID int) *PedalSingal {
 		DamperPedal:     false,
 		SostenutoPedal:  false,
 		SoftPedal:       false,
-		DamperPedalKeys: make([]uint8, 0),
-		DownKeys:        make(map[uint8]uint8),
+		DamperPedalKeys: make(map[channelNote]bool),
+		DownKeys:        make(map[channelNote]bool),
+		Channels:        make(map[uint8]bool),
 	}
 }
 
@@ -269,6 +293,12 @@ func (k *Keyboard) GetMidiDevices() MidiDevices {
 }
 
 func (k *Keyboard) MidiListenerStart() {
+	deviceChangeMu.Lock()
+	defer deviceChangeMu.Unlock()
+	k.midiListenerStart()
+}
+
+func (k *Keyboard) midiListenerStart() {
 	midiMu.Lock()
 	if Midis.Listener.Started || Midis.SelectedInDevice == -1 {
 		midiMu.Unlock()
@@ -298,6 +328,8 @@ func (k *Keyboard) MidiListenerStart() {
 }
 
 func handleMidiMessage(deviceID int, msg midi.Message) {
+	inputEventsMu.Lock()
+	defer inputEventsMu.Unlock()
 	var bt []byte
 	var ch, key, vel, con uint8
 
@@ -316,7 +348,8 @@ func handleMidiMessage(deviceID int, msg midi.Message) {
 			pedal = newPedalSignal(deviceID)
 			Midis.PedalStatus[deviceID] = pedal
 		}
-		pedal.DownKeys[midiKey] = ch
+		pedal.DownKeys[channelNote{ch, midiKey}] = true
+		delete(pedal.DamperPedalKeys, channelNote{ch, midiKey})
 		midiMu.Unlock()
 
 		emitKeyboardEvent("down", midiKey, vel, ch)
@@ -324,7 +357,6 @@ func handleMidiMessage(deviceID int, msg midi.Message) {
 
 	case msg.GetNoteEnd(&ch, &key):
 		midiKey := midi.Note(key).Value()
-		shouldReleaseVisualNow := true
 
 		midiMu.Lock()
 		pedal := Midis.PedalStatus[deviceID]
@@ -332,18 +364,30 @@ func handleMidiMessage(deviceID int, msg midi.Message) {
 			pedal = newPedalSignal(deviceID)
 			Midis.PedalStatus[deviceID] = pedal
 		}
-		delete(pedal.DownKeys, midiKey)
-		if pedal.DamperPedal {
-			shouldReleaseVisualNow = false
-			if !containsUint8(pedal.DamperPedalKeys, midiKey) {
-				pedal.DamperPedalKeys = append(pedal.DamperPedalKeys, midiKey)
+		delete(pedal.DownKeys, channelNote{ch, midiKey})
+		damper := pedal.Channels[ch]
+		if deviceID == interactiveDeviceID {
+			if input := Midis.PedalStatus[Midis.SelectedInDevice]; input != nil {
+				damper = damper || input.Channels[ch]
 			}
+		}
+		if damper {
+			pedal.DamperPedalKeys[channelNote{ch, midiKey}] = true
+		}
+		pressed, active := noteVisualState(midiKey)
+		outputHeld := false
+		for _, source := range Midis.PedalStatus {
+			outputHeld = outputHeld || source.DownKeys[channelNote{ch, midiKey}]
 		}
 		midiMu.Unlock()
 
-		emitKeyboardEvent("pressedUp", midiKey, 0, ch)
-		playSelectedOutputNoteOff(ch, key)
-		if shouldReleaseVisualNow {
+		if !pressed {
+			emitKeyboardEvent("pressedUp", midiKey, 0, ch)
+		}
+		if !outputHeld {
+			playSelectedOutputNoteOff(ch, key)
+		}
+		if !active {
 			emitKeyboardEvent("up", midiKey, 0, ch)
 		}
 
@@ -372,14 +416,34 @@ func handlePedalMessage(deviceID int, channel, controller, velocity uint8) {
 
 	switch controller {
 	case 64:
-		pedal.DamperPedal = velocity >= 64
-		if !pedal.DamperPedal {
-			for _, sustainedKey := range pedal.DamperPedalKeys {
-				if _, stillDown := pedal.DownKeys[sustainedKey]; !stillDown {
-					releaseKeys = append(releaseKeys, sustainedKey)
+		pedal.Channels[channel] = velocity >= 64
+		pedal.DamperPedal = false
+		for _, down := range pedal.Channels {
+			pedal.DamperPedal = pedal.DamperPedal || down
+		}
+		if !pedal.Channels[channel] {
+			for sustainedKey := range pedal.DamperPedalKeys {
+				if sustainedKey.Channel != channel {
+					continue
+				}
+				delete(pedal.DamperPedalKeys, sustainedKey)
+				if _, active := noteVisualState(sustainedKey.Note); !active {
+					releaseKeys = append(releaseKeys, sustainedKey.Note)
 				}
 			}
-			pedal.DamperPedalKeys = make([]uint8, 0)
+			if deviceID == Midis.SelectedInDevice {
+				if interactive := Midis.PedalStatus[interactiveDeviceID]; interactive != nil {
+					for note := range interactive.DamperPedalKeys {
+						if note.Channel != channel {
+							continue
+						}
+						delete(interactive.DamperPedalKeys, note)
+						if _, active := noteVisualState(note.Note); !active {
+							releaseKeys = append(releaseKeys, note.Note)
+						}
+					}
+				}
+			}
 		}
 	case 66:
 		pedal.SostenutoPedal = velocity > 0
@@ -418,9 +482,28 @@ func containsUint8(list []uint8, target uint8) bool {
 	return false
 }
 
+var interactiveMu sync.Mutex
+var interactiveNotes = make(map[uint8]struct {
+	Channel uint8
+	Count   int
+})
+
+const interactiveDeviceID = -3
+
 func (k *Keyboard) KeyboardPlay(key uint8) {
-	config := GetUserConfig()
-	MidiPlayer.HandleUserNoteOn(int(key))
+	interactiveMu.Lock()
+	defer interactiveMu.Unlock()
+	state := interactiveNotes[key]
+	state.Count++
+	if state.Count > 1 {
+		interactiveNotes[key] = state
+		return
+	}
+	configMu.RLock()
+	config := UserConfig
+	configMu.RUnlock()
+	state.Channel = config.MidiChannel
+	interactiveNotes[key] = state
 	if selectedOut, _, _ := currentOutputDevice(); selectedOut == midiOutputSoftwareSynth {
 		// A MIDI file can leave CC7/CC11 at zero on the configured channel.
 		// Restore the interactive piano channel before a computer/mouse key press.
@@ -428,15 +511,32 @@ func (k *Keyboard) KeyboardPlay(key uint8) {
 		ProcessSynthMidiMessage(int32(config.MidiChannel), midiCommandControlChange, midiCCPan, 64)
 		ProcessSynthMidiMessage(int32(config.MidiChannel), midiCommandControlChange, midiCCExpression, 127)
 	}
-	playSelectedOutputNoteOn(config.MidiChannel, key, config.Velocity)
+	handleMidiMessage(interactiveDeviceID, midi.NoteOn(config.MidiChannel, key, config.Velocity))
 }
 
 func (k *Keyboard) KeyboardStop(key uint8) {
-	config := GetUserConfig()
-	playSelectedOutputNoteOff(config.MidiChannel, key)
+	interactiveMu.Lock()
+	defer interactiveMu.Unlock()
+	state, ok := interactiveNotes[key]
+	if !ok {
+		return
+	}
+	state.Count--
+	if state.Count > 0 {
+		interactiveNotes[key] = state
+		return
+	}
+	delete(interactiveNotes, key)
+	handleMidiMessage(interactiveDeviceID, midi.NoteOff(state.Channel, key))
 }
 
 func (k *Keyboard) MidiListenerStop() {
+	deviceChangeMu.Lock()
+	defer deviceChangeMu.Unlock()
+	k.midiListenerStop()
+}
+
+func (k *Keyboard) midiListenerStop() {
 	midiMu.Lock()
 	if !Midis.Listener.Started {
 		midiMu.Unlock()
@@ -454,27 +554,51 @@ func (k *Keyboard) MidiListenerStop() {
 }
 
 func (k *Keyboard) ChangeDevice(deviceType string, deviceID int) bool {
-	midiMu.Lock()
-	defer midiMu.Unlock()
-
-	switch deviceType {
-	case "in":
-		if _, ok := Midis.InMidiPool[deviceID]; !ok {
-			return false
-		}
-		Midis.SelectedInDevice = deviceID
-	case "out":
-		if _, ok := Midis.OutMidiPool[deviceID]; !ok {
-			return false
-		}
-		Midis.SelectedOutDevice = deviceID
-	default:
+	deviceChangeMu.Lock()
+	defer deviceChangeMu.Unlock()
+	midiMu.RLock()
+	_, validIn := Midis.InMidiPool[deviceID]
+	_, validOut := Midis.OutMidiPool[deviceID]
+	midiMu.RUnlock()
+	if (deviceType != "in" && deviceType != "out") || (deviceType == "in" && !validIn) || (deviceType == "out" && !validOut) {
 		return false
 	}
+	k.midiListenerStop()
+	// Block interactive and input events through clearing and routing changes.
+	interactiveMu.Lock()
+	inputEventsMu.Lock()
+	k.allNotesOffLocked()
+	midiMu.Lock()
+	if deviceType == "in" {
+		Midis.SelectedInDevice = deviceID
+	} else {
+		Midis.SelectedOutDevice = deviceID
+	}
+	midiMu.Unlock()
+	inputEventsMu.Unlock()
+	interactiveMu.Unlock()
+	k.midiListenerStart()
 	return true
 }
 
 func (k *Keyboard) AllNotesOff() {
+	interactiveMu.Lock()
+	defer interactiveMu.Unlock()
+	inputEventsMu.Lock()
+	defer inputEventsMu.Unlock()
+	k.allNotesOffLocked()
+}
+
+func (k *Keyboard) allNotesOffLocked() {
+	interactiveNotes = make(map[uint8]struct {
+		Channel uint8
+		Count   int
+	})
+	midiMu.Lock()
+	for id := range Midis.PedalStatus {
+		Midis.PedalStatus[id] = newPedalSignal(id)
+	}
+	midiMu.Unlock()
 	AllSynthNotesOff()
 
 	midiMu.RLock()

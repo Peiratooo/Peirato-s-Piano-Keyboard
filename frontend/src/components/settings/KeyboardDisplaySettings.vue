@@ -26,6 +26,14 @@
                 <n-select v-model:value="store.config.keyLabel" :options="store.labelMap" size="small" @update:value="changeConfig" />
             </div>
 
+            <div class="setting-row" v-if="store.config.keyLabel === 'pitch'">
+                <div>
+                    <div class="label">数字唱名调性</div>
+                    <div class="desc">选择 1 对应的主音，仅改变标签，不改变弹奏音高。</div>
+                </div>
+                <n-select v-model:value="store.config.keyTonic" :options="tonicOptions" size="small" @update:value="changeConfig" />
+            </div>
+
             <div class="setting-row">
                 <div>
                     <div class="label">踏板显示</div>
@@ -39,6 +47,7 @@
 
 <script setup>
 import {inject} from 'vue'
+import {tonicOptions} from '../../services/keyDisplay'
 import {NRadioButton, NRadioGroup, NSelect, NSwitch} from 'naive-ui'
 
 const store = inject('store')
