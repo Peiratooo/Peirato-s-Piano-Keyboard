@@ -10,6 +10,7 @@
             >
                 <span class="menu-icon">{{ item.icon }}</span>
                 <span>{{ item.label }}</span>
+                <span v-if="item.key === 'about' && updater.available" class="update-dot" role="img" aria-label="有新版本可更新" title="有新版本可更新"></span>
             </button>
         </aside>
 
@@ -34,8 +35,10 @@ import KeyboardMappingSettings from './settings/KeyboardMappingSettings.vue'
 import AppearanceSettings from './settings/AppearanceSettings.vue'
 import SoundFont from './settings/SoundFont.vue'
 import AboutSettings from './settings/AboutSettings.vue'
+import {useUpdater} from '../store/updater'
 
 const store = inject('store')
+const updater = useUpdater()
 const changeConfig = inject('changeConfig')
 
 const menus = [
@@ -54,6 +57,9 @@ onBeforeUnmount(() => {
 </script>
 
 <style lang="scss">
+.settings-shell .update-dot { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: #e5484d; margin-left: auto; box-shadow: 0 0 0 3px #fff; }
+.settings-shell .menu-item:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+
 .settings-shell {
     --setting-panel-border: 1px solid rgba(148, 163, 184, 0.22);
     --setting-panel-bg: rgba(255, 255, 255, 0.76);

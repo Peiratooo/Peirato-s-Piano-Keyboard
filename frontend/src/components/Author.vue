@@ -8,9 +8,9 @@
                 <div class="info">
                     <div class="name">Peirato</div>
                     <div class="social">
-                        <div class="item" v-for="(item,index) in platforms" :key="index" @click="openPlatform(index)">
-                            <n-image :preview-disabled="true" :src="item.icon" :width="30" :height="30"/>
-                        </div>
+                        <button class="item" v-for="(item,index) in platforms" :key="index" :aria-label="item.name" :title="item.name" @click="openPlatform(index)">
+                            <img :src="item.icon" :alt="item.name" width="28" height="28" />
+                        </button>
                     </div>
                 </div>
             </div>
@@ -18,18 +18,15 @@
                 <div class="text">
                     {{desc[0]}}
                 </div>
-                <div class="version" >
-                    <n-tag :bordered="false" strong size="small">版本: {{ store.config.version }}</n-tag>
-                </div>
-
 
             </div>
         </div>
         <div class="right">
-            <div class="title">💰️支持作者</div>
+            <div class="title">支持独立开发</div>
             <div class="qrcodes">
-                <div class="qrcode" v-for="(item,index) in donate">
-                    <n-qr-code :padding="0"  style="box-sizing: content-box" :size="108" :value="item.url" :icon-src="item.icon" :icon-size="24"/>
+                <div class="qrcode" v-for="item in donate" :key="item.name">
+                    <n-qr-code :padding="0"  style="box-sizing: content-box" :size="88" :value="item.url" :icon-src="item.icon" :icon-size="24"/>
+                    <span class="qr-label">{{ item.name }}</span>
                 </div>
             </div>
         </div>
@@ -42,12 +39,12 @@
 </template>
 
 <script setup>
-import {NImage,NQrCode,NAvatar,NTag,NModal} from "naive-ui";
+import {NQrCode,NAvatar,NModal} from "naive-ui";
 import {inject, ref} from "vue";
 
 const Keyboard = inject("Keyboard")
 
-const store = inject("store")
+
 
 const showSocial = ref({
     show:false,
@@ -55,14 +52,8 @@ const showSocial = ref({
 })
 
 function openPlatform(index) {
-    showSocial.value = {
-        show:true,
-        index:index,
-    }
-    if (platforms[index].method === "url") {
-        Keyboard.OpenUrl(platforms[index].url)
-    }
-
+    if (platforms[index].method === 'url') Keyboard.OpenUrl(platforms[index].url)
+    else showSocial.value = {show: true, index}
 }
 
 const platforms = [
@@ -114,65 +105,19 @@ const donate = [
 </script>
 
 <style lang="scss" scoped>
-.author-card {
-    user-select: none;
-    display: flex;
-    background-color: #fff;
-    padding: 22px;
-    border-radius: 6px;
-    box-sizing: border-box;
-    align-items: center;
-    gap: 58px;
-    .left,.right {
-        display: flex;
-        flex-direction: column;
-    }
-    .author {
-        display: flex;
-        align-items: center;
-        gap: 16px;
-    }
-    .info {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        .name {
-            font-size: 32px;
-            font-weight: bold;
-            user-select: text;
-        }
-        .social {
-            display: flex;
-            gap: 8px;
-            .item {
-                display: flex;
-
-                cursor: pointer;
-                border-radius: 4px;
-                overflow: hidden;
-            }
-        }
-    }
-    .social,.qrcodes {
-        display: flex;
-    }
-    .desc {
-        margin-top:32px;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-    }
-    .qrcodes {
-        display: flex;
-        gap: 16px;
-    }
-    .title {
-        margin-bottom: 16px;
-    }
-}
-.platform {
-    background-color: #f6f6f6;
-    border-radius: 8px;
-    padding: 16px;
-}
+.author-card { display:flex; align-items:center; justify-content:space-between; gap:24px; width:100%; box-sizing:border-box; }
+.author { display:flex; align-items:center; gap:14px; }
+.name { font-size:24px; font-weight:700; letter-spacing:-.5px; color:#1e293b; }
+.social { display:flex; gap:8px; margin-top:8px; }
+.item { display:flex; padding:0; border:0; background:transparent; border-radius:7px; overflow:hidden; cursor:pointer; transition:transform .15s; }
+.item:hover { transform:translateY(-2px); }
+.item:focus-visible { outline:2px solid #2563eb; outline-offset:3px; }
+.desc { margin-top:16px; color:#64748b; font-size:12px; line-height:1.8; }
+.title { font-size:12px; color:#64748b; margin-bottom:12px; }
+.qrcodes { display:flex; gap:16px; }
+.qrcode { display:flex; flex-direction:column; gap:7px; align-items:center; }
+.qr-label { font-size:11px; color:#64748b; }
+.platform { background:#fff; border-radius:16px; padding:24px; }
+@media(max-width:650px) { .author-card { align-items:flex-start; flex-direction:column; } }
+@media(prefers-reduced-motion:reduce) { .item { transition:none; } }
 </style>
