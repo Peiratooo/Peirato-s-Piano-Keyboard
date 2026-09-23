@@ -2,17 +2,20 @@ package service
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	simpleupdater "github.com/Peiratooo/simple-updater"
 )
@@ -21,23 +24,59 @@ func releaseAppID() string { return "com.peirato.piano" }
 
 func releaseURL(endpoint string) string { return updateBaseURL + "/release/" + endpoint }
 
-func (k *Keyboard) CheckUpdate() (UpdateInfo, error) {
-	if _, err := installedUpdaterPath(); err != nil {
-		return UpdateInfo{}, err
+// Protected by updateMu; a 204 confirms disk files, not the running version.
+var filesCurrentReleaseID int
+
+func (k *Keyboard) CheckUpdate() (info UpdateInfo, err error) {
+	if !updateMu.TryLock() {
+		state := k.GetUpdateState()
+		return UpdateInfo{Version: state.Version, ReleaseID: state.ReleaseID, Available: state.Available, Supported: state.Supported}, nil
 	}
-	return checkReleaseUpdate()
+	defer updateMu.Unlock()
+	if preparedUpdate.Path != "" {
+		updateProgress(func(s *UpdateState) { s.Phase = "ready"; s.Error = "" })
+		return preparedUpdate.Info, nil
+	}
+	updateProgress(func(s *UpdateState) { s.Phase = "checking"; s.Error = "" })
+	info, err = checkReleaseUpdate()
+	if err != nil {
+		updateFailed(err)
+		return info, err
+	}
+	_, helperErr := installedUpdaterPath()
+	info.Supported = helperErr == nil
+	filesCurrent := info.Available && info.ReleaseID == filesCurrentReleaseID
+	if filesCurrent {
+		info.Available = false
+	}
+	updateProgress(func(s *UpdateState) {
+		s.Version, s.ReleaseID, s.Available, s.Supported = info.Version, info.ReleaseID, info.Available, info.Supported
+		s.Phase = "latest"
+		if info.Available {
+			s.Phase = "available"
+		} else if filesCurrent {
+			s.Phase = "files-current"
+		}
+	})
+	return info, nil
 }
 
 func checkReleaseUpdate() (UpdateInfo, error) {
 	info := UpdateInfo{Supported: true}
 	params := url.Values{"system": {runtime.GOOS}, "app_id": {releaseAppID()}}
-	resp, err := updateHTTP.Get(releaseURL("get_info") + "?" + params.Encode())
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, releaseURL("get_info")+"?"+params.Encode(), nil)
+	if err != nil {
+		return info, err
+	}
+	resp, err := updateHTTP.Do(request)
 	if err != nil {
 		return info, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == 404 || resp.StatusCode == 410 {
-		return info, fmt.Errorf("release 更新服务尚未部署或没有可用版本（HTTP %d）", resp.StatusCode)
+		return info, fmt.Errorf("暂时没有可用的更新信息，请稍后重试（HTTP %d）", resp.StatusCode)
 	}
 	if resp.StatusCode != 200 {
 		return info, fmt.Errorf("release 服务返回 HTTP %d", resp.StatusCode)
@@ -116,8 +155,8 @@ func localReleaseManifest(root string, manifest []simpleupdater.File) ([]simpleu
 	return result, nil
 }
 
-func (k *Keyboard) installRelease(info UpdateInfo, exe string) error {
-	root, _, restart := updateTarget(exe)
+func (k *Keyboard) downloadRelease(info UpdateInfo, exe string) error {
+	root, _, _ := updateTarget(exe)
 	files, err := localReleaseManifest(root, info.Files)
 	if err != nil {
 		return err
@@ -137,8 +176,16 @@ func (k *Keyboard) installRelease(info UpdateInfo, exe string) error {
 		return err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode == 204 {
-		return fmt.Errorf("文件已是最新版本")
+	if resp.StatusCode == http.StatusNoContent {
+		clearPreparedUpdate()
+		filesCurrentReleaseID = info.ReleaseID
+		updateProgress(func(s *UpdateState) {
+			s.Phase, s.Error = "files-current", ""
+			s.Version, s.ReleaseID = info.Version, info.ReleaseID
+			s.Available = false
+			s.Received, s.Total = 0, 0
+		})
+		return nil
 	}
 	if resp.StatusCode != 200 {
 		return fmt.Errorf("release 下载返回 HTTP %d", resp.StatusCode)
@@ -155,29 +202,49 @@ func (k *Keyboard) installRelease(info UpdateInfo, exe string) error {
 	if err != nil {
 		return err
 	}
-	defer os.Remove(archive.Name())
+	keep := false
+	defer func() {
+		if !keep {
+			_ = os.Remove(archive.Name())
+		}
+	}()
 	defer archive.Close()
 	hash := sha256.New()
-	n, err := io.Copy(io.MultiWriter(archive, hash), io.LimitReader(resp.Body, maxUpdateBytes+1))
+	progress := &updateDownloadProgress{Total: resp.ContentLength}
+	updateProgress(func(s *UpdateState) { s.Phase = "downloading"; s.Total = resp.ContentLength })
+	n, err := io.Copy(io.MultiWriter(archive, hash, progress), io.LimitReader(resp.Body, maxUpdateBytes+1))
 	if err != nil {
 		return err
 	}
 	if n > maxUpdateBytes || !bytes.Equal(hash.Sum(nil), expected) {
 		return fmt.Errorf("差分包校验失败")
 	}
-	if _, err = archive.Seek(0, io.SeekStart); err != nil {
+	updateProgress(func(s *UpdateState) { s.Phase = "verifying"; s.Received = n })
+	if err = archive.Sync(); err != nil {
 		return err
 	}
-	updaterPath, err := installedUpdaterPath()
-	if err != nil {
+	if err = archive.Close(); err != nil {
 		return err
 	}
-	_, err = simpleupdater.StartUpdater(simpleupdater.UpdaterLaunchOptions{UpdaterPath: updaterPath, PID: os.Getpid(), InstallRoot: root, RestartPath: restart, Archive: archive})
-	if err != nil {
-		return err
-	}
-	k.Quit()
+	preparedUpdate.Path, preparedUpdate.SHA256, preparedUpdate.Exe = archive.Name(), hex.EncodeToString(expected), exe
+	preparedUpdate.Info = info
+	keep = true
+	updateProgress(func(s *UpdateState) { s.Phase = "ready"; s.Received, s.Total = n, n })
 	return nil
+}
+
+type updateDownloadProgress struct {
+	Total, Received int64
+	last            time.Time
+}
+
+func (p *updateDownloadProgress) Write(data []byte) (int, error) {
+	p.Received += int64(len(data))
+	if time.Since(p.last) >= 100*time.Millisecond {
+		updateProgress(func(s *UpdateState) { s.Received, s.Total = p.Received, p.Total })
+		p.last = time.Now()
+	}
+	return len(data), nil
 }
 
 // Use the precompiled updater shipped beside the application executable.

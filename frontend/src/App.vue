@@ -34,9 +34,11 @@ import {
 import {Events, WML} from '@wailsio/runtime'
 import {Keyboard} from '../bindings/main/service'
 import {data} from './store'
+import {useUpdater} from './store/updater'
 import {createComputerKeyboard} from './services/computerKeyboard'
 
 const store = data()
+const updater = useUpdater()
 const route = useRoute()
 const isMainWindow = computed(() => route.path === '/')
 
@@ -145,13 +147,14 @@ async function savePendingConfig() {
 }
 
 async function resetConfig() {
-    if (configSaveTask && !await configSaveTask) return
+    if (configSaveTask && !await configSaveTask) return false
     try {
         const config = await Keyboard.ResetConfig()
         pendingConfig = {}
         applyConfig(config)
         setKeyColor()
-    } catch (error) { window.$message?.error(`恢复默认设置失败：${String(error)}`) }
+        return true
+    } catch (error) { console.error(error); window.$message?.error("恢复默认设置失败，原有设置已保留，请重试。"); return false }
 }
 
 function applyConfig(config) {
@@ -358,6 +361,7 @@ function registerBackendEvents() {
             pedalStatus: devices.pedalStatus || {},
         }
     })
+    on('updateState', event => updater.apply(getEventPayload(event)))
     on('configChanged', (event) => {
         applyConfig(getEventPayload(event))
         setKeyColor()
@@ -438,11 +442,11 @@ onMounted(async () => {
     store.menuBar = false
     store.keyboardMenu = false
     store.showSetting = false
-    if (isMainWindow.value && import.meta.env.PROD) {
-        Keyboard.CheckUpdate().then(info => {
-            if (info.available) window.$notify?.info('发现新版本', `${info.version} 已可用，请在设置中心「关于」中安装并重启。`)
-        }).catch(() => { /* Offline startup must not interrupt playing. */ })
-    }
+    try {
+        await updater.sync()
+        if (route.path === '/control' || (isMainWindow.value && import.meta.env.PROD)) await updater.check()
+    } catch { /* A transient update failure must not interrupt playing. */ }
+
 })
 
 onBeforeUnmount(() => {

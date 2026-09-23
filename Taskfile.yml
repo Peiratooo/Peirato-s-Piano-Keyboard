@@ -1,14 +1,5 @@
 version: '3'
 
-vars:
-  WAILS3: 'go run github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-alpha.90'
-  APP_NAME: "pp_keyboard"
-  BIN_DIR: "bin"
-  CGO_ENABLED: "1"
-  PACKAGE_MANAGER: '{{.PACKAGE_MANAGER | default "npm"}}'
-  VITE_PORT: '{{.WAILS_VITE_PORT | default 9245}}'
-  PRODUCTION: "true"
-
 includes:
   common: ./build/Taskfile.yml
   windows: ./build/windows/Taskfile.yml
@@ -17,36 +8,22 @@ includes:
   ios: ./build/ios/Taskfile.yml
   android: ./build/android/Taskfile.yml
 
-tasks:
-  updater:build:
-    summary: Rebuild precompiled updaters from the pinned simple-updater module
-    cmds:
-      - go run ./cmd/updater-builder
+vars:
+  APP_NAME: "pp_keyboard"
+  BIN_DIR: "bin"
+  CGO_ENABLED: "1" # Required by the MIDI/audio native dependencies.
+  VITE_PORT: '{{.WAILS_VITE_PORT | default 9245}}'
 
+tasks:
   build:
     summary: Builds the application
     cmds:
       - task: "{{OS}}:build"
-        vars:
-          APP_NAME: "{{.APP_NAME}}"
-          CGO_ENABLED: "{{.CGO_ENABLED}}"
-          PRODUCTION: "{{.PRODUCTION}}"
-
-  release:
-    summary: Builds the release application
-    cmds:
-      - task: "{{OS}}:build"
-        vars:
-          APP_NAME: "{{.APP_NAME}}"
-          CGO_ENABLED: "{{.CGO_ENABLED}}"
-          PRODUCTION: "{{.PRODUCTION}}"
 
   package:
     summary: Packages a production build of the application
     cmds:
       - task: "{{OS}}:package"
-        vars:
-          CGO_ENABLED: "{{.CGO_ENABLED}}"
 
   run:
     summary: Runs the application
