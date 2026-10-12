@@ -30,6 +30,14 @@
                 />
             </div>
 
+            <div class="setting-row">
+                <div>
+                    <div class="label">软件延音踏板</div>
+                    <div class="desc">开启后，松开琴键仍会延音；关闭时释放。音色按音源自然衰减。</div>
+                </div>
+                <n-switch :value="!!store.devices.softwareSustain" aria-label="软件延音踏板" @update:value="setSoftwareSustain" />
+            </div>
+
             <div class="tip-box">
                 当前设备列表会跟随后端热插拔扫描自动刷新。设备切换失败时，优先检查设备是否被其他软件占用。
             </div>
@@ -39,10 +47,11 @@
 
 <script setup>
 import {computed, inject} from 'vue'
-import {NSelect} from 'naive-ui'
+import {NSelect, NSwitch} from 'naive-ui'
 
 const store = inject('store')
 const changeDevice = inject('changeDevice')
+const setSoftwareSustain = inject('setSoftwareSustain')
 
 const inDeviceOptions = computed(() => buildDeviceOptions(store.devices.inMidiPool))
 const outDeviceOptions = computed(() => buildDeviceOptions(store.devices.outMidiPool, true))

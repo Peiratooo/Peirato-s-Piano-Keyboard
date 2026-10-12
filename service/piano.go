@@ -70,15 +70,18 @@ type MidiDevices struct {
 	SelectedInDevice  int                   `json:"selectedInDevice"`
 	SelectedOutDevice int                   `json:"selectedOutDevice"`
 	PedalStatus       map[int]*PedalSingal  `json:"pedalStatus"`
+	SoftwareSustain   bool                  `json:"softwareSustain"`
 	Listener          Listener              `json:"-"`
 	Initialized       bool                  `json:"initialized"`
 }
 
 var (
-	midiMu           sync.RWMutex
-	midiListenerStop func()
-	inputEventsMu    sync.Mutex
-	deviceChangeMu   sync.Mutex
+	midiMu                  sync.RWMutex
+	midiListenerStop        func()
+	inputEventsMu           sync.Mutex
+	deviceChangeMu          sync.Mutex
+	softwareSustain         bool
+	softwareSustainChannels = make(map[uint8]bool)
 )
 
 const (
@@ -139,6 +142,7 @@ func snapshotMidiDevices() MidiDevices {
 		SelectedInDevice:  Midis.SelectedInDevice,
 		SelectedOutDevice: Midis.SelectedOutDevice,
 		PedalStatus:       make(map[int]*PedalSingal, len(Midis.PedalStatus)),
+		SoftwareSustain:   softwareSustain,
 		Initialized:       Midis.Initialized,
 	}
 
@@ -339,6 +343,7 @@ func handleMidiMessage(deviceID int, msg midi.Message) {
 
 	case msg.GetNoteStart(&ch, &key, &vel):
 		midiKey := midi.Note(key).Value()
+		ensureSoftwareSustainChannel(ch)
 		playSelectedOutputNoteOn(ch, key, vel)
 		MidiPlayer.HandleUserNoteOn(int(midiKey))
 
@@ -371,7 +376,7 @@ func handleMidiMessage(deviceID int, msg midi.Message) {
 				damper = damper || input.Channels[ch]
 			}
 		}
-		if damper {
+		if damper || softwareSustain {
 			pedal.DamperPedalKeys[channelNote{ch, midiKey}] = true
 		}
 		pressed, active := noteVisualState(midiKey)
@@ -400,9 +405,8 @@ func handleMidiMessage(deviceID int, msg midi.Message) {
 }
 
 func handlePedalMessage(deviceID int, channel, controller, velocity uint8) {
-	playSelectedOutputControlChange(channel, controller, velocity)
-
 	if controller != 64 && controller != 66 && controller != 67 {
+		playSelectedOutputControlChange(channel, controller, velocity)
 		return
 	}
 
@@ -417,11 +421,15 @@ func handlePedalMessage(deviceID int, channel, controller, velocity uint8) {
 	switch controller {
 	case 64:
 		pedal.Channels[channel] = velocity >= 64
+		if softwareSustain {
+			softwareSustainChannels[channel] = true
+			velocity = 127
+		}
 		pedal.DamperPedal = false
 		for _, down := range pedal.Channels {
 			pedal.DamperPedal = pedal.DamperPedal || down
 		}
-		if !pedal.Channels[channel] {
+		if !pedal.Channels[channel] && !softwareSustain {
 			for sustainedKey := range pedal.DamperPedalKeys {
 				if sustainedKey.Channel != channel {
 					continue
@@ -457,12 +465,105 @@ func handlePedalMessage(deviceID int, channel, controller, velocity uint8) {
 		SoftPedal:      pedal.SoftPedal,
 	}
 	midiMu.Unlock()
+	playSelectedOutputControlChange(channel, controller, velocity)
 
 	if App != nil {
 		App.Event.Emit("pedal", pedalSnapshot)
 	}
 	for _, key := range releaseKeys {
 		emitKeyboardEvent("up", key, 0, channel)
+	}
+}
+
+// SetSoftwareSustain controls the live keyboard pedal. The sound font's own
+// envelope supplies the decay; released notes remain held until both pedals lift.
+func (k *Keyboard) SetSoftwareSustain(enabled bool) bool {
+	inputEventsMu.Lock()
+	defer inputEventsMu.Unlock()
+
+	config := GetUserConfig()
+	channels := make(map[uint8]bool)
+	releaseCandidates := make(map[uint8]bool)
+	midiMu.Lock()
+	if softwareSustain == enabled {
+		midiMu.Unlock()
+		return enabled
+	}
+	softwareSustain = enabled
+	if enabled {
+		channels[config.MidiChannel] = true
+		for id, pedal := range Midis.PedalStatus {
+			if id != Midis.SelectedInDevice && id != interactiveDeviceID {
+				continue
+			}
+			for note := range pedal.DownKeys {
+				channels[note.Channel] = true
+			}
+			for note := range pedal.DamperPedalKeys {
+				channels[note.Channel] = true
+			}
+		}
+		for channel := range channels {
+			softwareSustainChannels[channel] = true
+		}
+	} else {
+		for channel := range softwareSustainChannels {
+			channels[channel] = true
+		}
+		softwareSustainChannels = make(map[uint8]bool)
+		for id, pedal := range Midis.PedalStatus {
+			for note := range pedal.DamperPedalKeys {
+				physicalDown := pedal.Channels[note.Channel]
+				if id == interactiveDeviceID {
+					if input := Midis.PedalStatus[Midis.SelectedInDevice]; input != nil {
+						physicalDown = physicalDown || input.Channels[note.Channel]
+					}
+				}
+				if !physicalDown {
+					delete(pedal.DamperPedalKeys, note)
+					releaseCandidates[note.Note] = true
+				}
+			}
+		}
+		for note := range releaseCandidates {
+			if _, active := noteVisualState(note); active {
+				delete(releaseCandidates, note)
+			}
+		}
+	}
+	physicalChannels := make(map[uint8]bool, len(channels))
+	if input := Midis.PedalStatus[Midis.SelectedInDevice]; input != nil {
+		for channel := range channels {
+			physicalChannels[channel] = input.Channels[channel]
+		}
+	}
+	midiMu.Unlock()
+
+	for channel := range channels {
+		value := uint8(0)
+		if enabled || physicalChannels[channel] {
+			value = 127
+		}
+		playSelectedOutputControlChange(channel, midiCCSustain, value)
+	}
+	if App != nil {
+		App.Event.Emit("softwareSustain", enabled)
+	}
+	for note := range releaseCandidates {
+		emitKeyboardEvent("up", note, 0, 0)
+	}
+	return enabled
+}
+
+func ensureSoftwareSustainChannel(channel uint8) {
+	midiMu.Lock()
+	needSustain := softwareSustain && !softwareSustainChannels[channel]
+	if needSustain {
+		softwareSustainChannels[channel] = true
+	}
+	midiMu.Unlock()
+	if needSustain {
+		playSelectedOutputControlChange(channel, midiCCSustain, 127)
 	}
 }
 
@@ -595,6 +696,8 @@ func (k *Keyboard) allNotesOffLocked() {
 		Count   int
 	})
 	midiMu.Lock()
+	softwareSustain = false
+	softwareSustainChannels = make(map[uint8]bool)
 	for id := range Midis.PedalStatus {
 		Midis.PedalStatus[id] = newPedalSignal(id)
 	}
@@ -624,6 +727,7 @@ func (k *Keyboard) allNotesOffLocked() {
 
 	if App != nil {
 		App.Event.Emit("allNotesOff")
+		App.Event.Emit("softwareSustain", false)
 	}
 	emitMidiVisualClear()
 }
@@ -685,6 +789,15 @@ func playSelectedOutputNoteOff(channel uint8, note uint8) {
 }
 
 func playSelectedOutputControlChange(channel, controller, value uint8) {
+	if controller == midiCCSustain {
+		midiMu.Lock()
+		if softwareSustain {
+			// Playback and hardware CC64 must not lift the software pedal.
+			softwareSustainChannels[channel] = true
+			value = 127
+		}
+		midiMu.Unlock()
+	}
 	selectedOut, outDevice, ok := currentOutputDevice()
 	switch selectedOut {
 	case midiOutputNone:

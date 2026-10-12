@@ -26,6 +26,7 @@ const pedals = ['softPedal', 'sostenutoPedal', 'damperPedal']
 
 function isPedalDown(pedalName) {
     const selectedID = store.devices.selectedInDevice
+    if (pedalName === 'damperPedal' && store.devices.softwareSustain) return true
     if (selectedID === -1) return false
     return Boolean(store.devices.pedalStatus?.[selectedID]?.[pedalName])
 }

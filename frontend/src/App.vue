@@ -172,6 +172,7 @@ async function getMidiDevices() {
         inMidiPool: devices.inMidiPool || {},
         outMidiPool: devices.outMidiPool || {},
         pedalStatus: devices.pedalStatus || {},
+        softwareSustain: !!devices.softwareSustain,
     }
     store.loaded = true
 }
@@ -188,6 +189,15 @@ async function changeDevice(deviceType, deviceID) {
         }
         await getMidiDevices()
     } catch (error) { window.$message?.error(String(error)) }
+}
+
+async function setSoftwareSustain(enabled) {
+    try {
+        store.devices.softwareSustain = await Keyboard.SetSoftwareSustain(enabled)
+    } catch (error) {
+        window.$message?.error(`切换延音踏板失败：${String(error)}`)
+        await getMidiDevices()
+    }
 }
 
 // ========================
@@ -351,6 +361,9 @@ function registerBackendEvents() {
             ...pedal,
         }
     })
+    on('softwareSustain', event => {
+        store.devices.softwareSustain = !!getEventPayload(event)
+    })
     on('devices', (event) => {
         const devices = getEventPayload(event) || {}
         store.devices = {
@@ -359,6 +372,7 @@ function registerBackendEvents() {
             inMidiPool: devices.inMidiPool || {},
             outMidiPool: devices.outMidiPool || {},
             pedalStatus: devices.pedalStatus || {},
+            softwareSustain: !!devices.softwareSustain,
         }
     })
     on('updateState', event => updater.apply(getEventPayload(event)))
@@ -457,6 +471,7 @@ onBeforeUnmount(() => {
 
 provide('store', store)
 provide('changeDevice', changeDevice)
+provide('setSoftwareSustain', setSoftwareSustain)
 provide('setKeyColor', setKeyColor)
 provide('changeConfig', changeConfig)
 provide('changeKeyboardType', changeKeyboardType)

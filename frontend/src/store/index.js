@@ -57,6 +57,7 @@ export const data = defineStore('data', {
                 outMidiPool: {},
                 selectedInDevice: -1,
                 selectedOutDevice: -1,
+                softwareSustain: false,
                 pedalStatus: {}
             },
             noteName:{
