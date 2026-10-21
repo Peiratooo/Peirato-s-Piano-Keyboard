@@ -17,10 +17,6 @@ tasks:
     summary: Builds the application
     cmds:
       - task: "{{OS}}:build"
-  package:
-    summary: Packages a production build of the application
-    cmds:
-      - task: "{{OS}}:package"
   run:
     summary: Runs the application
     cmds:
@@ -34,10 +30,11 @@ tasks:
     cmds:
       - task: common:setup:docker
   release:
-    summary: Builds the release application
+    summary: Builds the application and runtime files for Wails3 Manager
     cmds:
       - task: "{{OS}}:build"
         vars:
           APP_NAME: "{{.APP_NAME}}"
           CGO_ENABLED: "{{.CGO_ENABLED}}"
           PRODUCTION: "{{.PRODUCTION}}"
+      - task: common:stage:runtime

@@ -96,7 +96,7 @@ func checkReleaseUpdate() (UpdateInfo, error) {
 		return info, err
 	}
 	info.Version, info.ReleaseID, info.Files = p.Version, p.ID, p.Files
-	info.Available = newerVersion(p.Version, GetUserConfig().Version)
+	info.Available = newerVersion(p.Version, AppVersion)
 	return info, nil
 }
 

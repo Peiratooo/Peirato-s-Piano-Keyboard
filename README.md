@@ -112,7 +112,7 @@
 
 - 主钢琴窗口、设置中心窗口、MIDI 播放 / 练习窗口互相独立；
 - 后端通过 Wails Event 推送设备、按键、播放状态；
-- 前端窗口间通过 BroadcastChannel / localStorage 进行同步；
+- 所有窗口通过 Go 后端的 Wails 事件同步状态；
 - 播放高亮、跟弹提示、错键提示和清理状态可以跨窗口同步。
 
 ---
@@ -121,7 +121,7 @@
 
 ### 下载 Release
 
-前往 [Releases](https://github.com/Peiratooo/Peirato-s-Piano/releases) 下载对应系统的安装包或压缩包，解压 / 安装后运行即可。
+前往 [Releases](https://github.com/Peiratooo/Peirato-s-Piano-Keyboard/releases) 下载对应系统的安装包或压缩包，解压 / 安装后运行即可。
 
 > macOS 首次打开时，如果系统提示无法验证开发者，可以在「系统设置 → 隐私与安全性」中允许打开，或在 Finder 中右键应用选择「打开」。
 
@@ -131,23 +131,23 @@
 
 ### 环境要求
 
-- Go
-- Node.js
-- Wails 3
+- Go 1.26.5+
+- Node.js 和 npm（满足当前 Vite 的运行要求）
+- 与 `go.mod` 对应版本兼容的 Wails 3 CLI
 - 支持 MIDI 的系统环境
 
 ### 克隆项目
 
 ```bash
-git clone https://github.com/Peiratooo/Peirato-s-Piano.git
-cd Peirato-s-Piano
+git clone https://github.com/Peiratooo/Peirato-s-Piano-Keyboard.git
+cd Peirato-s-Piano-Keyboard
 ```
 
 ### 安装前端依赖
 
 ```bash
 cd frontend
-npm install
+npm ci
 cd ..
 ```
 
@@ -169,13 +169,24 @@ wails3 dev
 wails3 task dev
 ```
 
-### 构建发布版本
+### 通过 Wails3 Manager 打包
+
+1. 在 Wails3 Manager 中导入项目根目录，版本信息来自 `build/config.yml`，当前为 `1.3.0`。
+2. 构建配置使用 `Taskfile.yml` 的 `release` 任务，应用名 `pp_keyboard`，开启生产构建和 CGO。
+3. 启动程序使用默认主程序入口；Windows 为 `bin/pp_keyboard.exe`，macOS 为应用包，不再使用独立启动器。
+4. 在 Manager 中执行构建与打包，安装包输出到 `builder/release/`。
+
+仓库保留 `builder/packaging.json` 作为当前 Windows Manager 配置，路径均相对于项目。Windows 附加资源为 `bin/updater.exe` 和三个运行库 DLL；`release` 任务会从仓库资源复制这些文件。安装脚本由 Manager 生成到 `builder/windows/inno.iss`。
+
+macOS 在原生环境中使用 Manager 打包时，将附加资源列表中的 Windows updater 和 DLL 移除，保留默认应用包入口。Manager 使用项目的 `darwin:create:app:bundle` 任务组装应用，通用 updater 会复制到 `Contents/MacOS/updater`，随后签名。
+
+只检查构建、不生成安装包时，可以运行与 Manager 相同的任务：
 
 ```bash
 wails3 task release
 ```
 
-构建产物通常会输出到 `bin/` 目录，具体路径以当前 Wails 配置为准。
+主程序与运行文件输出到 `bin/`。Windows 手工 Inno、NSIS/MSIX 和 Linux AppImage/发行包脚本已移除，安装包统一由 Manager 管理。
 
 ---
 
@@ -223,24 +234,24 @@ wails3 task release
 
 核心模块概览：
 
-本轮更新集成、验证结果及待优化问题见 [2026-09-13 审计报告](./docs/AUDIT-2026-09-13.md)。
-后续修复与release 更新协议见 [1.2.3 更新记录](./docs/DUAL-UPDATER-1.2.3.md)。
 数字唱名可在「设置中心 → 键盘显示」选择调性；更新入口在「关于软件」。
-构建环境要求 Go 1.26.5+，内置 updater 可通过 `go run ./cmd/updater-builder` 重新生成。
+软件更新仅使用 `/release/get_info` 与 `/release/download`，AppID 为 `com.peirato.piano`。`1.3.0` 不再包含旧 product 通道的启动器或过渡安装逻辑。随软件分发的 updater 可通过 `go run ./cmd/updater-builder` 重新生成。
 
 ```text
 main.go                         程序入口
 service/app.go                  Wails 应用与窗口创建
-service/config.go               用户配置读取、合并与保存
+service/config.go               版本常量、用户配置读取、校验与保存
 service/piano.go                MIDI 设备扫描、监听与演奏入口
 service/soundfont.go            SF2 音源加载与实时渲染
-service/midi_file.go            MIDI 文件解析与跟弹计划生成
-service/playback.go             MIDI 预览播放调度
+service/midi.go                 MIDI 文件目录、解析与缓存
+service/player.go               MIDI 播放调度与跟弹练习
+service/release_update.go       release 更新检查、下载与校验
 frontend/src/views/MainWindow.vue       主钢琴窗口
 frontend/src/views/ControlCenterWindow.vue 设置中心窗口
 frontend/src/views/MidiWindow.vue       MIDI 播放 / 跟弹窗口
-frontend/src/services/windowBus.js      多窗口前端同步
+frontend/src/App.vue                    Wails 事件与多窗口状态同步
 frontend/src/store/index.js             Pinia 状态中心
+builder/packaging.json                 Wails3 Manager 打包配置
 ```
 
 ---

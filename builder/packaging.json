@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "build": {
+    "taskfile": "Taskfile.yml",
+    "task": "release",
+    "command": null,
+    "production": true,
+    "cgoEnabled": true,
+    "appName": "pp_keyboard"
+  },
+  "entry": {
+    "executablePath": ""
+  },
+  "assets": [
+    {
+      "src": "bin/libgcc_s_seh-1.dll",
+      "type": "file",
+      "required": true,
+      "target": ""
+    },
+    {
+      "src": "bin/libstdc++-6.dll",
+      "type": "file",
+      "required": true,
+      "target": ""
+    },
+    {
+      "src": "bin/libwinpthread-1.dll",
+      "type": "file",
+      "required": true,
+      "target": ""
+    },
+    {
+      "src": "bin/updater.exe",
+      "type": "file",
+      "required": true,
+      "target": ""
+    }
+  ],
+  "windows": {
+    "enabled": true,
+    "innoScript": "builder/windows/inno.iss",
+    "isccPath": "",
+    "defaultDirName": "{autopf}\\${project.name}",
+    "privilegesRequired": "lowest",
+    "setupIcon": "assets/installer.ico",
+    "outputBaseName": "${project.name}-${project.version}-${package.platform}-setup",
+    "appURL": "https://piano.peirato.com/",
+    "createDesktopShortcut": true
+  },
+  "macos": {
+    "enabled": true,
+    "appBundle": "bin/${project.name}.app",
+    "background": "assets/install-grid.png",
+    "windowWidth": 640,
+    "windowHeight": 420,
+    "iconSize": 96,
+    "appX": 180,
+    "appY": 210,
+    "applicationsX": 460,
+    "applicationsY": 210
+  },
+  "artifacts": {
+    "outputRoot": "builder/release"
+  }
+}

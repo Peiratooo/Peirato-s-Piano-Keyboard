@@ -121,21 +121,6 @@ tasks:
       - wails3 tool lipo -output "{{.BIN_DIR}}/{{.APP_NAME}}" -input "{{.BIN_DIR}}/{{.APP_NAME}}-amd64" -input "{{.BIN_DIR}}/{{.APP_NAME}}-arm64"
       - rm -f "{{.BIN_DIR}}/{{.APP_NAME}}-amd64" "{{.BIN_DIR}}/{{.APP_NAME}}-arm64"
 
-  package:
-    summary: Packages the application into a `.app` bundle
-    deps:
-      - task: build
-    cmds:
-      - task: create:app:bundle
-
-  package:universal:
-    summary: Packages darwin universal binary (arm64 + amd64)
-    deps:
-      - task: build:universal
-    cmds:
-      - task: create:app:bundle
-
-
   create:app:bundle:
     summary: Creates an `.app` bundle
     cmds:
@@ -147,6 +132,8 @@ tasks:
           cp build/darwin/Assets.car "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/Resources"
         fi
       - cp "{{.BIN_DIR}}/{{.APP_NAME}}" "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS"
+      - cp assets/updater/updater-darwin.bin "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS/updater"
+      - chmod +x "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS/updater"
       - cp build/darwin/Info.plist "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents"
       - task: '{{if eq OS "darwin"}}codesign:adhoc{{else}}codesign:skip{{end}}'
 
@@ -182,8 +169,9 @@ tasks:
       Signs the .app bundle for distribution.
       Configure SIGN_IDENTITY in the vars section at the top of this file.
     deps:
-      - task: package
+      - task: build
     cmds:
+      - task: create:app:bundle
       - wails3 tool sign --input "{{.BIN_DIR}}/{{.APP_NAME}}.app" --identity "{{.SIGN_IDENTITY}}" {{if .ENTITLEMENTS}}--entitlements {{.ENTITLEMENTS}}{{end}}
     preconditions:
       - sh: '[ -n "{{.SIGN_IDENTITY}}" ]'
@@ -198,8 +186,9 @@ tasks:
       Setup (one-time):
         wails3 signing credentials --apple-id "you@email.com" --team-id "TEAMID" --password "app-specific-password" --profile "my-profile"
     deps:
-      - task: package
+      - task: build
     cmds:
+      - task: create:app:bundle
       - wails3 tool sign --input "{{.BIN_DIR}}/{{.APP_NAME}}.app" --identity "{{.SIGN_IDENTITY}}" {{if .ENTITLEMENTS}}--entitlements {{.ENTITLEMENTS}}{{end}} --notarize --keychain-profile {{.KEYCHAIN_PROFILE}}
     preconditions:
       - sh: '[ -n "{{.SIGN_IDENTITY}}" ]'

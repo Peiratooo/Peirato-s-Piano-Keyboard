@@ -8,7 +8,10 @@ import (
 	"sync"
 )
 
-const appName = "Peirato's Piano Keyboard"
+const (
+	appName    = "Peirato's Piano Keyboard"
+	AppVersion = "1.3.0"
+)
 
 var (
 	configFilePath = "config.json"
@@ -18,13 +21,6 @@ var (
 type Color struct {
 	Label string `json:"label"`
 	Color string `json:"color"`
-}
-
-type Window struct {
-	Width  int `json:"width"`
-	Height int `json:"height"`
-	X      int `json:"x"`
-	Y      int `json:"y"`
 }
 
 type Config struct {
@@ -49,6 +45,7 @@ type Config struct {
 }
 
 var DefaultConfig = Config{
+	Version: AppVersion,
 	Colors: map[string]Color{
 		"whiteKey": {
 			Label: "白键按下",
@@ -112,9 +109,8 @@ func cloneConfig(source Config) Config {
 	return result
 }
 
-// LoadConfig 负责读取用户配置，并自动补齐旧配置里缺失的新字段。
-// 后续新增配置字段时，优先在 mergeConfigWithDefaults 中补默认值，避免旧用户升级后出现空字段。
-func LoadConfig(version string) error {
+// LoadConfig 读取当前配置，损坏时尝试恢复备份。
+func LoadConfig() error {
 	ucd, err := os.UserConfigDir()
 	if err != nil {
 		ucd = "./assets"
@@ -124,7 +120,6 @@ func LoadConfig(version string) error {
 	config := cloneDefaultConfig()
 
 	if _, err := os.Stat(configFilePath); os.IsNotExist(err) {
-		config.Version = version
 		if saveErr := SaveConfig(config); saveErr != nil {
 			return fmt.Errorf("保存默认配置失败: %w", saveErr)
 		}
@@ -133,7 +128,6 @@ func LoadConfig(version string) error {
 
 	data, err := os.ReadFile(configFilePath)
 	if err != nil {
-		config.Version = version
 		UserConfig = config
 		return fmt.Errorf("读取配置文件失败: %w", err)
 	}
@@ -142,16 +136,13 @@ func LoadConfig(version string) error {
 		backup, backupErr := os.ReadFile(configFilePath + ".bak")
 		config = cloneDefaultConfig()
 		if backupErr != nil || json.Unmarshal(backup, &config) != nil {
-			config.Version = version
 			UserConfig = config
 			return fmt.Errorf("配置与备份均无法读取: %w", err)
 		}
 	}
 
-	config = mergeConfigWithDefaults(config)
-	config.Version = version
-
 	config = normalizeConfigRanges(config)
+	config.Version = AppVersion
 	configMu.Lock()
 	UserConfig = cloneConfig(config)
 	configMu.Unlock()
@@ -159,37 +150,15 @@ func LoadConfig(version string) error {
 	return SaveConfig(config)
 }
 
-// mergeConfigWithDefaults 用于兼容旧版本 config.json。
-// 例如用户旧配置没有 midiChannel / soundFontPath 时，这里会补上安全默认值。
-func mergeConfigWithDefaults(config Config) Config {
-	merged := cloneDefaultConfig()
-	merged.Revision = config.Revision
-
-	merged.KeyLabel = config.KeyLabel
-	merged.KeyTonic = config.KeyTonic
-	merged.KeyboardType = config.KeyboardType
-	merged.Velocity = config.Velocity
-	merged.Opacity = config.Opacity
-	merged.Version = config.Version
-	merged.ShowPedal = config.ShowPedal
-	merged.Volume = config.Volume
-	merged.SampleRate = config.SampleRate
-	merged.BufferSize = config.BufferSize
-	merged.MidiChannel = config.MidiChannel
-	merged.SoundFonts = append([]UserSoundFont{}, config.SoundFonts...)
-	merged.ActiveSoundFontID = config.ActiveSoundFontID
-	merged.MidiStore = append([]UserMidi{}, config.MidiStore...)
-	merged.ActiveKeymapProfileID = config.ActiveKeymapProfileID
-	merged.KeymapProfiles = cloneKeymapProfiles(config.KeymapProfiles)
-
-	for key, value := range config.Colors {
-		merged.Colors[key] = value
-	}
-
-	return normalizeConfigRanges(merged)
-}
-
 func normalizeConfigRanges(config Config) Config {
+	if config.Colors == nil {
+		config.Colors = make(map[string]Color, len(DefaultConfig.Colors))
+	}
+	for key, color := range DefaultConfig.Colors {
+		if _, ok := config.Colors[key]; !ok {
+			config.Colors[key] = color
+		}
+	}
 	if config.KeyTonic < 0 || config.KeyTonic > 11 {
 		config.KeyTonic = 0
 	}
@@ -223,7 +192,8 @@ func SaveConfig(config Config) error {
 		configMu.Unlock()
 		return fmt.Errorf("设置已被其他窗口修改，请刷新后重试")
 	}
-	nextConfig := mergeConfigWithDefaults(config)
+	nextConfig := normalizeConfigRanges(cloneConfig(config))
+	nextConfig.Version = AppVersion
 	nextConfig.Revision++
 
 	data, err := json.MarshalIndent(nextConfig, "", "  ")
@@ -270,10 +240,6 @@ func (k *Keyboard) SendConfig() Config {
 	return GetUserConfig()
 }
 
-func (k *Keyboard) GetDefaultConfig() Config {
-	return cloneDefaultConfig()
-}
-
 func (k *Keyboard) ReceiveConfig(config Config) (bool, string) {
 	if err := SaveConfig(config); err != nil {
 		return false, err.Error()
@@ -285,7 +251,7 @@ func (k *Keyboard) ResetConfig() (Config, error) {
 	err := withSoundFontChange(func() error {
 		current := GetUserConfig()
 		resetConfig := cloneDefaultConfig()
-		resetConfig.Version, resetConfig.Revision = current.Version, current.Revision
+		resetConfig.Revision = current.Revision
 		if err := SwitchDefaultSoundFont(); err != nil {
 			return err
 		}

@@ -1,5 +1,7 @@
-# Vue 3 + Vite
+# Peirato's Piano 前端
 
-This template should help get you started developing with Vue 3 in Vite. The template uses Vue 3 `<script setup>` SFCs, check out the [script setup docs](https://v3.vuejs.org/api/sfc-script-setup.html#sfc-script-setup) to learn more.
+Vue 3、Pinia、Naive UI 和 Vite 实现主钢琴窗口、设置中心与 MIDI 中心。
 
-Learn more about IDE Support for Vue in the [Vue Docs Scaling up Guide](https://vuejs.org/guide/scaling-up/tooling.html#ide-support).
+在项目根目录运行 `wails3 task dev` 启动完整桌面开发环境；前端依赖通过 `npm ci` 安装。Wails 绑定由 `common:generate:bindings` 任务生成，不提交到仓库。
+
+生产构建与安装包通过 Wails3 Manager 的 `release` 任务完成，配置和资源说明见根目录 README。单独检查前端构建可在本目录执行 `npm run build`，需要先生成绑定。

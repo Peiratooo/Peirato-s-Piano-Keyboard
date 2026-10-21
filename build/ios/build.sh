@@ -4,8 +4,8 @@ set -e
 # Build configuration
 APP_NAME="pp_keyboard"
 BUNDLE_ID="com.peirato.piano"
-VERSION="1.2.0"
-BUILD_NUMBER="1.2.0"
+VERSION="1.3.0"
+BUILD_NUMBER="1.3.0"
 BUILD_DIR="build/ios"
 TARGET="simulator"
 

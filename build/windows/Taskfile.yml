@@ -96,13 +96,6 @@ tasks:
             fi
           done | tr '\n' ' '
 
-  package:
-    summary: Packages the application
-    cmds:
-      - task: '{{if eq (.FORMAT | default "nsis") "msix"}}create:msix:package{{else}}create:nsis:installer{{end}}'
-    vars:
-      FORMAT: '{{.FORMAT | default "nsis"}}'
-
   generate:syso:
     summary: Generates Windows `.syso` file
     dir: build
@@ -110,50 +103,6 @@ tasks:
       - wails3 generate syso -arch {{.ARCH}} -icon windows/icon.ico -manifest windows/wails.exe.manifest -info windows/info.json -out ../wails_windows_{{.ARCH}}.syso
     vars:
       ARCH: '{{.ARCH | default ARCH}}'
-
-  create:nsis:installer:
-    summary: Creates an NSIS installer
-    dir: build/windows/nsis
-    deps:
-      - task: build
-    cmds:
-      # Create the Microsoft WebView2 bootstrapper if it doesn't exist
-      - wails3 generate webview2bootstrapper -dir "{{.ROOT_DIR}}/build/windows/nsis"
-      - |
-        {{if eq OS "windows"}}
-        makensis -DARG_WAILS_{{.ARG_FLAG}}_BINARY="{{.ROOT_DIR}}\{{.BIN_DIR}}\{{.APP_NAME}}.exe" project.nsi
-        {{else}}
-        makensis -DARG_WAILS_{{.ARG_FLAG}}_BINARY="{{.ROOT_DIR}}/{{.BIN_DIR}}/{{.APP_NAME}}.exe" project.nsi
-        {{end}}
-    vars:
-      ARCH: '{{.ARCH | default ARCH}}'
-      ARG_FLAG: '{{if eq .ARCH "amd64"}}AMD64{{else}}ARM64{{end}}'
-
-  create:msix:package:
-    summary: Creates an MSIX package
-    deps:
-      - task: build
-    cmds:
-      - |-
-        wails3 tool msix \
-          --config "{{.ROOT_DIR}}/wails.json" \
-          --name "{{.APP_NAME}}" \
-          --executable "{{.ROOT_DIR}}/{{.BIN_DIR}}/{{.APP_NAME}}.exe" \
-          --arch "{{.ARCH}}" \
-          --out "{{.ROOT_DIR}}/{{.BIN_DIR}}/{{.APP_NAME}}-{{.ARCH}}.msix" \
-          {{if .CERT_PATH}}--cert "{{.CERT_PATH}}"{{end}} \
-          {{if .PUBLISHER}}--publisher "{{.PUBLISHER}}"{{end}} \
-          {{if .USE_MSIX_TOOL}}--use-msix-tool{{else}}--use-makeappx{{end}}
-    vars:
-      ARCH: '{{.ARCH | default ARCH}}'
-      CERT_PATH: '{{.CERT_PATH | default ""}}'
-      PUBLISHER: '{{.PUBLISHER | default ""}}'
-      USE_MSIX_TOOL: '{{.USE_MSIX_TOOL | default "false"}}'
-
-  install:msix:tools:
-    summary: Installs tools required for MSIX packaging
-    cmds:
-      - wails3 tool msix-install-tools
 
   run:
     cmds:
@@ -169,20 +118,6 @@ tasks:
       - task: build
     cmds:
       - wails3 tool sign --input "{{.BIN_DIR}}/{{.APP_NAME}}.exe" {{if .SIGN_CERTIFICATE}}--certificate {{.SIGN_CERTIFICATE}}{{end}} {{if .SIGN_THUMBPRINT}}--thumbprint {{.SIGN_THUMBPRINT}}{{end}} {{if .TIMESTAMP_SERVER}}--timestamp {{.TIMESTAMP_SERVER}}{{end}}
-    preconditions:
-      - sh: '[ -n "{{.SIGN_CERTIFICATE}}" ] || [ -n "{{.SIGN_THUMBPRINT}}" ]'
-        msg: "Either SIGN_CERTIFICATE or SIGN_THUMBPRINT is required. Set it in the vars section at the top of build/windows/Taskfile.yml"
-
-  sign:installer:
-    summary: Signs the NSIS installer
-    desc: |
-      Creates and signs the NSIS installer.
-      Configure SIGN_CERTIFICATE or SIGN_THUMBPRINT in the vars section at the top of this file.
-      Password is retrieved from system keychain (run: wails3 setup signing)
-    deps:
-      - task: create:nsis:installer
-    cmds:
-      - wails3 tool sign --input "build/windows/nsis/{{.APP_NAME}}-installer.exe" {{if .SIGN_CERTIFICATE}}--certificate {{.SIGN_CERTIFICATE}}{{end}} {{if .SIGN_THUMBPRINT}}--thumbprint {{.SIGN_THUMBPRINT}}{{end}} {{if .TIMESTAMP_SERVER}}--timestamp {{.TIMESTAMP_SERVER}}{{end}}
     preconditions:
       - sh: '[ -n "{{.SIGN_CERTIFICATE}}" ] || [ -n "{{.SIGN_THUMBPRINT}}" ]'
         msg: "Either SIGN_CERTIFICATE or SIGN_THUMBPRINT is required. Set it in the vars section at the top of build/windows/Taskfile.yml"

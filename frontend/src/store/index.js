@@ -48,7 +48,6 @@ export const data = defineStore('data', {
                 waiting: false,
             },
 
-            keyMapping: {},
             chordsName: {},
             keyboardLoaded: false,
             loaded: false,

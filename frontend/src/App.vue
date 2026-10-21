@@ -98,9 +98,6 @@ const FeedbackBridge = defineComponent({
 // ========================
 
 async function getConfig() {
-    const defaultConfig = await Keyboard.GetDefaultConfig()
-    applyConfig(defaultConfig)
-
     const config = await Keyboard.SendConfig()
     applyConfig(config)
     setKeyColor()
@@ -178,7 +175,6 @@ async function getMidiDevices() {
 }
 
 async function getMidiWindowState() {
-    if (typeof Keyboard.GetMidiWindowOpen !== 'function') return
     store.midiWindowOpen = await Keyboard.GetMidiWindowOpen()
 }
 
@@ -326,46 +322,37 @@ function registerBackendEvents() {
     cleanupBackendEvents()
 
     const on = (eventName, callback) => {
-        const unsubscribe = Events.On(eventName, callback)
-        if (typeof unsubscribe === 'function') {
-            unsubscribeBackendEvents.push(unsubscribe)
-        }
+        unsubscribeBackendEvents.push(Events.On(eventName, event => callback(event.data)))
     }
 
-    on('down', (event) => {
-        const signal = getEventPayload(event)
+    on('down', (signal) => {
         if (!signal) return
         store.activeKey[signal.value] = true
     })
-    on('up', (event) => {
-        const signal = getEventPayload(event)
+    on('up', (signal) => {
         if (!signal) return
         store.activeKey[signal.value] = false
     })
-    on('pressedDown', (event) => {
-        const signal = getEventPayload(event)
+    on('pressedDown', (signal) => {
         if (!signal) return
         store.backendPressedKey[signal.value] = true
     })
-    on('pressedUp', (event) => {
-        const signal = getEventPayload(event)
+    on('pressedUp', (signal) => {
         if (!signal) return
         store.backendPressedKey[signal.value] = false
     })
-    on('pedal', (event) => {
+    on('pedal', (pedal) => {
         if (store.devices.selectedInDevice === -1) return
-        const pedal = getEventPayload(event)
         if (!pedal) return
         store.devices.pedalStatus[store.devices.selectedInDevice] = {
             ...store.devices.pedalStatus[store.devices.selectedInDevice],
             ...pedal,
         }
     })
-    on('softwareSustain', event => {
-        store.devices.softwareSustain = !!getEventPayload(event)
+    on('softwareSustain', enabled => {
+        store.devices.softwareSustain = !!enabled
     })
-    on('devices', (event) => {
-        const devices = getEventPayload(event) || {}
+    on('devices', (devices) => {
         store.devices = {
             ...store.devices,
             ...devices,
@@ -375,32 +362,29 @@ function registerBackendEvents() {
             softwareSustain: !!devices.softwareSustain,
         }
     })
-    on('updateState', event => updater.apply(getEventPayload(event)))
-    on('configChanged', (event) => {
-        applyConfig(getEventPayload(event))
+    on('updateState', state => updater.apply(state))
+    on('configChanged', (config) => {
+        applyConfig(config)
         setKeyColor()
         resize()
     })
-    on('midiWindowState', (event) => {
-        const payload = getEventPayload(event)
+    on('midiWindowState', (payload) => {
         store.midiWindowOpen = !!payload?.open
         if (!store.midiWindowOpen) {
             store.clearMidiVisualKeys()
         }
     })
-    on('midiPlayerState', (event) => {
+    on('midiPlayerState', (state) => {
         store.midiPlayerState = {
             ...store.midiPlayerState,
-            ...getEventPayload(event),
+            ...state,
         }
     })
-    on('midiPlaybackKey', (event) => {
-        const signal = getEventPayload(event)
+    on('midiPlaybackKey', (signal) => {
         if (!signal) return
         store.setMidiVisualKey(signal.note, signal.hand, !!signal.active, 'playback')
     })
-    on('midiFollowHint', (event) => {
-        const step = getEventPayload(event)
+    on('midiFollowHint', (step) => {
         store.clearMidiHints()
         if (!step?.notes?.length) return
         for (const note of step.notes) {
@@ -414,11 +398,6 @@ function registerBackendEvents() {
         store.clearAllKeys()
     })
 
-}
-
-function getEventPayload(event) {
-    const data = event?.data
-    return Array.isArray(data) ? data[0] : data
 }
 
 function cleanupBackendEvents() {
