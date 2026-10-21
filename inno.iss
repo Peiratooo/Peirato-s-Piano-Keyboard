@@ -5,7 +5,7 @@
 #define MyAppVersion "1.2.3"
 #define MyAppPublisher "Peirato"
 #define MyAppURL "https://piano.peirato.com/"
-#define MyAppExeName "Peirato-s-Piano-Keyboard.exe"
+#define MyAppExeName "pp_keyboard.exe"
 #define MyAppAssocName MyAppName + " File"
 #define MyAppAssocExt ".myp"
 #define MyAppAssocKey StringChange(MyAppAssocName, " ", "") + MyAppAssocExt
@@ -49,9 +49,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 Source: "bin\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
-Source: "bin\pp_keyboard.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "bin\updater.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "docs\licenses\*"; DestDir: "{app}\licenses"; Flags: ignoreversion
 Source: "libgcc_s_seh-1.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "libstdc++-6.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "libwinpthread-1.dll"; DestDir: "{app}"; Flags: ignoreversion
@@ -70,3 +68,6 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
 
+[UninstallDelete]
+Type: files; Name: "{app}\Peirato-s-Piano-Keyboard.exe"
+Type: files; Name: "{app}\app.log"

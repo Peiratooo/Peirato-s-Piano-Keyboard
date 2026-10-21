@@ -76,10 +76,14 @@ type MidiDevices struct {
 }
 
 var (
-	midiMu                  sync.RWMutex
-	midiListenerStop        func()
-	inputEventsMu           sync.Mutex
-	deviceChangeMu          sync.Mutex
+	midiMu           sync.RWMutex
+	midiListenerStop func()
+	inputEventsMu    sync.Mutex
+	deviceChangeMu   sync.Mutex
+	// Listener requests and port lifecycle changes are serialized by deviceChangeMu.
+	midiListeningEnabled    bool
+	midiDevicesClosed       bool
+	inputSelectionDisabled  bool
 	softwareSustain         bool
 	softwareSustainChannels = make(map[uint8]bool)
 )
@@ -168,11 +172,13 @@ func snapshotMidiDevices() MidiDevices {
 }
 
 func CloseMidiDevice() {
-	(&Keyboard{}).MidiListenerStop()
+	deviceChangeMu.Lock()
+	defer deviceChangeMu.Unlock()
+	midiDevicesClosed = true
+	midiListeningEnabled = false
+	(&Keyboard{}).midiListenerStop()
 	(&Keyboard{}).AllNotesOff()
 
-	midiMu.Lock()
-	defer midiMu.Unlock()
 	for id, device := range Midis.InMidiPool {
 		if id != -1 && device.Device != nil {
 			_ = device.Device.Close()
@@ -190,98 +196,153 @@ func CloseMidiDevice() {
 }
 
 func CompareInDevices(inports midi.InPorts) {
-	midiMu.Lock()
-	defer midiMu.Unlock()
+	deviceChangeMu.Lock()
+	defer deviceChangeMu.Unlock()
+	if midiDevicesClosed {
+		return
+	}
+	compareInDevices(inports)
+	(&Keyboard{}).midiListenerStart()
+}
 
+func compareInDevices(inports midi.InPorts) {
 	lastID := -1
-	alive := map[int]bool{-1: true}
-
+	available := make(map[int]drivers.In, len(inports))
 	for _, port := range inports {
-		deviceID := port.Number()
-		alive[deviceID] = true
-		lastID = deviceID
-
-		if _, ok := Midis.InMidiPool[deviceID]; ok {
-			continue
-		}
-
-		Midis.InMidiPool[deviceID] = InMidiDevice{
-			Device: port,
-			Name:   port.String(),
-			Value:  deviceID,
-		}
-		Midis.PedalStatus[deviceID] = newPedalSignal(deviceID)
+		available[port.Number()] = port
+		lastID = port.Number()
 	}
 
-	if Midis.SelectedInDevice == -1 && lastID != -1 {
-		Midis.SelectedInDevice = lastID
-	}
-
+	midiMu.RLock()
+	selectedID := Midis.SelectedInDevice
+	selectedName := Midis.InMidiPool[selectedID].Name
+	var removed []InMidiDevice
 	for id, device := range Midis.InMidiPool {
-		if alive[id] {
+		if id == -1 {
 			continue
 		}
-		if id == Midis.SelectedInDevice {
-			Midis.SelectedInDevice = -1
-			// 当前输入设备被拔掉时，停止监听并清理本地音符，避免残留卡音。
-			go (&Keyboard{}).MidiListenerStop()
-			go (&Keyboard{}).AllNotesOff()
+		port, exists := available[id]
+		// Port numbers can be reused or shift when another device is unplugged.
+		if !exists || port.String() != device.Name {
+			removed = append(removed, device)
 		}
-		if id != -1 && device.Device != nil {
+	}
+	midiMu.RUnlock()
+	selectedRemoved := selectedID != -1 && (available[selectedID] == nil || available[selectedID].String() != selectedName)
+	if selectedRemoved {
+		(&Keyboard{}).midiListenerStop()
+		(&Keyboard{}).AllNotesOff()
+	}
+	// Cancel callbacks before closing their port, without holding midiMu.
+	for _, device := range removed {
+		if device.Device != nil {
 			_ = device.Device.Close()
 		}
-		delete(Midis.PedalStatus, id)
-		delete(Midis.InMidiPool, id)
 	}
+	midiMu.Lock()
+	for _, device := range removed {
+		delete(Midis.PedalStatus, device.Value)
+		delete(Midis.InMidiPool, device.Value)
+	}
+	for _, port := range inports {
+		id := port.Number()
+		if _, exists := Midis.InMidiPool[id]; !exists {
+			Midis.InMidiPool[id] = InMidiDevice{Device: port, Name: port.String(), Value: id}
+			Midis.PedalStatus[id] = newPedalSignal(id)
+		}
+	}
+	if selectedRemoved {
+		Midis.SelectedInDevice = -1
+		for _, port := range inports {
+			if port.String() == selectedName {
+				Midis.SelectedInDevice = port.Number()
+				break
+			}
+		}
+	}
+	if Midis.SelectedInDevice == -1 && !inputSelectionDisabled {
+		Midis.SelectedInDevice = lastID
+	}
+	midiMu.Unlock()
 }
 
 func CompareOutDevices(outports midi.OutPorts) {
-	midiMu.Lock()
-	defer midiMu.Unlock()
-
-	alive := map[int]bool{
-		midiOutputNone:          true,
-		midiOutputSoftwareSynth: true,
+	deviceChangeMu.Lock()
+	defer deviceChangeMu.Unlock()
+	if midiDevicesClosed {
+		return
 	}
+	compareOutDevices(outports)
+	(&Keyboard{}).midiListenerStart()
+}
 
+func compareOutDevices(outports midi.OutPorts) {
+	available := make(map[int]drivers.Out, len(outports))
 	for _, port := range outports {
-		deviceID := port.Number()
-		alive[deviceID] = true
-
-		if _, ok := Midis.OutMidiPool[deviceID]; ok {
+		available[port.Number()] = port
+	}
+	midiMu.RLock()
+	selectedID := Midis.SelectedOutDevice
+	selectedName := Midis.OutMidiPool[selectedID].Name
+	var removed []OutMidiDevice
+	for id, device := range Midis.OutMidiPool {
+		if id < 0 {
 			continue
 		}
-
+		port, exists := available[id]
+		if !exists || port.String() != device.Name {
+			removed = append(removed, device)
+		}
+	}
+	midiMu.RUnlock()
+	selectedRemoved := selectedID >= 0 && (available[selectedID] == nil || available[selectedID].String() != selectedName)
+	if selectedRemoved {
+		(&Keyboard{}).midiListenerStop()
+		(&Keyboard{}).AllNotesOff()
+	}
+	for _, device := range removed {
+		if device.Device != nil {
+			_ = device.Device.Close()
+		}
+	}
+	midiMu.Lock()
+	for _, device := range removed {
+		delete(Midis.OutMidiPool, device.Value)
+	}
+	if selectedRemoved {
+		Midis.SelectedOutDevice = midiOutputSoftwareSynth
+	}
+	midiMu.Unlock()
+	for _, port := range outports {
+		id := port.Number()
+		midiMu.RLock()
+		_, exists := Midis.OutMidiPool[id]
+		midiMu.RUnlock()
+		if exists {
+			continue
+		}
 		if err := port.Open(); err != nil {
 			fmt.Println("打开 MIDI 输出设备失败:", err)
 			continue
 		}
-
-		Midis.OutMidiPool[deviceID] = OutMidiDevice{
-			Device: port,
-			Name:   port.String(),
-			Value:  deviceID,
+		midiMu.Lock()
+		Midis.OutMidiPool[id] = OutMidiDevice{Device: port, Name: port.String(), Value: id}
+		if selectedRemoved && port.String() == selectedName {
+			Midis.SelectedOutDevice = id
 		}
-	}
-
-	for id, device := range Midis.OutMidiPool {
-		if alive[id] {
-			continue
-		}
-		if id == Midis.SelectedOutDevice {
-			Midis.SelectedOutDevice = midiOutputSoftwareSynth
-			go (&Keyboard{}).AllNotesOff()
-		}
-		if id != -1 && device.Device != nil {
-			_ = device.Device.Close()
-		}
-		delete(Midis.OutMidiPool, id)
+		midiMu.Unlock()
 	}
 }
 
 func ListenMidiDevices() {
-	CompareInDevices(midi.GetInPorts())
-	CompareOutDevices(midi.GetOutPorts())
+	deviceChangeMu.Lock()
+	defer deviceChangeMu.Unlock()
+	if midiDevicesClosed {
+		return
+	}
+	compareInDevices(midi.GetInPorts())
+	compareOutDevices(midi.GetOutPorts())
+	(&Keyboard{}).midiListenerStart()
 
 	midiMu.Lock()
 	Midis.Initialized = true
@@ -299,10 +360,14 @@ func (k *Keyboard) GetMidiDevices() MidiDevices {
 func (k *Keyboard) MidiListenerStart() {
 	deviceChangeMu.Lock()
 	defer deviceChangeMu.Unlock()
+	midiListeningEnabled = true
 	k.midiListenerStart()
 }
 
 func (k *Keyboard) midiListenerStart() {
+	if !midiListeningEnabled || midiDevicesClosed {
+		return
+	}
 	midiMu.Lock()
 	if Midis.Listener.Started || Midis.SelectedInDevice == -1 {
 		midiMu.Unlock()
@@ -634,6 +699,7 @@ func (k *Keyboard) KeyboardStop(key uint8) {
 func (k *Keyboard) MidiListenerStop() {
 	deviceChangeMu.Lock()
 	defer deviceChangeMu.Unlock()
+	midiListeningEnabled = false
 	k.midiListenerStop()
 }
 
@@ -657,6 +723,9 @@ func (k *Keyboard) midiListenerStop() {
 func (k *Keyboard) ChangeDevice(deviceType string, deviceID int) bool {
 	deviceChangeMu.Lock()
 	defer deviceChangeMu.Unlock()
+	if midiDevicesClosed {
+		return false
+	}
 	midiMu.RLock()
 	_, validIn := Midis.InMidiPool[deviceID]
 	_, validOut := Midis.OutMidiPool[deviceID]
@@ -672,6 +741,7 @@ func (k *Keyboard) ChangeDevice(deviceType string, deviceID int) bool {
 	midiMu.Lock()
 	if deviceType == "in" {
 		Midis.SelectedInDevice = deviceID
+		inputSelectionDisabled = deviceID == -1
 	} else {
 		Midis.SelectedOutDevice = deviceID
 	}
