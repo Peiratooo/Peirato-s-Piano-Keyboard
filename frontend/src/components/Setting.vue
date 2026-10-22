@@ -58,18 +58,18 @@ onBeforeUnmount(() => {
 
 <style lang="scss">
 .settings-shell .update-dot { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: #e5484d; margin-left: auto; box-shadow: 0 0 0 3px #fff; }
-.settings-shell .menu-item:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+.settings-shell .menu-item:focus-visible { outline: 2px solid var(--ui-accent, #666666); outline-offset: 2px; }
 
 .settings-shell {
-    --setting-panel-border: 1px solid rgba(148, 163, 184, 0.22);
+    --setting-panel-border: 1px solid rgba(160, 160, 160, 0.22);
     --setting-panel-bg: rgba(255, 255, 255, 0.76);
-    --setting-subtle-bg: rgba(248, 250, 252, 0.9);
-    --setting-text-main: #1e293b;
-    --setting-text-muted: #64748b;
-    --setting-text-soft: #475569;
-    --setting-brand: #2563eb;
-    --setting-shadow-soft: 0 18px 50px rgba(15, 23, 42, 0.08);
-    --setting-shadow-hover: 0 12px 30px rgba(15, 23, 42, 0.08);
+    --setting-subtle-bg: rgba(248, 248, 248, 0.9);
+    --setting-text-main: #303030;
+    --setting-text-muted: #666666;
+    --setting-text-soft: #555555;
+    --setting-brand: var(--ui-accent, #666666);
+    --setting-shadow-soft: 0 18px 50px rgba(0, 0, 0, 0.08);
+    --setting-shadow-hover: 0 12px 30px rgba(0, 0, 0, 0.08);
     --setting-blur-panel: blur(18px);
 
     display: grid;
@@ -106,8 +106,8 @@ onBeforeUnmount(() => {
 
     &:hover,
     &.active {
-        color: #0f172a;
-        background: rgba(37, 99, 235, 0.09);
+        color: #222222;
+        background: var(--ui-accent-soft);
     }
 }
 
@@ -194,7 +194,7 @@ onBeforeUnmount(() => {
 .settings-shell .placeholder-card {
     border-radius: 16px;
     padding: 16px;
-    background: rgba(37, 99, 235, 0.07);
+    background: var(--ui-accent-soft);
     color: var(--setting-text-soft);
     font-size: 13px;
     line-height: 1.7;

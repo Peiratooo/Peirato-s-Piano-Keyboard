@@ -14,7 +14,7 @@ const routes = [
     {
         path: '/midi',
         name: 'midi-window',
-        component: () => import('../views/MidiWindow.vue'),
+        redirect: to => ({path: '/', query: {...to.query, midiMode: 'play'}}),
     },
 ]
 

@@ -22,8 +22,8 @@ const store = inject('store')
 <style lang="scss" scoped>
 .control-window {
     min-height: 100vh;
-    background: linear-gradient(135deg, #f8f9fd, #eef2f8);
-    color: #1f2937;
+    background: linear-gradient(135deg, #f8f8f8, #eeeeee);
+    color: #303030;
     user-select: none;
 }
 
@@ -43,6 +43,6 @@ const store = inject('store')
 .subtitle {
     margin-top: 6px;
     font-size: 13px;
-    color: #64748b;
+    color: #666666;
 }
 </style>

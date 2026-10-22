@@ -1,12 +1,26 @@
-// Keep the note chosen on keydown until keyup, even if Shift or the mapping changes.
+export function isPianoEditableTarget(target) {
+    return !!(target?.isContentEditable || target?.closest?.(
+        'input, textarea, select, [contenteditable=""], [contenteditable="true"], '
+        + '[role="textbox"], [role="combobox"], [role="slider"], [role="spinbutton"], [role="switch"]',
+    ))
+}
+
+export function isPianoControlTarget(target) {
+    return isPianoEditableTarget(target)
+        || !!target?.closest?.('button, [role="button"], [data-piano-control]')
+}
+
+// Keep the note chosen on keydown until keyup, even if focus, Shift or the mapping changes.
 export function createComputerKeyboard({mapping, enabled, press, release}) {
     const physical = new Map()
     const notes = new Map()
     function keydown(event) {
         const id = event.code || event.key
-        if (!enabled() || event.repeat || physical.has(id)) return
+        if (!enabled() || event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey
+            || isPianoControlTarget(event.target) || event.repeat || physical.has(id)) return
         const note = Number(mapping()[event.key])
         if (!Number.isInteger(note) || note < 0 || note > 127) return
+        event.preventDefault()
         physical.set(id, note)
         const count = notes.get(note) || 0
         notes.set(note, count + 1)
@@ -26,5 +40,9 @@ export function createComputerKeyboard({mapping, enabled, press, release}) {
         physical.clear()
         notes.clear()
     }
-    return {keydown, keyup, clear}
+    function focusin(event) {
+        if (event.target?.closest?.('[data-preserve-piano-holds]')) return
+        if (isPianoEditableTarget(event.target)) clear()
+    }
+    return {keydown, keyup, clear, focusin}
 }

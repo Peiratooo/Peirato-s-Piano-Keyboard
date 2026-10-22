@@ -24,24 +24,25 @@ type Color struct {
 }
 
 type Config struct {
-	Revision              uint64           `json:"revision"`
-	Colors                map[string]Color `json:"colors"`
-	KeyLabel              string           `json:"keyLabel"`
-	KeyTonic              int              `json:"keyTonic"`
-	KeyboardType          int              `json:"keyboardType"`
-	Velocity              uint8            `json:"velocity"`
-	Opacity               int              `json:"opacity"`
-	Version               string           `json:"version"`
-	ShowPedal             bool             `json:"showPedal"`
-	Volume                int32            `json:"volume"`
-	SampleRate            int32            `json:"sampleRate"`
-	BufferSize            int32            `json:"bufferSize"`
-	MidiChannel           uint8            `json:"midiChannel"`
-	ActiveSoundFontID     string           `json:"activeSoundFontId"`
-	SoundFonts            []UserSoundFont  `json:"soundFonts"`
-	MidiStore             []UserMidi       `json:"midiStore"`
-	ActiveKeymapProfileID string           `json:"activeKeymapProfileId"`
-	KeymapProfiles        []KeymapProfile  `json:"keymapProfiles"`
+	Revision              uint64            `json:"revision"`
+	Colors                map[string]Color  `json:"colors"`
+	KeyLabel              string            `json:"keyLabel"`
+	KeyTonic              int               `json:"keyTonic"`
+	KeyboardType          int               `json:"keyboardType"`
+	Velocity              uint8             `json:"velocity"`
+	Opacity               int               `json:"opacity"`
+	Version               string            `json:"version"`
+	ShowPedal             bool              `json:"showPedal"`
+	Volume                int32             `json:"volume"`
+	SampleRate            int32             `json:"sampleRate"`
+	BufferSize            int32             `json:"bufferSize"`
+	MidiChannel           uint8             `json:"midiChannel"`
+	ActiveSoundFontID     string            `json:"activeSoundFontId"`
+	SoundFonts            []UserSoundFont   `json:"soundFonts"`
+	MidiStore             []UserMidi        `json:"midiStore"`
+	ActiveKeymapProfileID string            `json:"activeKeymapProfileId"`
+	KeymapProfiles        []KeymapProfile   `json:"keymapProfiles"`
+	MainWindowLayouts     MainWindowLayouts `json:"mainWindowLayouts"`
 }
 
 var DefaultConfig = Config{
@@ -89,6 +90,7 @@ var DefaultConfig = Config{
 	ActiveSoundFontID:     "",
 	ActiveKeymapProfileID: defaultKeymapProfileID,
 	KeymapProfiles:        []KeymapProfile{defaultKeymapProfile()},
+	MainWindowLayouts:     defaultMainWindowLayouts(),
 }
 
 var UserConfig = cloneDefaultConfig()
@@ -183,6 +185,7 @@ func normalizeConfigRanges(config Config) Config {
 	if config.MidiChannel > 15 {
 		config.MidiChannel = DefaultConfig.MidiChannel
 	}
+	config.MainWindowLayouts = normalizeMainWindowLayouts(config.MainWindowLayouts)
 	return normalizeKeymapConfig(config)
 }
 
@@ -192,42 +195,68 @@ func SaveConfig(config Config) error {
 		configMu.Unlock()
 		return fmt.Errorf("设置已被其他窗口修改，请刷新后重试")
 	}
+	// Window layouts belong to native presentation state; settings clients may
+	// still submit an older schema or cached layout along with piano settings.
+	config.MainWindowLayouts = UserConfig.MainWindowLayouts
+	err := saveConfigLocked(config)
+	volume := UserConfig.Volume
+	configMu.Unlock()
+	if err != nil {
+		return err
+	}
+	SetMasterVolume(volume)
+	EmitConfigChanged()
+	return nil
+}
+
+// saveConfigLocked writes a configuration while configMu is held. Native window
+// updates use this with a fresh copy so a resize cannot overwrite other settings.
+func saveConfigLocked(config Config) error {
 	nextConfig := normalizeConfigRanges(cloneConfig(config))
 	nextConfig.Version = AppVersion
 	nextConfig.Revision++
 
 	data, err := json.MarshalIndent(nextConfig, "", "  ")
 	if err != nil {
-		configMu.Unlock()
 		return fmt.Errorf("序列化 JSON 失败: %w", err)
 	}
 
 	dir := filepath.Dir(configFilePath)
 	if dir != "" && dir != "." {
 		if err := os.MkdirAll(dir, 0755); err != nil {
-			configMu.Unlock()
 			return fmt.Errorf("创建配置目录失败: %w", err)
 		}
 	}
 
 	if previous, err := os.ReadFile(configFilePath); err == nil && json.Valid(previous) {
 		if err = writeAtomicFile(configFilePath+".bak", previous, 0600); err != nil {
-			configMu.Unlock()
 			return fmt.Errorf("备份配置失败: %w", err)
 		}
 	}
 	if err := writeAtomicFile(configFilePath, data, 0600); err != nil {
-		configMu.Unlock()
 		return fmt.Errorf("写入配置文件失败: %w", err)
 	}
 
 	UserConfig = nextConfig
 
-	configMu.Unlock()
-	SetMasterVolume(nextConfig.Volume)
-	EmitConfigChanged()
-
 	return nil
+}
+
+func saveMainWindowLayouts(layouts MainWindowLayouts) error {
+	configMu.Lock()
+	layouts = normalizeMainWindowLayouts(layouts)
+	if UserConfig.MainWindowLayouts == layouts {
+		configMu.Unlock()
+		return nil
+	}
+	config := cloneConfig(UserConfig)
+	config.MainWindowLayouts = layouts
+	err := saveConfigLocked(config)
+	configMu.Unlock()
+	if err == nil {
+		EmitConfigChanged()
+	}
+	return err
 }
 
 func GetUserConfig() Config {
@@ -252,6 +281,8 @@ func (k *Keyboard) ResetConfig() (Config, error) {
 		current := GetUserConfig()
 		resetConfig := cloneDefaultConfig()
 		resetConfig.Revision = current.Revision
+		// Reset piano settings without resetting the independent window layouts.
+		resetConfig.MainWindowLayouts = current.MainWindowLayouts
 		if err := SwitchDefaultSoundFont(); err != nil {
 			return err
 		}

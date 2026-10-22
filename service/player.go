@@ -45,6 +45,7 @@ type MidiPlaybackOptions struct {
 
 	LeftMs  float64 `json:"leftMs"`
 	RightMs float64 `json:"rightMs"`
+	StartMs float64 `json:"startMs,omitempty"`
 	Speed   float64 `json:"speed"`
 	Loop    bool    `json:"loop"`
 
@@ -167,6 +168,9 @@ func (p *MidiPlayerRuntime) Start(midiFile *Midi, options MidiPlaybackOptions) e
 	if options.MidiID == "" {
 		options.MidiID = midiFile.ID
 	}
+	// StartMs is a one-shot transport position. Later option changes preserve
+	// the current position, and looping continues to return to LeftMs.
+	startMs := clampFloat(options.StartMs, options.LeftMs, options.RightMs)
 
 	followSteps := make([]MidiPracticeStep, 0)
 	if options.Mode == MidiPlaybackModeFollow {
@@ -179,12 +183,12 @@ func (p *MidiPlayerRuntime) Start(midiFile *Midi, options MidiPlaybackOptions) e
 	p.mu.Lock()
 	p.stopLocked()
 	p.events = events
-	p.eventIndex = findMidiEventIndexByMs(p.events, options.LeftMs)
+	p.eventIndex = findMidiEventIndexByMs(p.events, startMs)
 	p.followSteps = followSteps
-	p.followIndex = 0
+	p.followIndex = findPracticeStepIndexByMs(p.followSteps, startMs)
 	p.hintActive = false
 	p.acceptedNotes = make(map[int]bool)
-	p.baseMs = options.LeftMs
+	p.baseMs = startMs
 	p.baseTime = time.Now()
 	p.lastStateEmit = time.Time{}
 
@@ -194,7 +198,7 @@ func (p *MidiPlayerRuntime) Start(midiFile *Midi, options MidiPlaybackOptions) e
 		Mode:          options.Mode,
 		Hand:          options.HandMode,
 		DurationMs:    midiFile.DurationMs,
-		CurrentMs:     options.LeftMs,
+		CurrentMs:     startMs,
 		LeftMs:        options.LeftMs,
 		RightMs:       options.RightMs,
 		Speed:         options.Speed,
@@ -205,8 +209,8 @@ func (p *MidiPlayerRuntime) Start(midiFile *Midi, options MidiPlaybackOptions) e
 		MutedHands:    make(map[MidiHand]bool),
 	}
 
-	if options.Mode == MidiPlaybackModeFollow && len(followSteps) > 0 {
-		p.state.CurrentStep = cloneMidiPracticeStep(&followSteps[0])
+	if options.Mode == MidiPlaybackModeFollow && p.followIndex < len(followSteps) {
+		p.state.CurrentStep = cloneMidiPracticeStep(&followSteps[p.followIndex])
 	}
 
 	p.startLocked()
@@ -577,8 +581,13 @@ func (p *MidiPlayerRuntime) Resume() error {
 	p.baseMs = p.state.CurrentMs
 	p.baseTime = time.Now()
 	p.state.Status = MidiPlayPlaying
-	p.startLocked()
+	// Pause clears visual hints but preserves accepted notes. Restore the active
+	// step before releasing the lock so the resumed ticker cannot overtake it.
+	if p.state.Mode == MidiPlaybackModeFollow && p.hintActive && p.followIndex < len(p.followSteps) {
+		emitMidiFollowHint(cloneMidiPracticeStep(&p.followSteps[p.followIndex]))
+	}
 	emitMidiPlayerState(p.state)
+	p.startLocked()
 	return nil
 }
 

@@ -15,7 +15,6 @@ var (
 	App        *application.App
 	PianoWin   *application.WebviewWindow
 	ControlWin *application.WebviewWindow
-	MidiWin    *application.WebviewWindow
 	PRODUCTION = false
 )
 
@@ -25,16 +24,15 @@ type WindowSize struct {
 }
 
 func initSize() WindowSize {
-	// 这里先使用一个稳定的默认尺寸，避免原来的 Windows User32 调用导致 macOS/Linux 无法编译。
-	// 后续如果需要更精准的屏幕自适应，可以按平台拆成 window_size_windows.go / window_size_darwin.go。
-	return WindowSize{Width: 1280, Height: 170}
+	layout := GetUserConfig().MainWindowLayouts.Waterfall
+	return WindowSize{Width: layout.Width, Height: layout.Height}
 }
 
 func Run(assets embed.FS) {
 	size := initSize()
 	App = application.New(application.Options{
 		Name:        "Peirato's Piano Keyboard",
-		Description: "A piano keyboard desktop widget",
+		Description: "Piano performance and waterfall practice",
 		Services: []application.Service{
 			application.NewService(&Keyboard{}),
 		},
@@ -66,17 +64,20 @@ func Run(assets embed.FS) {
 		Frameless:              true,
 		Width:                  size.Width,
 		Height:                 size.Height,
-		MinHeight:              100,
-		MinWidth:               800,
+		MinHeight:              600,
+		MinWidth:               960,
 		BackgroundType:         application.BackgroundTypeTranslucent,
-		BackgroundColour:       application.NewRGBA(0, 0, 0, 0),
+		BackgroundColour:       application.NewRGBA(28, 28, 28, 255),
 		URL:                    "/",
 		DevToolsEnabled:        !PRODUCTION,
-		OpenInspectorOnStartup: !PRODUCTION,
+		OpenInspectorOnStartup: false,
 		EnableFileDrop:         true,
-		AlwaysOnTop:            true,
+		AlwaysOnTop:            false,
+		// Apply the screen work-area clamp before the first visible frame.
+		Hidden: true,
 	})
 	App.Window.Add(PianoWin)
+	installMainWindowPresentation()
 
 	// 窗口创建完成后再开始扫描设备，避免 App.Event.Emit 早于 App 初始化。
 	go ListenDevices()
@@ -135,48 +136,20 @@ func (k *Keyboard) OpenControlCenter() {
 	ControlWin.Show()
 }
 
-func (k *Keyboard) OpenMidiCenter() {
-	if App == nil {
-		return
+// OpenMidiCenter preserves the old entry point while MIDI controls now live in
+// the main window. No second window or playback-reset lifecycle is created.
+func (k *Keyboard) OpenMidiCenter() error {
+	if App == nil || PianoWin == nil {
+		return fmt.Errorf("主窗口尚未就绪")
 	}
-
-	if MidiWin != nil {
-		MidiWin.Show()
-		MidiWin.Focus()
-		emitMidiWindowState(true)
-		return
+	if _, err := k.SetMainDisplayMode(mainDisplayWaterfall); err != nil {
+		return fmt.Errorf("打开曲目播放面板失败：%w", err)
 	}
-	MidiWin = App.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title: "MIDI 中心",
-		Mac: application.MacWindow{
-			InvisibleTitleBarHeight: 40,
-			TitleBar:                application.MacTitleBarHidden,
-		},
-		Windows: application.WindowsWindow{
-			BackdropType:                      0,
-			WindowMaskDraggable:               true,
-			DisableFramelessWindowDecorations: true,
-		},
-		Width:                  1120,
-		Height:                 360,
-		MinWidth:               920,
-		MinHeight:              300,
-		BackgroundType:         application.BackgroundTypeSolid,
-		BackgroundColour:       application.NewRGBA(245, 247, 251, 255),
-		URL:                    "/#/midi",
-		DevToolsEnabled:        !PRODUCTION,
-		OpenInspectorOnStartup: false,
-		EnableFileDrop:         true,
-		AlwaysOnTop:            false,
-	})
-	MidiWin.OnWindowEvent(events.Common.WindowClosing, func(e *application.WindowEvent) {
-		MidiWin = nil
-		_ = MidiPlayer.Reset()
-		emitMidiWindowState(false)
-	})
-	App.Window.Add(MidiWin)
-	MidiWin.Show()
-	emitMidiWindowState(true)
+	PianoWin.UnMinimise()
+	PianoWin.Show()
+	PianoWin.Focus()
+	App.Event.Emit("mainMidiModeRequested", map[string]string{"mode": "play"})
+	return nil
 }
 
 func (k *Keyboard) Quit() {
@@ -206,11 +179,6 @@ func (k *Keyboard) OpenSoundFontDialog() error {
 }
 
 func (k *Keyboard) GetMidiWindowOpen() bool {
-	return MidiWin != nil
-}
-
-func emitMidiWindowState(open bool) {
-	if App != nil {
-		App.Event.Emit("midiWindowState", map[string]bool{"open": open})
-	}
+	// Retained for older frontend clients; MIDI is part of the main window.
+	return false
 }

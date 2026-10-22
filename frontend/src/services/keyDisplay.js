@@ -12,7 +12,9 @@ export function numberedPitch(midi, tonic = 0) {
 export function keyVisualClass(store, item) {
     const key = item.index
     const prefix = item.color === 'black' ? 'b' : 'w'
-    if (store.pressedKey[key] || store.midiPlaybackKey[key] || store.midiHintKey[key]) return `${prefix}-active`
-    if (store.midiPlaybackLeftKey[key] || store.midiHintLeftKey[key]) return `${prefix}-l-active`
+    if (store.pressedKey[key] || store.midiPlaybackKey[key]) return `${prefix}-active`
+    if (store.midiPlaybackLeftKey[key]) return `${prefix}-l-active`
+    if (store.midiHintKey[key]) return `${prefix}-hint`
+    if (store.midiHintLeftKey[key]) return `${prefix}-l-hint`
     return store.activeKey[key] ? `${prefix}-sustained` : ''
 }

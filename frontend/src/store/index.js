@@ -34,7 +34,6 @@ export const data = defineStore('data', {
             midiPlaybackLeftKey: {},
             midiHintKey: {},
             midiHintLeftKey: {},
-            midiWindowOpen: false,
             midiPlayerState: {
                 status: 'idle',
                 mode: 'play',
@@ -84,8 +83,8 @@ export const data = defineStore('data', {
             keyboardRange:[
                 [0, 88],
                 [3, 87],
-                [6, 83],
-                [8, 81],
+                [7, 83],
+                [8, 80],
                 [27,88],
                 [27,64],
             ],
@@ -103,6 +102,8 @@ export const data = defineStore('data', {
             menuBar:true,
             showSetting:true,
             showAuthor:false,
+            mainDisplayMode: 'waterfall',
+            mainMode: 'free',
         }
     },
     getters: {

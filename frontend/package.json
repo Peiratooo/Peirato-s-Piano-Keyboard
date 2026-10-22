@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@phosphor-icons/vue": "^2.2.1",
     "pinia": "^3.0.4",
     "tonal": "^6.4.3",
     "vue": "^3.5.34",

@@ -6,15 +6,18 @@
 
 `main.go` 按顺序读取配置、注册嵌入式 Upright Piano KW 音源、初始化音源，再调用 `service.Run()`。音源初始化失败时记录错误，窗口仍可打开。
 
-`service/app.go` 创建三个窗口：
+`service/app.go` 创建两个窗口：
 
 | 窗口 | 路由 | 前端 |
 | --- | --- | --- |
 | 主钢琴窗口 | `/` | `views/MainWindow.vue` |
 | 设置中心 | `/#/control` | `views/ControlCenterWindow.vue` |
-| MIDI 中心 | `/#/midi` | `views/MidiWindow.vue` |
 
-设置中心和 MIDI 中心各自保持单例，关闭时清除窗口引用。关闭 MIDI 中心会重置播放器；应用关闭时清理下载缓存并释放 MIDI 设备。
+设置中心保持单例，关闭时清除窗口引用。MIDI 播放和跟弹在主窗口中切换；旧 `/#/midi` 路由转到主窗口播放模式，`OpenMidiCenter()` 也只聚焦主窗口并发送模式请求。应用关闭时清理下载缓存并释放 MIDI 设备。
+
+主窗口默认进入自由演奏瀑布流，浮动菜单在首个真实音符输入后自动收起。`GetMainWindowPresentation()` / `SetMainDisplayMode()` 由 `window_presentation.go` 串行管理同一窗口的 `waterfall` / `simple` 形态；前者为普通可缩放窗口，后者为置顶长条。尺寸按屏幕工作区限制，切换不会调用播放器或清音接口。打开简单模式的菜单或常用设置时先展开完整窗口，以保留琴键操作空间。
+
+`mainWindowLayouts` 保存两种形态的正常尺寸以及完整窗口的最大化状态，由原生窗口控制器单独防抖合并保存。常规配置提交和钢琴设置重置保留此字段，避免前端旧快照覆盖窗口状态。完整窗口固定不透明，原有透明度配置仅用于简单键盘。
 
 ## 配置与版本
 
@@ -32,6 +35,16 @@
 
 `service/keymap.go` 管理多个按键方案，内置默认映射；导入和导出使用 `.pp-keymap.json`。前端不再加载静态 `case-*.json`。
 
+输入框、下拉框和滑块获得焦点时释放电脑持键，并暂停接收新电脑琴键；按钮操作只屏蔽新琴键事件，不主动释放已按住的音。`keyup` 始终按原物理键释放音符。
+
+## 自由演奏瀑布流
+
+`keyboardLayout.js` 根据可见 MIDI 音域和容器宽度生成共享的琴键坐标，供 `ClassicKeyboard.vue` 和 `WaterfallCanvas.vue` 使用。琴键高度由主窗口容器控制，不再固定为整个窗口高度。所有现有音域选项均按实际键数切片。
+
+`live_performance.go` 在真实输入路径产生独立 `livePerformance` 事件，包含来源、通道、音高、力度、单调时间、序号和音符实例 ID。事件区分 `noteOn`、真实松键 `noteOff`、踏板尾音结束 `noteEnd`、`clear`；自动播放事件不进入此流。原有按键和播放高亮事件继续使用。
+
+前端 `livePerformance.js` 维护六秒可见时间轴，按实例区分同音重弹和来源重叠；`WaterfallCanvas.vue` 用 Canvas 2D 绘制向上的实色按键段和淡色延音段。简单模式暂停逐帧绘制，模型继续接收事件并有界清理历史，切回瀑布时恢复。背景、面板、文字及网格采用中性灰，音符沿用按键主题。
+
 ## 音源
 
 `service/soundfont.go` 管理嵌入式 SF2、自定义音源目录、MeltySynth 合成器和 beep 扬声器。当前音源由 `ActiveSoundFontID` 选择，音源记录保存在 `SoundFonts` 中。
@@ -44,15 +57,20 @@
 
 `service/player.go` 使用 `MidiPlaybackOptions` 管理播放模式、练习手、区间、速度、循环和分组窗口。播放器负责事件调度、通道与静音、暂停恢复、跳转和清音；跟弹步骤及命中判断均在 Go 后端执行。
 
-`MidiWindow.vue` 通过 `LoadMidiByID()`、`StartMidiPlayback()`、`SwitchMidiPlayback()`、`PauseMidiPlayback()`、`ResumeMidiPlayback()`、`SeekMidiPlayback()` 等绑定操作播放器。
+`midiSession.js` 维护主窗口唯一的曲库、已选曲目、播放选项和进度草稿，通过现有播放器绑定操作后端。曲库、练习设置和播放控制都是会话的视图，关闭浮层不会停止播放器。切回自由演奏时停止曲目并清理提示；切换简单／瀑布显示方式保持会话。导入、预选曲目不自动播放，切曲先停止旧曲，异步选择使用序号避免旧结果覆盖新选择。
+
+`GetMidiTimeline(id)` 返回与播放器共用的毫秒时间轴，音符包含稳定 ID、音高、起止时间、力度、轨道、通道和左右手。它配对解析事件的副本，不修改缓存。`MidiWaterfallCanvas.vue` 使用共享琴键布局、可见区间查询和后端时间快照插值绘制向下音流；暂停、等待、跳转、循环和变速重新锚定，等待跟弹时停在当前步骤。`startMs` 是启动命令的一次性位置，后续变速和选项更新不会重新定位。
+
+`uiTheme.js` 从现有按键主题生成界面强调色和 Naive UI 覆盖值。完整设置负责切换主题，主窗口快捷设置只提供常用钢琴参数；面板、文字和背景的中性色保持纯灰。
 
 ## 窗口同步
 
 各 WebView 的 Pinia store 独立。所有共享状态由后端 Wails 事件同步，前端直接读取当前事件格式的 `event.data`：
 
 - 配置与设备：`configChanged`、`devices`、`softwareSustain`。
-- 用户演奏：`down`、`up`、`pressedDown`、`pressedUp`、`pedal`。
-- MIDI 中心：`midiWindowState`、`midiPlayerState`、`midiPlaybackKey`、`midiFollowHint`、`midiVisualClear`。
+- 用户演奏：`down`、`up`、`pressedDown`、`pressedUp`、`pedal`、`livePerformance`。
+- 主窗口：`mainWindowPresentation`、`mainWindowPresentationSaveError`。
+- MIDI 模式：`mainMidiModeRequested`、`midiPlayerState`、`midiPlaybackKey`、`midiFollowHint`、`midiVisualClear`。
 - 全局清理和更新：`allNotesOff`、`updateState`。
 
 用户真实按键、延音、播放高亮与左右手提示分别保存，渲染时聚合。事件、键盘和 resize 监听在前端卸载时取消。

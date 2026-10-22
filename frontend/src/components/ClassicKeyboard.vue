@@ -1,7 +1,7 @@
 <template>
     <div
         class="classic-keyboard"
-        @mousedown="mouse.down = true"
+        ref="keybed"
         @mouseup="releaseMouseKey"
         @mouseleave="releaseMouseKey"
     >
@@ -9,9 +9,10 @@
             class="key"
             v-for="item in visibleKeys"
             :class="[item.color, item.note, getKeyClass(item)]"
+            :style="keyStyle(item.index)"
             :key="item.index"
-            @mouseenter="enterKey(item.index)"
-            @mousedown.prevent="pressKey(item.index)"
+            @mouseenter="enterKey($event, item.index)"
+            @mousedown.prevent="pressKey($event, item.index)"
             @mouseup="releaseKey(item.index)"
         >
             <div class="label" v-if="store.config.keyLabel !== '' && item[store.config.keyLabel]" :class="{'pitch-label': store.config.keyLabel === 'pitch'}">
@@ -31,12 +32,17 @@
 </template>
 
 <script setup>
-import {computed, inject, onBeforeUnmount, onMounted, reactive} from 'vue'
+import {computed, inject, onBeforeUnmount, onMounted, reactive, ref} from 'vue'
 import {numberedPitch, keyVisualClass} from '../services/keyDisplay'
+import {createKeyboardLayout} from '../services/keyboardLayout'
+
+const props = defineProps({layout: {type: Array, default: null}})
 
 const store = inject('store')
 const Keyboard = inject('Keyboard')
-const resize = inject('resize')
+const keybed = ref(null)
+const keybedWidth = ref(0)
+let resizeObserver = null
 
 const mouse = reactive({
     down: false,
@@ -44,10 +50,20 @@ const mouse = reactive({
 })
 
 const visibleKeys = computed(() => {
-    const range = store.keyboardRange[store.config.keyboardType]
+    const range = store.keyboardRange[store.config.keyboardType] || store.keyboardRange[0]
     return store.keyboardConfig.slice(range[0], range[1]).map(item => store.config.keyLabel === 'pitch'
         ? {...item, ...numberedPitch(item.index, store.config.keyTonic ?? 0)} : item)
 })
+
+const keyPositions = computed(() => new Map(
+    (props.layout || createKeyboardLayout(visibleKeys.value, keybedWidth.value))
+        .map(key => [key.note, key]),
+))
+
+function keyStyle(note) {
+    const position = keyPositions.value.get(note)
+    return position ? {left: `${position.x}px`, width: `${position.width}px`} : {visibility: 'hidden'}
+}
 
 function getKeyClass(item) {
     return keyVisualClass(store, item)
@@ -61,7 +77,8 @@ function pitchMarksAbove(item) {
     return Number(item.octave) > 4
 }
 
-function pressKey(key) {
+function pressKey(event, key) {
+    if (event.button !== 0) return
     mouse.down = true
     if (mouse.currentKey === key) return
 
@@ -84,21 +101,28 @@ function releaseMouseKey() {
     mouse.currentKey = -1
 }
 
-function enterKey(key) {
+function enterKey(event, key) {
+    if (!(event.buttons & 1)) {
+        releaseMouseKey()
+        return
+    }
     if (!mouse.down || mouse.currentKey === key) return
-    pressKey(key)
+    pressKey({button: 0}, key)
 }
 
 onMounted(() => {
-    resize()
-    window.addEventListener('resize', resize)
+    resizeObserver = new ResizeObserver(entries => {
+        keybedWidth.value = entries[0]?.contentRect.width || 0
+    })
+    resizeObserver.observe(keybed.value)
+    keybedWidth.value = keybed.value.clientWidth
     window.addEventListener('mouseup', releaseMouseKey)
     window.addEventListener('blur', releaseMouseKey)
 })
 
 onBeforeUnmount(() => {
     releaseMouseKey()
-    window.removeEventListener('resize', resize)
+    resizeObserver?.disconnect()
     window.removeEventListener('mouseup', releaseMouseKey)
     window.removeEventListener('blur', releaseMouseKey)
 })
@@ -106,15 +130,18 @@ onBeforeUnmount(() => {
 
 <style lang="scss" scoped>
 .classic-keyboard {
-    display: flex;
-    flex-direction: row;
-    height: 100vh;
-    width: 100vw;
+    position: relative;
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+    touch-action: none;
 }
 
 .key {
-    position: relative;
-    transition: 100ms;
+    position: absolute;
+    top: 0;
+    box-sizing: border-box;
+    transition: background-color 100ms, box-shadow 100ms;
     height: 100%;
     user-select: none;
 }
@@ -160,7 +187,6 @@ onBeforeUnmount(() => {
 
 .white {
     height: 100%;
-    width: var(--white-key-width);
     z-index: 1;
     border-left: 1px solid #bbb;
     border-bottom: 1px solid #bbb;
@@ -169,7 +195,9 @@ onBeforeUnmount(() => {
     background-color: #f6f6f6;
 
     .label {
-        font-size: 18px;
+        font-size: 14px;
+        color: #616161;
+        opacity: 1;
     }
 }
 
@@ -190,8 +218,6 @@ onBeforeUnmount(() => {
 
 .black {
     height: 63%;
-    width: var(--black-key-width);
-    transform: translateX(var(--black-key-offset));
     z-index: 3;
     border-bottom: 1px solid #000;
     border-left: 1px solid #000;
@@ -220,19 +246,19 @@ onBeforeUnmount(() => {
 
 
 
-.A:first-child {
-    margin: 0;
-}
-
 .w-sustained {
     background-color: color-mix(in srgb, var(--whiteKey) 38%, #f6f6f6);
+}
+
+.w-hint, .b-hint {
+    box-shadow: inset 0 0 0 2px var(--whiteKey), 0 0 7px var(--whiteKey-o);
+}
+.w-l-hint, .b-l-hint {
+    box-shadow: inset 0 0 0 2px var(--whiteKeyLeft), 0 0 7px var(--whiteKeyLeft-o);
 }
 
 .b-sustained {
     background-color: color-mix(in srgb, var(--blackKey) 38%, #333);
 }
 
-.B, .D, .E, .A, .G {
-    margin-left: var(--white-key-offset);
-}
 </style>

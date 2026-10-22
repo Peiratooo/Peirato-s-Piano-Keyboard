@@ -2,7 +2,9 @@
     <n-config-provider
         :date-locale="dateZhCN"
         :locale="zhCN"
-        :style="{opacity: isMainWindow ? store.config.opacity / 100 : 1}"
+        :theme="isMainWindow ? darkTheme : undefined"
+        :theme-overrides="themeOverrides"
+        :style="{...pianoUiTheme.cssVariables, opacity: isMainWindow && store.mainDisplayMode === 'simple' ? store.config.opacity / 100 : 1}"
     >
         <n-modal-provider>
             <n-loading-bar-provider>
@@ -22,6 +24,7 @@ import {computed, defineComponent, h, onBeforeUnmount, onMounted, provide} from 
 import {useRoute} from 'vue-router'
 import {
     dateZhCN,
+    darkTheme,
     NConfigProvider,
     NLoadingBarProvider,
     NMessageProvider,
@@ -36,16 +39,33 @@ import {Keyboard} from '../bindings/main/service'
 import {data} from './store'
 import {useUpdater} from './store/updater'
 import {createComputerKeyboard} from './services/computerKeyboard'
+import {acceptLivePerformance} from './services/livePerformance'
+import {getPianoUiTheme} from './services/uiTheme'
 
 const store = data()
 const updater = useUpdater()
 const route = useRoute()
 const isMainWindow = computed(() => route.path === '/')
+const pianoUiTheme = computed(() => getPianoUiTheme(store.config.colors, isMainWindow.value ? 'dark' : 'light'))
+const themeOverrides = computed(() => {
+    const theme = pianoUiTheme.value
+    if (isMainWindow.value) return theme.naiveOverrides
+    return {
+        common: {
+            primaryColor: theme.accent,
+            primaryColorHover: theme.accentHover,
+            primaryColorPressed: theme.accentPressed,
+            primaryColorSuppl: theme.accent,
+        },
+        Button: theme.naiveOverrides.Button,
+    }
+})
 
 const unsubscribeBackendEvents = []
 const keyboardLabelSkipKeys = ['k', 'K', 'l', 'L', ';', "'", '\\', '|', '`', '~', '[', '{', ']', '}', 'p', 'P']
 let unsubscribeKeyboardListener = null
 let unsubscribeResizeListener = null
+let lastWindowSaveError = 0
 
 const FeedbackBridge = defineComponent({
     name: 'FeedbackBridge',
@@ -111,7 +131,7 @@ const copyConfig = value => JSON.parse(JSON.stringify(value))
 
 function changeConfig() {
     for (const [key, value] of Object.entries(store.config)) {
-        if (key === 'revision' || key === 'version') continue
+        if (key === 'revision' || key === 'version' || key === 'mainWindowLayouts') continue
         if (JSON.stringify(value) !== JSON.stringify(({...confirmedConfig, ...savingConfig, ...pendingConfig})[key])) {
             pendingConfig[key] = copyConfig(value)
         }
@@ -126,9 +146,15 @@ async function savePendingConfig() {
         pendingConfig = {}
         savingConfig = changes
         try {
-            const latest = await Keyboard.SendConfig()
-            const [ok, error] = await Keyboard.ReceiveConfig({...latest, ...changes})
-            if (!ok) throw new Error(error)
+            // Window-size saves can advance the configuration revision between
+            // reading it and submitting a slider change. Rebase only that conflict.
+            for (let attempt = 0; attempt < 3; attempt++) {
+                const latest = await Keyboard.SendConfig()
+                const [ok, error] = await Keyboard.ReceiveConfig({...latest, ...changes})
+                if (ok) break
+                if (attempt < 2 && String(error).includes('设置已被其他窗口修改')) continue
+                throw new Error(error)
+            }
             const saved = await Keyboard.SendConfig()
             savingConfig = {}
             applyConfig(saved)
@@ -172,10 +198,6 @@ async function getMidiDevices() {
         softwareSustain: !!devices.softwareSustain,
     }
     store.loaded = true
-}
-
-async function getMidiWindowState() {
-    store.midiWindowOpen = await Keyboard.GetMidiWindowOpen()
 }
 
 async function changeDevice(deviceType, deviceID) {
@@ -301,11 +323,13 @@ function keyboardListener() {
     window.addEventListener('keydown', input.keydown)
     window.addEventListener('keyup', input.keyup)
     window.addEventListener('blur', input.clear)
+    window.addEventListener('focusin', input.focusin)
     unsubscribeKeyboardListener = () => {
         input.clear()
         window.removeEventListener('keydown', input.keydown)
         window.removeEventListener('keyup', input.keyup)
         window.removeEventListener('blur', input.clear)
+        window.removeEventListener('focusin', input.focusin)
     }
 }
 function updateScaleByWindowHeight() {
@@ -325,6 +349,16 @@ function registerBackendEvents() {
         unsubscribeBackendEvents.push(Events.On(eventName, event => callback(event.data)))
     }
 
+    if (isMainWindow.value) on('livePerformance', acceptLivePerformance)
+    on('mainWindowPresentation', presentation => {
+        if (presentation?.mode) store.mainDisplayMode = presentation.mode
+    })
+    on('mainWindowPresentationSaveError', payload => {
+        if (!isMainWindow.value || Date.now() - lastWindowSaveError < 10000) return
+        lastWindowSaveError = Date.now()
+        window.$message?.error('窗口尺寸未保存：' + (payload?.error || '请检查配置目录是否可写'))
+    })
+
     on('down', (signal) => {
         if (!signal) return
         store.activeKey[signal.value] = true
@@ -342,10 +376,10 @@ function registerBackendEvents() {
         store.backendPressedKey[signal.value] = false
     })
     on('pedal', (pedal) => {
-        if (store.devices.selectedInDevice === -1) return
         if (!pedal) return
-        store.devices.pedalStatus[store.devices.selectedInDevice] = {
-            ...store.devices.pedalStatus[store.devices.selectedInDevice],
+        const source = pedal.deviceID ?? store.devices.selectedInDevice
+        store.devices.pedalStatus[source] = {
+            ...store.devices.pedalStatus[source],
             ...pedal,
         }
     })
@@ -368,16 +402,12 @@ function registerBackendEvents() {
         setKeyColor()
         resize()
     })
-    on('midiWindowState', (payload) => {
-        store.midiWindowOpen = !!payload?.open
-        if (!store.midiWindowOpen) {
-            store.clearMidiVisualKeys()
-        }
-    })
     on('midiPlayerState', (state) => {
+        if (!state) return
         store.midiPlayerState = {
-            ...store.midiPlayerState,
             ...state,
+            currentStep: state.currentStep ?? null,
+            error: state.error || '',
         }
     })
     on('midiPlaybackKey', (signal) => {
@@ -421,12 +451,11 @@ function registerResizeListener() {
 
 onMounted(async () => {
     WML.Reload()
+    registerBackendEvents()
     await initKeyboardConfig()
     await getConfig()
     await getMidiDevices()
-    await getMidiWindowState()
     await Keyboard.MidiListenerStart()
-    registerBackendEvents()
     keyboardListener()
     resize()
     updateScaleByWindowHeight()
