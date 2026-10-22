@@ -556,14 +556,17 @@ func (k *Keyboard) DiscardRecording() error {
 		inputEventsMu.Unlock()
 		return errors.New("请先停止录制，且等待保存操作完成")
 	}
+	// Do not lose the in-memory draft if disk removal fails.
+	if err := removeRecordingBackupLocked(); err != nil {
+		inputEventsMu.Unlock()
+		return fmt.Errorf("删除录制草稿失败：%w", err)
+	}
 	recording.status, recording.id, recording.lastError = "idle", "", ""
 	recording.events = nil
 	recording.durationUS, recording.noteCount = 0, 0
 	inputEventsMu.Unlock()
 	_ = k.StopRecordingPreview()
-	err := os.Remove(recordingDraftPath())
-	if os.IsNotExist(err) { return nil }
-	return err
+	return nil
 }
 
 func (k *Keyboard) SaveRecording(name string) (UserMidi, error) {
@@ -621,24 +624,34 @@ func (k *Keyboard) SaveRecording(name string) (UserMidi, error) {
 	if strings.ToLower(filepath.Ext(path)) != ".mid" {
 		return UserMidi{}, errors.New("录制只能保存为 .mid 文件")
 	}
-	// Refuse silent replacement of existing compositions.
+	// Never silently replace another composition. A retry after a partial
+	// export can reuse only an existing file with identical MIDI bytes.
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
-	if err != nil {
-		return UserMidi{}, fmt.Errorf("无法创建 MIDI 文件（可能已存在）：%w", err)
-	}
-	if _, err = f.Write(data); err != nil {
-		f.Close()
-		os.Remove(path)
-		return UserMidi{}, err
-	}
-	if err = f.Sync(); err != nil {
-		f.Close()
-		os.Remove(path)
-		return UserMidi{}, err
-	}
-	if err = f.Close(); err != nil {
-		os.Remove(path)
-		return UserMidi{}, err
+	if errors.Is(err, os.ErrExist) {
+		existing, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return UserMidi{}, fmt.Errorf("读取已存在的 MIDI 文件失败：%w", readErr)
+		}
+		if !bytes.Equal(existing, data) {
+			return UserMidi{}, errors.New("该路径已有不同的 MIDI 文件，请另选文件名")
+		}
+	} else if err != nil {
+		return UserMidi{}, fmt.Errorf("无法创建 MIDI 文件：%w", err)
+	} else {
+		if _, err = f.Write(data); err != nil {
+			f.Close()
+			os.Remove(path)
+			return UserMidi{}, err
+		}
+		if err = f.Sync(); err != nil {
+			f.Close()
+			os.Remove(path)
+			return UserMidi{}, err
+		}
+		if err = f.Close(); err != nil {
+			os.Remove(path)
+			return UserMidi{}, err
+		}
 	}
 	song, err := k.AddMidiByPath(path)
 	if err != nil {
@@ -648,10 +661,14 @@ func (k *Keyboard) SaveRecording(name string) (UserMidi, error) {
 	_ = k.StopRecordingPreview()
 	inputEventsMu.Lock()
 	if recording.id == snap.ID && recording.status == "draft" {
+		if err := removeRecordingBackupLocked(); err != nil {
+			recording.lastError = "MIDI 已保存并加入曲库，但清理草稿失败，请重试保存或放弃草稿：" + err.Error()
+			inputEventsMu.Unlock()
+			return UserMidi{}, errors.New(recording.lastError)
+		}
 		recording.status, recording.id, recording.lastError = "idle", "", ""
 		recording.events = nil
 		recording.durationUS, recording.noteCount = 0, 0
-		_ = os.Remove(recordingDraftPath())
 	}
 	inputEventsMu.Unlock()
 	return song, nil
