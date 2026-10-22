@@ -156,7 +156,6 @@ vite.config.ts.timestamp-*
 /builder/*
 !/builder/packaging.json
 
-/docs/licenses
-/docs/*
-!/docs/ARCHITECTURE.md
+/design-qa.md
+/docs/
 /packaging
