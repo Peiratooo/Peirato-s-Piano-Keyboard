@@ -146,6 +146,20 @@ func (k *Keyboard) StartRecording() (RecordingState, error) {
 	recording.physical = make(map[recordingTrackKey]uint8)
 	recording.software = false
 	recordingSoftwareSustainLocked(softwareSustain)
+	// If a real damper is already pressed when recording begins, retain its
+	// initial controller state instead of waiting for the next pedal movement.
+	midiMu.RLock()
+	for deviceID, pedal := range Midis.PedalStatus {
+		if pedal == nil {
+			continue
+		}
+		for channel, down := range pedal.Channels {
+			if down {
+				recordingControlLocked(deviceID, channel, 64, 127)
+			}
+		}
+	}
+	midiMu.RUnlock()
 	return recordingStateLocked(), nil
 }
 
