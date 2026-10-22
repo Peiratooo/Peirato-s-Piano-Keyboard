@@ -169,6 +169,9 @@ func recordingNoteOnLocked(deviceID int, channel, note, velocity uint8) {
 		return
 	}
 	track := recordingTrackKey{deviceID, channel}
+	if recording.software && !recording.tracks[track] {
+		recordingEmitControlLocked(track, 64, 127)
+	}
 	key := recordingNoteKey{track, note}
 	// A retrigger without a release must not create an endless preceding note.
 	if recording.held[key] {
