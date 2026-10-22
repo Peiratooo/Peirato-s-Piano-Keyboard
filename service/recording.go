@@ -513,7 +513,7 @@ func (k *Keyboard) SaveRecording(name string) (UserMidi, error) {
 		return UserMidi{}, errors.New("应用尚未初始化")
 	}
 	name = strings.TrimSpace(name)
-	name = strings.NewReplacer("/", "-", "\", "-", ":", "-", "*", "-", "?", "-", """, "-", "<", "-", ">", "-", "|", "-").Replace(name)
+	name = strings.NewReplacer("/", "-", "\\", "-", ":", "-", "*", "-", "?", "-", "\"", "-", "<", "-", ">", "-", "|", "-").Replace(name)
 	if name == "" {
 		name = "自由演奏-" + time.Now().Format("20060102-150405")
 	}
