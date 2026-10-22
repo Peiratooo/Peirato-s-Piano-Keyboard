@@ -204,6 +204,7 @@ async function changeMode(mode) {
         if (mode !== 'free' && recording.state.status === 'draft') {
             if (!window.confirm('录制草稿尚未保存。切换模式后草稿仍会保留，返回自由演奏可保存或放弃。确定切换？')) return false
         }
+        if (mode !== 'free' && recording.previewing && !await recording.stopPreview()) return false
         if (mode !== 'free' && isSimple.value && !await setDisplayMode('waterfall')) return false
         await session.initialize()
         if (!await session.setMode(mode)) return false
