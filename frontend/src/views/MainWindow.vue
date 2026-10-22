@@ -29,9 +29,12 @@
                 <button class="window-button" type="button" aria-label="最小化" title="最小化" @pointerdown.prevent @click="minimize"><PhMinus :size="16" /></button>
                 <button v-if="!isSimple" class="window-button" type="button" aria-label="最大化或还原" title="最大化 / 还原"
                     @pointerdown.prevent @click="toggleMaximize"><PhArrowsOutSimple :size="15" /></button>
-                <button class="window-button close-window" type="button" aria-label="退出软件" title="退出" @pointerdown.prevent @click="Keyboard.Quit"><PhX :size="17" /></button>
+                <button class="window-button close-window" type="button" aria-label="退出软件" title="退出" @pointerdown.prevent @click="requestQuit"><PhX :size="17" /></button>
             </div>
         </header>
+
+        <RecordingControls v-if="!isMidi" :recording="recording" :simple="isSimple"
+            @show-draft="setDisplayMode('waterfall')" />
 
         <div v-show="isMidi && !isSimple" ref="midiControlsRef" class="midi-workspace-controls" data-piano-control>
             <div class="midi-options-row">
@@ -57,7 +60,7 @@
                 </div>
                 <footer class="menu-footer">
                     <span class="input-status"><i :class="{ connected: hasMidiInput }"></i>{{ hasMidiInput ? 'MIDI 键盘已连接' : '电脑键盘 / 鼠标演奏' }}</span>
-                    <button type="button" @click="Keyboard.Quit"><PhPower :size="15" />退出</button>
+                    <button type="button" @click="requestQuit"><PhPower :size="15" />退出</button>
                 </footer>
                 <p class="menu-hint">{{ isMidi ? '选择曲目后开始播放或跟弹' : '弹下第一个音，菜单自动收起' }}</p>
             </section>
@@ -100,9 +103,11 @@ import MidiLibraryPanel from '../components/MidiLibraryPanel.vue'
 import MidiPracticeControls from '../components/MidiPracticeControls.vue'
 import MidiTransport from '../components/MidiTransport.vue'
 import MidiWaterfallCanvas from '../components/MidiWaterfallCanvas.vue'
+import RecordingControls from '../components/RecordingControls.vue'
 import {createKeyboardLayout} from '../services/keyboardLayout'
 import {subscribeLivePerformance} from '../services/livePerformance'
 import {useMidiSession} from '../services/midiSession'
+import {useRecordingSession} from '../services/recordingSession'
 import {getPianoUiTheme} from '../services/uiTheme'
 
 const store = inject('store')
@@ -110,6 +115,10 @@ const Keyboard = inject('Keyboard')
 const route = useRoute()
 const router = useRouter()
 const session = useMidiSession({store, Keyboard})
+const recording = useRecordingSession({Keyboard, onSaved: async song => {
+    await session.refreshLibrary()
+    if (song?.id) await session.selectSong(song.id)
+}})
 const uiTheme = computed(() => getPianoUiTheme(store.config.colors))
 const containerRef = ref(null)
 const midiControlsRef = ref(null)
@@ -189,6 +198,12 @@ async function changeMode(mode) {
     if (modeSwitching.value) return false
     modeSwitching.value = true
     try {
+        if (mode !== 'free' && recording.state.status === 'recording') {
+            if (!await recording.stop()) return false
+        }
+        if (mode !== 'free' && recording.state.status === 'draft') {
+            if (!window.confirm('录制草稿尚未保存。切换模式后草稿仍会保留，返回自由演奏可保存或放弃。确定切换？')) return false
+        }
         if (mode !== 'free' && isSimple.value && !await setDisplayMode('waterfall')) return false
         await session.initialize()
         if (!await session.setMode(mode)) return false
@@ -209,6 +224,13 @@ async function consumeRequestedMode() {
         delete query.midiMode
         await router.replace({path: '/', query})
     }
+}
+async function requestQuit() {
+    if (recording.state.status === 'recording' || recording.state.status === 'draft') {
+        if (!window.confirm('当前录制或草稿尚未保存为 MIDI。退出时会保留草稿供下次恢复，确定退出？')) return
+    }
+    if (recording.state.status === 'recording' && !await recording.stop()) return
+    try { await Keyboard.Quit() } catch (error) { window.$message?.error('退出失败：' + String(error)) }
 }
 async function openFullSettings() {
     closePanel()
@@ -256,6 +278,7 @@ onMounted(async () => {
         store.mainDisplayMode = state.mode
     } catch (error) { console.error('无法读取主窗口状态', error) }
     await session.initialize()
+    await recording.initialize()
     await consumeRequestedMode()
 })
 watch(() => route.query.midiMode, consumeRequestedMode)
@@ -264,6 +287,7 @@ onBeforeUnmount(() => {
     unsubscribeLive?.()
     unsubscribeMidiRequest?.()
     session.dispose()
+    recording.dispose()
     clearTimeout(hideTimer)
     window.removeEventListener('keydown', keydown, true)
 })
