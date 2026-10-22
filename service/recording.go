@@ -25,6 +25,7 @@ type RecordingState struct {
 	DurationMs float64 `json:"durationMs"`
 	NoteCount  int     `json:"noteCount"`
 	Error      string  `json:"error"`
+	BackupSaved bool `json:"backupSaved"`
 }
 
 type recordingTrackKey struct {
@@ -75,6 +76,7 @@ var recording = struct {
 	software   bool
 	saving     bool
 	backupRevision uint64
+	backupSaved bool
 }{
 	status: "idle",
 	held:   make(map[recordingNoteKey]bool),
@@ -192,6 +194,7 @@ func loadRecordingDraftLocked() {
 	recording.durationUS, recording.noteCount = snap.DurationUS, snap.NoteCount
 	recording.lastError = snap.Error
 	recording.events = snap.Events
+	recording.backupSaved = true
 }
 
 func recordingStateLocked() RecordingState {
@@ -204,6 +207,7 @@ func recordingStateLocked() RecordingState {
 		Status: recording.status, DraftID: recording.id,
 		DurationMs: float64(duration) / 1000,
 		NoteCount: recording.noteCount, Error: recording.lastError,
+		BackupSaved: recording.backupSaved,
 	}
 }
 
@@ -228,6 +232,7 @@ func (k *Keyboard) StartRecording() (RecordingState, error) {
 	recording.started = time.Now()
 	recording.durationUS, recording.noteCount = 0, 0
 	recording.lastError = ""
+	recording.backupSaved = false
 	recording.events = make([]recordingInputEvent, 0, 1024)
 	recording.held = make(map[recordingNoteKey]bool)
 	recording.pedals = make(map[recordingPedalKey]uint8)
@@ -258,7 +263,7 @@ func recordingAppendLocked(track recordingTrackKey, kind, data1, data2 uint8) {
 		return
 	}
 	if len(recording.events) >= recordingEventLimit {
-		stopRecordingLocked("录制事件已达到上限，已自动停止，请保存当前草稿")
+		stopRecordingLocked("录制已达上限，草稿已保留", true)
 		return
 	}
 	recording.tracks[track] = true
@@ -346,7 +351,7 @@ func recordingSoftwareSustainLocked(enabled bool) {
 	}
 }
 
-func stopRecordingLocked(reason string) {
+func stopRecordingLocked(reason string, asyncBackup bool) {
 	if recording.status != "recording" {
 		return
 	}
@@ -369,6 +374,7 @@ func stopRecordingLocked(reason string) {
 	clear(recording.physical)
 	recording.software = false
 	recording.lastError = reason
+	recording.backupSaved = false
 	if recording.noteCount == 0 {
 		recording.status, recording.id = "idle", ""
 		recording.lastError = "录制为空，没有可保存的音符"
@@ -379,28 +385,57 @@ func stopRecordingLocked(reason string) {
 		return
 	}
 	recording.status = "draft"
+	recording.backupRevision++
+	// File serialization and disk flush must never block physical MIDI input.
+	if asyncBackup {
+		go func() { _ = persistStoppedRecording() }()
+	}
+}
+
+// Serialize an immutable draft snapshot outside inputEventsMu. The backup
+// revision fence ensures a stale checkpoint cannot overwrite a newer save.
+func persistStoppedRecording() error {
+	inputEventsMu.Lock()
+	if recording.status != "draft" || recording.noteCount == 0 {
+		inputEventsMu.Unlock()
+		return nil
+	}
 	snap := recordingSnapshot{
 		ID: recording.id, DurationUS: recording.durationUS,
 		NoteCount: recording.noteCount, Error: recording.lastError,
 		Events: recording.events,
 	}
-	recording.backupRevision++
-	if err := writeRecordingBackup(snap, recording.backupRevision); err != nil {
-		recording.lastError = "草稿未能写入本地备份，请在退出前保存：" + err.Error()
+	revision := recording.backupRevision
+	inputEventsMu.Unlock()
+	err := writeRecordingBackup(snap, revision)
+	inputEventsMu.Lock()
+	if recording.status == "draft" && recording.id == snap.ID && recording.backupRevision == revision {
+		recording.backupSaved = err == nil
+		if err != nil {
+			recording.lastError = "草稿备份失败，请保存 MIDI 后再退出：" + err.Error()
+		} else if strings.HasPrefix(recording.lastError, "草稿备份失败") {
+			recording.lastError = ""
+		}
 	}
+	inputEventsMu.Unlock()
+	return err
 }
 
-func (k *Keyboard) StopRecording() RecordingState {
+func (k *Keyboard) StopRecording() (RecordingState, error) {
 	inputEventsMu.Lock()
-	defer inputEventsMu.Unlock()
-	stopRecordingLocked("")
-	return recordingStateLocked()
+	stopRecordingLocked("", false)
+	inputEventsMu.Unlock()
+	err := persistStoppedRecording()
+	return k.GetRecordingState(), err
 }
 
 func stopRecordingForShutdown() {
 	inputEventsMu.Lock()
-	defer inputEventsMu.Unlock()
-	stopRecordingLocked("录制因退出或设备状态变化而停止")
+	stopRecordingLocked("录制因退出而停止", false)
+	inputEventsMu.Unlock()
+	if err := persistStoppedRecording(); err != nil {
+		fmt.Println("recording backup failed at shutdown:", err)
+	}
 }
 
 func recordingBytes(snap recordingSnapshot) ([]byte, error) {
@@ -565,6 +600,7 @@ func (k *Keyboard) DiscardRecording() error {
 		return fmt.Errorf("删除录制草稿失败：%w", err)
 	}
 	recording.status, recording.id, recording.lastError = "idle", "", ""
+	recording.backupSaved = false
 	recording.events = nil
 	recording.durationUS, recording.noteCount = 0, 0
 	inputEventsMu.Unlock()
@@ -670,6 +706,7 @@ func (k *Keyboard) SaveRecording(name string) (UserMidi, error) {
 			return UserMidi{}, errors.New(recording.lastError)
 		}
 		recording.status, recording.id, recording.lastError = "idle", "", ""
+		recording.backupSaved = false
 		recording.events = nil
 		recording.durationUS, recording.noteCount = 0, 0
 	}
