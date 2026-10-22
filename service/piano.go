@@ -409,6 +409,7 @@ func handleMidiMessage(deviceID int, msg midi.Message) {
 	case msg.GetNoteStart(&ch, &key, &vel):
 		midiKey := midi.Note(key).Value()
 		livePerformanceNoteOn(deviceID, ch, midiKey, vel)
+		recordingNoteOnLocked(deviceID, ch, midiKey, vel)
 		ensureSoftwareSustainChannel(ch)
 		playSelectedOutputNoteOn(ch, key, vel)
 		MidiPlayer.HandleUserNoteOn(int(midiKey))
@@ -429,6 +430,7 @@ func handleMidiMessage(deviceID int, msg midi.Message) {
 	case msg.GetNoteEnd(&ch, &key):
 		midiKey := midi.Note(key).Value()
 		livePerformanceNoteOff(deviceID, ch, midiKey)
+		recordingNoteOffLocked(deviceID, ch, midiKey)
 
 		midiMu.Lock()
 		pedal := Midis.PedalStatus[deviceID]
@@ -473,6 +475,7 @@ func handleMidiMessage(deviceID int, msg midi.Message) {
 
 func handlePedalMessage(deviceID int, channel, controller, velocity uint8) {
 	livePerformanceControlChange(deviceID, channel, controller, velocity)
+	recordingControlLocked(deviceID, channel, controller, velocity)
 	if controller != 64 && controller != 66 && controller != 67 {
 		playSelectedOutputControlChange(channel, controller, velocity)
 		return
@@ -608,6 +611,7 @@ func (k *Keyboard) SetSoftwareSustain(enabled bool) bool {
 	midiMu.Unlock()
 
 	livePerformanceSoftwareSustain(enabled)
+	recordingSoftwareSustainLocked(enabled)
 	for channel := range channels {
 		value := uint8(0)
 		if enabled || physicalChannels[channel] {
@@ -765,6 +769,7 @@ func (k *Keyboard) AllNotesOff() {
 }
 
 func (k *Keyboard) allNotesOffLocked() {
+	stopRecordingLocked("录制因清音或设备切换而停止")
 	clearLivePerformance()
 	interactiveNotes = make(map[uint8]struct {
 		Channel uint8
