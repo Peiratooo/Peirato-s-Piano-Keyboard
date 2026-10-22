@@ -522,7 +522,7 @@ func (k *Keyboard) SaveRecording(name string) (UserMidi, error) {
 		name = string([]rune(name)[:120])
 	}
 	path, err := App.Dialog.SaveFile().
-		SetTitle("保存录制 MIDI").
+		SetMessage("保存录制 MIDI").
 		SetFilename(name + ".mid").
 		AddFilter("MIDI 文件", "*.mid").
 		PromptForSingleSelection()
