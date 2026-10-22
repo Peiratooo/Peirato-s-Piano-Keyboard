@@ -37,7 +37,7 @@
                 <div class="progress-fill" aria-hidden="true" :style="{width: percent(currentValue) + '%'}"></div>
                 <div v-for="bar in visibleMeasures" :key="bar.index" class="measure-mark"
                     :class="{major: bar.major}" :style="{left: bar.percent + '%'}" aria-hidden="true">
-                    <span v-if="bar.label" class="measure-label">{{ bar.index }}</span>
+                    <span v-if="bar.label" class="measure-label">{{ bar.index - 1 }}</span>
                 </div>
                 <div class="play-head" :style="{left: percent(currentValue) + '%'}" aria-hidden="true"></div>
             </div>
@@ -58,7 +58,7 @@
             </button>
         </div>
         <p class="timeline-hint" :aria-live="dragging ? 'off' : 'polite'">
-            <span>按小节划分 · 每 5 小节加粗</span>
+            <span>{{ measures.marks.length > 1 ? "按小节划分 · 每 5 小节加粗" : "无可用小节信息" }}</span>
             <span>A {{ formatMidiTime(rangeValue[0]) }} — B {{ formatMidiTime(rangeValue[1]) }}</span>
         </p>
     </section>
@@ -125,10 +125,12 @@ const visibleMeasures = computed(() => {
         lastMajor = mark.x
     }
     const picked = [...majors]
-    let lastMinor = -100
+    let lastMinor = -100, nextMajor = 0
     for (const mark of marks) {
-        if (mark.major || mark.x - lastMinor < 3
-            || majors.some(major => Math.abs(major.x - mark.x) < 3)) continue
+        while (nextMajor < majors.length && majors[nextMajor].x < mark.x) nextMajor++
+        const nearMajor = (nextMajor > 0 && Math.abs(majors[nextMajor - 1].x - mark.x) < 3)
+            || (nextMajor < majors.length && Math.abs(majors[nextMajor].x - mark.x) < 3)
+        if (mark.major || mark.x - lastMinor < 3 || nearMajor) continue
         picked.push(mark)
         lastMinor = mark.x
     }
