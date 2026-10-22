@@ -161,13 +161,16 @@ func recordingCheckpointLoop() {
 		recording.backupRevision++
 		revision := recording.backupRevision
 		inputEventsMu.Unlock()
-		if err := writeRecordingBackup(snapshot, revision); err != nil {
-			inputEventsMu.Lock()
-			if recording.id == snapshot.ID && recording.status == "recording" {
+		err := writeRecordingBackup(snapshot, revision)
+		inputEventsMu.Lock()
+		if recording.id == snapshot.ID && recording.status == "recording" {
+			if err != nil {
 				recording.lastError = "自动草稿备份失败：" + err.Error()
+			} else if strings.HasPrefix(recording.lastError, "自动草稿备份失败") {
+				recording.lastError = ""
 			}
-			inputEventsMu.Unlock()
 		}
+		inputEventsMu.Unlock()
 	}
 }
 
@@ -182,7 +185,7 @@ func loadRecordingDraftLocked() {
 		return
 	}
 	var snap recordingSnapshot
-	if json.Unmarshal(data, &snap) != nil || snap.ID == "" || snap.NoteCount <= 0 || len(snap.Events) == 0 || len(snap.Events) > recordingEventLimit {
+	if json.Unmarshal(data, &snap) != nil || snap.ID == "" || snap.NoteCount <= 0 || len(snap.Events) == 0 || len(snap.Events) > recordingEventLimit+16384 {
 		return
 	}
 	recording.status, recording.id = "draft", snap.ID
