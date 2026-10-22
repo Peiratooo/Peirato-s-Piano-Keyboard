@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -73,6 +74,7 @@ var recording = struct {
 	physical   map[recordingTrackKey]uint8
 	software   bool
 	saving     bool
+	backupRevision uint64
 }{
 	status: "idle",
 	held:   make(map[recordingNoteKey]bool),
@@ -83,6 +85,90 @@ var recording = struct {
 
 func recordingDraftPath() string {
 	return filepath.Join(filepath.Dir(configFilePath), "recording-draft.json")
+}
+
+// Background checkpoints and finalization cannot overwrite each other out of
+// order; in-flight snapshots are sequenced against discard and final save.
+var recordingBackupMu sync.Mutex
+var recordingBackupVersion uint64
+var recordingCheckpointOnce sync.Once
+
+func writeRecordingBackup(snapshot recordingSnapshot, revision uint64) error {
+	data, err := json.Marshal(snapshot)
+	if err != nil {
+		return err
+	}
+	recordingBackupMu.Lock()
+	defer recordingBackupMu.Unlock()
+	if revision < recordingBackupVersion {
+		return nil
+	}
+	if err := writeAtomicFile(recordingDraftPath(), data, 0600); err != nil {
+		return err
+	}
+	recordingBackupVersion = revision
+	return nil
+}
+
+// Call with inputEventsMu held. Tombstone the backup version so an older
+// asynchronous checkpoint cannot recreate a discarded/saved draft.
+func removeRecordingBackupLocked() error {
+	recording.backupRevision++
+	revision := recording.backupRevision
+	recordingBackupMu.Lock()
+	defer recordingBackupMu.Unlock()
+	err := os.Remove(recordingDraftPath())
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	recordingBackupVersion = revision
+	return nil
+}
+
+// During recording a backup is a playable STOPPED snapshot: copy active notes
+// and pedal releases at the checkpoint time without changing the live session.
+func recordingCheckpointSnapshotLocked() recordingSnapshot {
+	elapsed := time.Since(recording.started).Microseconds()
+	events := append([]recordingInputEvent(nil), recording.events...)
+	for key := range recording.held {
+		events = append(events, recordingInputEvent{
+			AtUS: elapsed, Track: key.Track, Kind: 0x80, Data1: key.Note,
+		})
+	}
+	for key, value := range recording.pedals {
+		if value >= 64 {
+			events = append(events, recordingInputEvent{
+				AtUS: elapsed, Track: key.Track, Kind: 0xB0, Data1: key.Controller,
+			})
+		}
+	}
+	return recordingSnapshot{
+		ID: recording.id, DurationUS: elapsed, NoteCount: recording.noteCount,
+		Events: events, Error: "录制意外中断后恢复的自动草稿",
+	}
+}
+
+func recordingCheckpointLoop() {
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+	for range ticker.C {
+		inputEventsMu.Lock()
+		if recording.status != "recording" || recording.noteCount == 0 || recording.saving {
+			inputEventsMu.Unlock()
+			continue
+		}
+		snapshot := recordingCheckpointSnapshotLocked()
+		recording.backupRevision++
+		revision := recording.backupRevision
+		inputEventsMu.Unlock()
+		if err := writeRecordingBackup(snapshot, revision); err != nil {
+			inputEventsMu.Lock()
+			if recording.id == snapshot.ID && recording.status == "recording" {
+				recording.lastError = "自动草稿备份失败：" + err.Error()
+			}
+			inputEventsMu.Unlock()
+		}
+	}
 }
 
 // Caller holds inputEventsMu, the same lock as the real MIDI input pipeline.
@@ -146,6 +232,7 @@ func (k *Keyboard) StartRecording() (RecordingState, error) {
 	recording.physical = make(map[recordingTrackKey]uint8)
 	recording.software = false
 	recordingSoftwareSustainLocked(softwareSustain)
+	recordingCheckpointOnce.Do(func() { go recordingCheckpointLoop() })
 	// If a real damper is already pressed when recording begins, retain its
 	// initial controller state instead of waiting for the next pedal movement.
 	midiMu.RLock()
@@ -283,7 +370,9 @@ func stopRecordingLocked(reason string) {
 		recording.status, recording.id = "idle", ""
 		recording.lastError = "录制为空，没有可保存的音符"
 		recording.events = nil
-		_ = os.Remove(recordingDraftPath())
+		if err := removeRecordingBackupLocked(); err != nil {
+			recording.lastError = "清理空录制草稿失败：" + err.Error()
+		}
 		return
 	}
 	recording.status = "draft"
@@ -292,14 +381,8 @@ func stopRecordingLocked(reason string) {
 		NoteCount: recording.noteCount, Error: recording.lastError,
 		Events: recording.events,
 	}
-	data, err := json.Marshal(snap)
-	if err == nil {
-		err = os.MkdirAll(filepath.Dir(recordingDraftPath()), 0700)
-	}
-	if err == nil {
-		err = writeAtomicFile(recordingDraftPath(), data, 0600)
-	}
-	if err != nil {
+	recording.backupRevision++
+	if err := writeRecordingBackup(snap, recording.backupRevision); err != nil {
 		recording.lastError = "草稿未能写入本地备份，请在退出前保存：" + err.Error()
 	}
 }
