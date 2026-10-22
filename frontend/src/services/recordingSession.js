@@ -1,4 +1,4 @@
-import {ref} from 'vue'
+import {reactive, ref} from 'vue'
 
 const emptyState = {status: 'idle', draftId: '', durationMs: 0, noteCount: 0, error: ''}
 
@@ -119,6 +119,6 @@ export function useRecordingSession({Keyboard, onSaved}) {
         if (ticker) clearInterval(ticker)
         ticker = null
     }
-    return {state, name, durationMs, busy, previewing, initialize, refresh,
-        start, stop, preview, stopPreview, save, discard, dispose}
+    return reactive({state, name, durationMs, busy, previewing, initialize, refresh,
+        start, stop, preview, stopPreview, save, discard, dispose})
 }
