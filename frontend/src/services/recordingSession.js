@@ -11,6 +11,7 @@ export function useRecordingSession({Keyboard, onSaved}) {
     let clockStart = 0
     let ticker = null
     let pollCount = 0
+    let refreshVersion = 0
     let disposed = false
 
     function applyState(next) {
@@ -27,8 +28,9 @@ export function useRecordingSession({Keyboard, onSaved}) {
     }
 
     async function refresh() {
+        const version = ++refreshVersion
         const current = await Keyboard.GetRecordingState()
-        applyState(current)
+        if (version === refreshVersion) applyState(current)
         return current
     }
 
@@ -41,7 +43,7 @@ export function useRecordingSession({Keyboard, onSaved}) {
                 durationMs.value = Math.max(durationMs.value, Date.now() - clockStart)
             }
             pollCount++
-            if (pollCount % 4 === 0 && state.value.status === 'recording') {
+            if (pollCount % 4 === 0 && state.value.status === 'recording' && !busy.value) {
                 refresh().catch(error => report('录制状态同步失败', error))
             }
         }, 500)
@@ -116,6 +118,7 @@ export function useRecordingSession({Keyboard, onSaved}) {
     }
     function dispose() {
         disposed = true
+        ++refreshVersion
         if (ticker) clearInterval(ticker)
         ticker = null
     }
