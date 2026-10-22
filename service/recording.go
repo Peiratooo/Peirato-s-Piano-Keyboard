@@ -70,12 +70,15 @@ var recording = struct {
 	held       map[recordingNoteKey]bool
 	pedals     map[recordingPedalKey]uint8
 	tracks     map[recordingTrackKey]bool
+	physical   map[recordingTrackKey]uint8
+	software   bool
 	saving     bool
 }{
 	status: "idle",
 	held:   make(map[recordingNoteKey]bool),
 	pedals: make(map[recordingPedalKey]uint8),
 	tracks: make(map[recordingTrackKey]bool),
+	physical: make(map[recordingTrackKey]uint8),
 }
 
 func recordingDraftPath() string {
@@ -140,6 +143,9 @@ func (k *Keyboard) StartRecording() (RecordingState, error) {
 	recording.held = make(map[recordingNoteKey]bool)
 	recording.pedals = make(map[recordingPedalKey]uint8)
 	recording.tracks = make(map[recordingTrackKey]bool)
+	recording.physical = make(map[recordingTrackKey]uint8)
+	recording.software = false
+	recordingSoftwareSustainLocked(softwareSustain)
 	return recordingStateLocked(), nil
 }
 
@@ -196,6 +202,16 @@ func recordingControlLocked(deviceID int, channel, controller, value uint8) {
 		return
 	}
 	track := recordingTrackKey{deviceID, channel}
+	if controller == 64 {
+		recording.physical[track] = value
+		if recording.software && value < 64 {
+			value = 127
+		}
+	}
+	recordingEmitControlLocked(track, controller, value)
+}
+
+func recordingEmitControlLocked(track recordingTrackKey, controller, value uint8) {
 	key := recordingPedalKey{track, controller}
 	if recording.pedals[key] == value {
 		return
@@ -210,16 +226,16 @@ func recordingSoftwareSustainLocked(enabled bool) {
 	if recording.status != "recording" {
 		return
 	}
-	value := uint8(0)
-	if enabled {
-		value = 127
-	}
+	recording.software = enabled
 	channel := GetUserConfig().MidiChannel
-	recordingControlLocked(interactiveDeviceID, channel, 64, value)
+	interactive := recordingTrackKey{interactiveDeviceID, channel}
+	recording.tracks[interactive] = true
 	for track := range recording.tracks {
-		if track.DeviceID != interactiveDeviceID {
-			recordingControlLocked(track.DeviceID, track.Channel, 64, value)
+		value := recording.physical[track]
+		if enabled && value < 64 {
+			value = 127
 		}
+		recordingEmitControlLocked(track, 64, value)
 	}
 }
 
@@ -243,6 +259,8 @@ func stopRecordingLocked(reason string) {
 	}
 	clear(recording.held)
 	clear(recording.pedals)
+	clear(recording.physical)
+	recording.software = false
 	recording.lastError = reason
 	if recording.noteCount == 0 {
 		recording.status, recording.id = "idle", ""
@@ -342,7 +360,12 @@ func recordingBytes(snap recordingSnapshot) ([]byte, error) {
 	// Tempo track: 120 BPM and explicit end-of-track.
 	writeRecordingChunk(out, []byte{0, 0xff, 0x51, 3, 7, 0xa1, 0x20, 0, 0xff, 0x2f, 0})
 	for _, t := range tracks {
-		t.data.Write([]byte{0, 0xff, 0x2f, 0})
+		endTick := uint64((snap.DurationUS*recordingPPQ + recordingTempoUS/2) / recordingTempoUS)
+		if endTick < t.last {
+			endTick = t.last
+		}
+		writeRecordingVLQ(&t.data, endTick-t.last)
+		t.data.Write([]byte{0xff, 0x2f, 0})
 		writeRecordingChunk(out, t.data.Bytes())
 	}
 	return out.Bytes(), nil
@@ -437,7 +460,9 @@ func (k *Keyboard) DiscardRecording() error {
 	recording.durationUS, recording.noteCount = 0, 0
 	inputEventsMu.Unlock()
 	_ = k.StopRecordingPreview()
-	return os.Remove(recordingDraftPath())
+	err := os.Remove(recordingDraftPath())
+	if os.IsNotExist(err) { return nil }
+	return err
 }
 
 func (k *Keyboard) SaveRecording(name string) (UserMidi, error) {
@@ -474,7 +499,7 @@ func (k *Keyboard) SaveRecording(name string) (UserMidi, error) {
 	if name == "" {
 		name = "自由演奏-" + time.Now().Format("20060102-150405")
 	}
-	name = strings.TrimSuffix(name, ".mid")
+	if strings.EqualFold(filepath.Ext(name), ".mid") { name = name[:len(name)-4] }
 	if len([]rune(name)) > 120 {
 		name = string([]rune(name)[:120])
 	}
