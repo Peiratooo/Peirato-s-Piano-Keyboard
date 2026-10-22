@@ -281,6 +281,7 @@ func stopRecordingLocked(reason string) {
 	recording.lastError = reason
 	if recording.noteCount == 0 {
 		recording.status, recording.id = "idle", ""
+		recording.lastError = "录制为空，没有可保存的音符"
 		recording.events = nil
 		_ = os.Remove(recordingDraftPath())
 		return
