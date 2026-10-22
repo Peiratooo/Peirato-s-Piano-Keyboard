@@ -769,7 +769,7 @@ func (k *Keyboard) AllNotesOff() {
 }
 
 func (k *Keyboard) allNotesOffLocked() {
-	stopRecordingLocked("录制因清音或设备切换而停止")
+	stopRecordingLocked("录制因清音或设备切换而停止", true)
 	clearLivePerformance()
 	interactiveNotes = make(map[uint8]struct {
 		Channel uint8
