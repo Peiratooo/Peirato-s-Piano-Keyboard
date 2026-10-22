@@ -58,7 +58,7 @@
             </button>
         </div>
         <p class="timeline-hint" :aria-live="dragging ? 'off' : 'polite'">
-            <span>{{ measures.marks.length > 1 ? "按小节划分 · 每 5 小节加粗" : "无可用小节信息" }}</span>
+            <span>{{ hasMeasureGrid ? "小节吸附 · 每 5 小节加粗 · Alt 精确拖动" : "自由选取区间 · 无可用小节边界" }}</span>
             <span>A {{ formatMidiTime(rangeValue[0]) }} — B {{ formatMidiTime(rangeValue[1]) }}</span>
         </p>
     </section>
@@ -110,6 +110,8 @@ const measures = computed(() => {
     return {marks, times: times.filter((value, index) => index === 0 || value > times[index - 1] + .001)}
 })
 
+const hasMeasureGrid = computed(() => measures.value.times.length > 2)
+
 // Render at the available pixel density, preserving strong 5-bar lines.
 // Snapping still uses *all* actual measure boundaries, including hidden lines.
 const visibleMeasures = computed(() => {
@@ -148,7 +150,9 @@ function fromPointer(event) {
     if (!rect || rect.width <= 0) return 0
     return clamp((event.clientX - rect.left) / rect.width * duration.value, 0, duration.value)
 }
-function nearestMeasure(value, lower, upper) {
+function nearestMeasure(value, lower, upper, precise = false) {
+    const safe = clamp(value, lower, upper)
+    if (precise || !hasMeasureGrid.value) return safe
     const times = measures.value.times
     let lo = 0, hi = times.length
     while (lo < hi) {
@@ -219,8 +223,8 @@ function moveRange(side, event) {
     const next = rangeDraft.value?.slice()
     if (!next) return
     const minimumGap = Math.min(1, duration.value)
-    if (side === 'A') next[0] = nearestMeasure(fromPointer(event), 0, next[1] - minimumGap)
-    else next[1] = nearestMeasure(fromPointer(event), next[0] + minimumGap, duration.value)
+    if (side === 'A') next[0] = nearestMeasure(fromPointer(event), 0, next[1] - minimumGap, event.altKey)
+    else next[1] = nearestMeasure(fromPointer(event), next[0] + minimumGap, duration.value, event.altKey)
     rangeDraft.value = next
 }
 async function finishRange(side, event) {
@@ -245,8 +249,14 @@ function seekByKeyboard(event) {
     const times = measures.value.times
     const min = rangeValue.value[0], max = rangeValue.value[1]
     let target = event.key === 'Home' ? min : event.key === 'End' ? max : currentValue.value
-    if (event.key === 'ArrowRight') target = times.find(ms => ms > currentValue.value + .5 && ms <= max) ?? max
-    if (event.key === 'ArrowLeft') target = times.slice().reverse().find(ms => ms < currentValue.value - .5 && ms >= min) ?? min
+    if (hasMeasureGrid.value) {
+        if (event.key === 'ArrowRight') target = times.find(ms => ms > currentValue.value + .5 && ms <= max) ?? max
+        if (event.key === 'ArrowLeft') target = times.slice().reverse().find(ms => ms < currentValue.value - .5 && ms >= min) ?? min
+    } else {
+        const step = Math.max(10, duration.value / 100)
+        if (event.key === 'ArrowRight') target = clamp(currentValue.value + step, min, max)
+        if (event.key === 'ArrowLeft') target = clamp(currentValue.value - step, min, max)
+    }
     void props.session.seek(target)
 }
 function rangeByKeyboard(side, event) {
@@ -259,6 +269,15 @@ function rangeByKeyboard(side, event) {
     const lower = side === 'A' ? 0 : range[0] + minGap
     const upper = side === 'A' ? range[1] - minGap : duration.value
     let target = range[index]
+    if (!hasMeasureGrid.value || event.altKey) {
+        const step = Math.max(10, duration.value / 100)
+        if (event.key === 'Home') target = lower
+        if (event.key === 'End') target = upper
+        if (event.key === 'ArrowRight') target = clamp(target + step, lower, upper)
+        if (event.key === 'ArrowLeft') target = clamp(target - step, lower, upper)
+        if (target !== range[index]) { range[index] = target; void props.session.setRange(range[0], range[1]) }
+        return
+    }
     if (event.key === 'Home') target = nearestMeasure(lower, lower, upper)
     if (event.key === 'End') target = nearestMeasure(upper, lower, upper)
     if (event.key === 'ArrowRight') target = nearestMeasure(target + Math.max(1, duration.value / 1000), Math.min(target + .001, upper), upper)
