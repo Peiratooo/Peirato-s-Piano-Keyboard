@@ -9,7 +9,7 @@ import (
 
 const (
 	defaultMidiWindowMs = 100.0
-	playerTickInterval  = 1 * time.Millisecond
+	playerTickInterval  = 4 * time.Millisecond
 	stateEmitInterval   = 50 * time.Millisecond
 )
 
@@ -213,12 +213,12 @@ func (p *MidiPlayerRuntime) Start(midiFile *Midi, options MidiPlaybackOptions) e
 		p.state.CurrentStep = cloneMidiPracticeStep(&followSteps[p.followIndex])
 	}
 
+	clearMidiPlaybackOutput()
+	emitMidiVisualClear()
+	p.restoreAtLocked(startMs)
 	p.startLocked()
 	state := p.state
 	p.mu.Unlock()
-
-	AllSynthNotesOff()
-	emitMidiVisualClear()
 	emitMidiPlayerState(state)
 	return nil
 }
@@ -273,9 +273,10 @@ func (p *MidiPlayerRuntime) Tick() {
 		if p.state.Loop {
 			p.resetToRangeStartLocked()
 			state = p.state
-			p.mu.Unlock()
-			AllSynthNotesOff()
+			clearMidiPlaybackOutput()
 			emitMidiVisualClear()
+			p.restoreAtLocked(p.state.LeftMs)
+			p.mu.Unlock()
 			emitMidiPlayerState(state)
 			return
 		} else {
@@ -284,7 +285,7 @@ func (p *MidiPlayerRuntime) Tick() {
 			p.resetToRangeStartLocked()
 			state = p.state
 			p.mu.Unlock()
-			AllSynthNotesOff()
+			clearMidiPlaybackOutput()
 			emitMidiVisualClear()
 			emitMidiPlayerState(state)
 			return
@@ -566,7 +567,7 @@ func (p *MidiPlayerRuntime) Pause() error {
 	p.baseMs = p.state.CurrentMs
 	p.baseTime = time.Now()
 	p.stopLocked()
-	AllSynthNotesOff()
+	clearMidiPlaybackOutput()
 	emitMidiVisualClear()
 	emitMidiPlayerState(p.state)
 	return nil
@@ -581,6 +582,7 @@ func (p *MidiPlayerRuntime) Resume() error {
 	p.baseMs = p.state.CurrentMs
 	p.baseTime = time.Now()
 	p.state.Status = MidiPlayPlaying
+	p.restoreAtLocked(p.state.CurrentMs)
 	// Pause clears visual hints but preserves accepted notes. Restore the active
 	// step before releasing the lock so the resumed ticker cannot overtake it.
 	if p.state.Mode == MidiPlaybackModeFollow && p.hintActive && p.followIndex < len(p.followSteps) {
@@ -595,7 +597,7 @@ func (p *MidiPlayerRuntime) Stop() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.stopLocked()
-	AllSynthNotesOff()
+	clearMidiPlaybackOutput()
 	emitMidiVisualClear()
 	p.state.Status = MidiPlayIdle
 	p.resetToRangeStartLocked()
@@ -618,7 +620,7 @@ func (p *MidiPlayerRuntime) Reset() error {
 	state := p.state
 	p.mu.Unlock()
 
-	AllSynthNotesOff()
+	clearMidiPlaybackOutput()
 	emitMidiVisualClear()
 	emitMidiPlayerState(state)
 	return nil
@@ -628,7 +630,7 @@ func (p *MidiPlayerRuntime) Seek(ms float64) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	ms = clampFloat(ms, p.state.LeftMs, p.state.RightMs)
-	AllSynthNotesOff()
+	clearMidiPlaybackOutput()
 	emitMidiVisualClear()
 	p.state.CurrentMs = ms
 	p.state.Waiting = false
@@ -643,6 +645,9 @@ func (p *MidiPlayerRuntime) Seek(ms float64) error {
 	}
 	p.baseMs = ms
 	p.baseTime = time.Now()
+	if p.state.Status == MidiPlayPlaying {
+		p.restoreAtLocked(ms)
+	}
 	emitMidiPlayerState(p.state)
 	return nil
 }
@@ -707,7 +712,7 @@ func (p *MidiPlayerRuntime) SetOptions(options MidiPlaybackOptions) error {
 
 	currentMs = clampFloat(currentMs, options.LeftMs, options.RightMs)
 
-	AllSynthNotesOff()
+	clearMidiPlaybackOutput()
 	emitMidiVisualClear()
 
 	p.state.MidiID = options.MidiID
@@ -736,7 +741,9 @@ func (p *MidiPlayerRuntime) SetOptions(options MidiPlaybackOptions) error {
 	p.eventIndex = findMidiEventIndexByMs(p.events, currentMs)
 	p.baseMs = currentMs
 	p.baseTime = time.Now()
-
+	if p.state.Status == MidiPlayPlaying {
+		p.restoreAtLocked(currentMs)
+	}
 	emitMidiPlayerState(p.state)
 	return nil
 }
@@ -765,7 +772,7 @@ func (p *MidiPlayerRuntime) SetTrackMuted(trackIndex int, muted bool) error {
 	}
 	p.state.MutedTracks[trackIndex] = muted
 	if muted {
-		AllSynthNotesOff()
+		clearMidiPlaybackOutput()
 		emitMidiVisualClear()
 	}
 	emitMidiPlayerState(p.state)
@@ -780,7 +787,7 @@ func (p *MidiPlayerRuntime) SetHandMuted(hand MidiHand, muted bool) error {
 	}
 	p.state.MutedHands[hand] = muted
 	if muted {
-		AllSynthNotesOff()
+		clearMidiPlaybackOutput()
 		emitMidiVisualClear()
 	}
 	emitMidiPlayerState(p.state)
@@ -851,6 +858,102 @@ func (p *MidiPlayerRuntime) loop(ticker *time.Ticker, stopCh <-chan struct{}) {
 		}
 	}
 }
+
+// Reconstruct only the notes and MIDI channel state that are alive at the
+// requested song position. Old attacks are not played as a historical stream.
+// This is called on transport changes, never for each render/audio tick.
+type midiRestoreNoteKey struct {
+	track, channel, note int
+}
+
+func (p *MidiPlayerRuntime) restoreAtLocked(ms float64) {
+	if p.state.Status != MidiPlayPlaying || len(p.events) == 0 {
+		return
+	}
+	active := make(map[midiRestoreNoteKey]MidiEvent)
+	sustained := make(map[midiRestoreNoteKey]MidiEvent)
+	controllers := make(map[int]map[int]int)
+	programs := make(map[int]int)
+	sustain := make(map[int]bool)
+	for _, event := range p.events[:findMidiEventIndexByMs(p.events, ms)] {
+		if event.Channel < 0 || event.Channel > 15 || p.state.MutedTracks[event.TrackIndex] {
+			continue
+		}
+		ch := event.Channel
+		switch event.Type {
+		case MidiEventControlChange:
+			if controllers[ch] == nil {
+				controllers[ch] = make(map[int]int)
+			}
+			controllers[ch][event.Controller] = event.Value
+			switch event.Controller {
+			case 64:
+				sustain[ch] = event.Value >= 64
+				if !sustain[ch] {
+					for key := range sustained {
+						if key.channel == ch {
+							delete(sustained, key)
+						}
+					}
+				}
+			case 120, 123:
+				for key := range active {
+					if key.channel == ch {
+						delete(active, key)
+					}
+				}
+				for key := range sustained {
+					if key.channel == ch {
+						delete(sustained, key)
+					}
+				}
+			case 121:
+				controllers[ch] = make(map[int]int)
+				sustain[ch] = false
+				for key := range sustained {
+					if key.channel == ch {
+						delete(sustained, key)
+					}
+				}
+			}
+		case MidiEventProgramChange:
+			programs[ch] = event.Program
+		case MidiEventNoteOn, MidiEventNoteOff:
+			if p.shouldMuteEventLocked(event) || event.Note < 0 || event.Note > 127 {
+				continue
+			}
+			key := midiRestoreNoteKey{event.TrackIndex, ch, event.Note}
+			if event.Type == MidiEventNoteOn && event.Velocity > 0 {
+				active[key] = event
+				delete(sustained, key)
+			} else if original, ok := active[key]; ok {
+				delete(active, key)
+				if sustain[ch] {
+					sustained[key] = original
+				}
+			}
+		}
+	}
+	for ch := 0; ch < 16; ch++ {
+		if program, ok := programs[ch]; ok {
+			playSelectedOutputProgramChange(uint8(ch), uint8(clampMidiByte(program)))
+		}
+		for controller := 0; controller <= 119; controller++ {
+			if value, ok := controllers[ch][controller]; ok {
+				playSelectedOutputControlChange(uint8(ch), uint8(controller), uint8(clampMidiByte(value)))
+			}
+		}
+	}
+	for _, note := range sustained {
+		playSelectedOutputNoteOn(uint8(note.Channel), uint8(note.Note), uint8(clampMidiByte(note.Velocity)))
+		playSelectedOutputNoteOff(uint8(note.Channel), uint8(note.Note))
+	}
+	for _, note := range active {
+		playSelectedOutputNoteOn(uint8(note.Channel), uint8(note.Note), uint8(clampMidiByte(note.Velocity)))
+		emitMidiPlaybackKey(note, uint8(note.Channel), true)
+	}
+}
+
 func findMidiEventIndexByMs(events []MidiEvent, ms float64) int {
 	return sort.Search(len(events), func(i int) bool {
 		return events[i].Ms >= ms

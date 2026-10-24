@@ -1,8 +1,8 @@
 import {reactive, ref} from 'vue'
 
-const emptyState = {status: 'idle', draftId: '', durationMs: 0, noteCount: 0, error: ''}
+const emptyState = {status: 'idle', draftId: '', durationMs: 0, noteCount: 0, error: '', backupSaved: false}
 
-export function useRecordingSession({Keyboard, onSaved}) {
+export function useRecordingSession({Keyboard, onSaved, getPlayerState}) {
     const state = ref({...emptyState})
     const name = ref('')
     const durationMs = ref(0)
@@ -13,6 +13,7 @@ export function useRecordingSession({Keyboard, onSaved}) {
     let pollCount = 0
     let refreshVersion = 0
     let disposed = false
+    let previewStartTime = 0
 
     function applyState(next) {
         if (disposed || !next) return
@@ -41,6 +42,12 @@ export function useRecordingSession({Keyboard, onSaved}) {
             if (disposed) return
             if (state.value.status === 'recording') {
                 durationMs.value = Math.max(durationMs.value, Date.now() - clockStart)
+            }
+            if (previewing.value && Date.now() - previewStartTime > 700) {
+                const player = getPlayerState?.()
+                if (player?.midiId?.startsWith('recording:') && player.status === 'idle') {
+                    previewing.value = false
+                }
             }
             pollCount++
             if (pollCount % 4 === 0 && state.value.status === 'recording' && !busy.value) {
@@ -72,7 +79,8 @@ export function useRecordingSession({Keyboard, onSaved}) {
         })
     }
     async function stop() {
-        if (state.value.status !== 'recording') return true
+        if (state.value.status !== 'recording'
+            && !(state.value.status === 'draft' && !state.value.backupSaved)) return true
         return operation('无法停止录制', async () => {
             await Keyboard.StopRecording()
         })
@@ -80,6 +88,7 @@ export function useRecordingSession({Keyboard, onSaved}) {
     async function preview() {
         return operation('无法试听录制', async () => {
             await Keyboard.PreviewRecording()
+            previewStartTime = Date.now()
             previewing.value = true
         })
     }

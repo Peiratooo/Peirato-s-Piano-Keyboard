@@ -9,7 +9,7 @@
         <NInput v-model:value="search" placeholder="搜索曲目" clearable size="small" aria-label="搜索曲目">
             <template #prefix><PhMagnifyingGlass :size="16" /></template>
         </NInput>
-        <div class="library-scroll" :aria-busy="session.loading">
+        <NScrollbar class="library-scroll" trigger="hover" :aria-busy="session.loading">
             <div v-for="song in filteredSongs" :key="song.id" class="song-row" :class="{selected: song.id === session.selectedId}">
                 <NButton quaternary class="song-select" :aria-pressed="song.id === session.selectedId" @click="choose(song.id)">
                     <template #icon><PhMusicNote :size="19" /></template>
@@ -26,14 +26,14 @@
                 <span>{{ search ? '没有匹配的曲目' : '导入 MIDI，开始播放或跟弹' }}</span>
                 <NButton v-if="!search" size="small" secondary :loading="session.importing" @click="importSong">选择 MIDI 文件</NButton>
             </div>
-        </div>
+        </NScrollbar>
         <footer>选择曲目后，点击播放或开始练习。</footer>
     </section>
 </template>
 
 <script setup>
 import {computed, ref} from 'vue'
-import {NButton, NInput, NPopconfirm} from 'naive-ui'
+import {NButton, NInput, NPopconfirm, NScrollbar} from 'naive-ui'
 import {PhCheck, PhMagnifyingGlass, PhMusicNote, PhMusicNotes, PhTrash, PhUploadSimple} from '@phosphor-icons/vue'
 import {formatMidiTime} from '../services/midiSession'
 const props = defineProps({session: {type: Object, required: true}})
@@ -55,7 +55,10 @@ header, header > div { display: flex; align-items: center; gap: 9px; }
 header { justify-content: space-between; margin-bottom: 16px; }
 h2 { font-size: 15px; font-weight: 550; }
 header span { font-size: 11px; color: #939393; }
-.library-scroll { flex: 1; min-height: 0; margin: 12px -5px 0; max-height: min(350px, 44vh); overflow: auto; scrollbar-width: thin; }
+.library-scroll { flex: 1; min-height: 0; margin: 12px -5px 0; max-height: min(350px, 44vh); }
+.library-scroll :deep(.n-scrollbar-rail.n-scrollbar-rail--vertical) { width: 6px; right: 1px; }
+.library-scroll :deep(.n-scrollbar-rail .n-scrollbar-rail__scrollbar) { border-radius: 6px; background: #a6a6a65e; }
+.library-scroll :deep(.n-scrollbar-rail:hover .n-scrollbar-rail__scrollbar) { background: #bcbcbc99; }
 .song-row { display: flex; align-items: center; gap: 3px; padding: 2px 4px; border-radius: 7px; margin: 2px 0; }
 .song-row.selected { background: var(--ui-accent-soft, #ffffff0c); }
 .song-select { flex: 1; min-width: 0; height: 58px; justify-content: flex-start; padding: 8px !important; }
