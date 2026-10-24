@@ -3,7 +3,7 @@
 </template>
 
 <script setup>
-import {onBeforeUnmount, onMounted, ref, watch} from 'vue'
+import {computed, onBeforeUnmount, onMounted, ref, watch} from 'vue'
 import {getLivePerformanceFrame, subscribeLivePerformance} from '../services/livePerformance'
 
 const props = defineProps({
@@ -19,6 +19,7 @@ let frameRequest = 0
 let context = null
 let mounted = false
 let unsubscribe = null
+const keyLookup = computed(() => new Map(props.layout.map(key => [key.note, key])))
 
 function noteColor(isBlack) {
     const value = props.colors[isBlack ? 'blackKey' : 'whiteKey']
@@ -85,7 +86,7 @@ function render(now) {
     context.fillStyle = background
     context.fillRect(0, 0, width, height)
 
-    const keys = new Map(props.layout.map(key => [key.note, key]))
+    const keys = keyLookup.value
     for (const key of props.layout) {
         if (key.isBlack) continue
         context.strokeStyle = key.note % 12 === 0 ? 'rgba(235,235,235,.13)' : 'rgba(235,235,235,.045)'
@@ -118,31 +119,31 @@ function render(now) {
     context.moveTo(0, height - .5)
     context.lineTo(width, height - .5)
     context.stroke()
+    // Nothing visible: suspend rAF until an input event arrives.
+    return frame.notes.length > 0
 }
 
 function tick(now) {
     frameRequest = 0
     if (!props.active || !mounted) return
-    render(now)
-    frameRequest = requestAnimationFrame(tick)
+    if (render(now)) frameRequest = requestAnimationFrame(tick)
 }
 
 function syncAnimation() {
     if (frameRequest) cancelAnimationFrame(frameRequest)
     frameRequest = 0
-    if (mounted && props.active) {
-        render(performance.now())
+    if (mounted && props.active && render(performance.now())) {
         frameRequest = requestAnimationFrame(tick)
     }
 }
 
 watch(() => [props.width, props.height], () => {
     resizeCanvas()
-    if (props.active) render(performance.now())
+    if (props.active) syncAnimation()
 })
 watch(() => props.active, syncAnimation)
 watch(() => [props.layout, props.colors], () => {
-    if (props.active) render(performance.now())
+    if (props.active) syncAnimation()
 }, {deep: true})
 
 onMounted(() => {

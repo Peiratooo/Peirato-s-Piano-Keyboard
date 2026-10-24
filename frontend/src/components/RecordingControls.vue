@@ -9,19 +9,22 @@
         </div>
         <template v-else-if="recording.state.status === 'draft'">
             <template v-if="simple">
-                <span class="draft-label">录制草稿待保存</span>
-                <NButton size="small" @click="$emit('show-draft')">返回瀑布视图</NButton>
+                <span class="draft-label">录制草稿</span>
+                <NButton size="small" @click="$emit('show-draft')">查看</NButton>
             </template>
             <template v-else>
                 <div class="draft-heading">
-                    <span>录制完成 · {{ formatTime(recording.state.durationMs) }} · {{ recording.state.noteCount }} 个音符</span>
+                    <span>草稿 · {{ formatTime(recording.state.durationMs) }} · {{ recording.state.noteCount }} 音</span>
+                    <span class="backup-label" :class="{unsafe: !recording.state.backupSaved}" :title="recording.state.backupSaved ? '草稿已备份，可以退出后恢复' : '本次录制尚未完整备份，请先保存 MIDI'">
+                        {{ recording.state.backupSaved ? '已备份' : '未备份' }}
+                    </span>
                 </div>
                 <div class="draft-actions">
                     <NInput v-model:value="recording.name" size="small" maxlength="120" placeholder="录制名称（可留空）"
                         aria-label="录制名称" :disabled="recording.busy"/>
                     <NButton v-if="!recording.previewing" size="small" :disabled="recording.busy" @click="recording.preview">试听</NButton>
                     <NButton v-else size="small" :disabled="recording.busy" @click="recording.stopPreview">停止试听</NButton>
-                    <NButton size="small" type="primary" :loading="recording.busy" @click="recording.save">保存 MIDI</NButton>
+                    <NButton size="small" type="primary" title="保存 MIDI" :loading="recording.busy" @click="recording.save">保存</NButton>
                     <NPopconfirm positive-text="放弃录制" negative-text="保留草稿"
                         :positive-button-props="{type: 'error'}" @positive-click="recording.discard">
                         <template #trigger>
@@ -33,7 +36,7 @@
             </template>
         </template>
         <NButton v-else size="small" secondary :disabled="recording.busy" @click="recording.start">
-            <span class="recording-empty-dot"></span>开始录制
+            <span class="recording-empty-dot"></span>录制
         </NButton>
         <div v-if="recording.state.error && !simple" class="recording-warning" role="status">
             {{ recording.state.error }}
@@ -71,7 +74,9 @@ function formatTime(milliseconds) {
 .recording-indicator { animation: recording-pulse 1.1s ease-in-out infinite; }
 .recording-clock { font-variant-numeric: tabular-nums; font-size: 13px; font-weight: 600; }
 .recording-label { white-space: nowrap; }
-.draft-heading { color: #c5c5c5; padding: 1px 3px; }
+.draft-heading { display: flex; justify-content: space-between; align-items: center; gap: 14px; color: #c5c5c5; padding: 1px 3px; }
+.backup-label { font-size: 10px; color: #aaa; white-space: nowrap; }
+.backup-label.unsafe { color: #efb1b5; }
 .draft-actions { display: flex; align-items: center; gap: 6px; }
 .draft-actions :deep(.n-input) { width: 200px; min-width: 120px; }
 .recording-warning { color: #efb1b5; line-height: 1.5; max-width: 410px; }

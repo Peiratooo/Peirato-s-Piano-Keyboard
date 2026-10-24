@@ -143,11 +143,14 @@ function render(now) {
     context.lineTo(props.width, props.height - .5)
     context.stroke()
 }
+function isAnimating() {
+    return clock.state.status === 'playing' && !clock.state.waiting
+}
 function tick(now) {
     frameRequest = 0
     if (!mounted || !props.active) return
     render(now)
-    frameRequest = requestAnimationFrame(tick)
+    if (isAnimating()) frameRequest = requestAnimationFrame(tick)
 }
 function syncAnimation() {
     if (frameRequest) cancelAnimationFrame(frameRequest)
@@ -155,10 +158,14 @@ function syncAnimation() {
     if (mounted && props.active) {
         captureClock()
         render(performance.now())
-        frameRequest = requestAnimationFrame(tick)
+        if (isAnimating()) frameRequest = requestAnimationFrame(tick)
     }
 }
-watch(() => props.playerState, captureClock, {deep: true})
+watch(() => props.playerState, () => {
+    captureClock()
+    if (!mounted || !props.active) return
+    if (!isAnimating() || !frameRequest) syncAnimation()
+}, {deep: true})
 watch(() => props.active, syncAnimation)
 watch(() => [props.width, props.height], () => { resize(); if (props.active) render(performance.now()) })
 watch(() => [props.timeline, props.layout, props.colors], () => { if (props.active) render(performance.now()) })

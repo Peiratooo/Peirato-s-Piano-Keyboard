@@ -39,7 +39,7 @@
         <div v-show="isMidi && !isSimple" ref="midiControlsRef" class="midi-workspace-controls" data-piano-control>
             <div class="midi-options-row">
                 <NButton class="library-toggle" :type="panel === 'library' ? 'primary' : 'default'" size="small" :aria-expanded="panel === 'library'" @click="openPanel('library')">
-                    <template #icon><PhMusicNotes :size="18" /></template>曲库 / 导入
+                    <template #icon><PhMusicNotes :size="18" /></template>曲库
                 </NButton>
                 <MidiPracticeControls :session="session" />
             </div>
@@ -51,7 +51,6 @@
                 <button class="menu-close" type="button" aria-label="收起菜单" @click="closePanel"><PhX :size="17" /></button>
                 <PhPianoKeys class="menu-mark" :size="36" weight="light" />
                 <h1>Peirato’s Piano</h1>
-                <p class="menu-description">{{ isMidi ? '播放与跟弹' : '自由演奏' }}</p>
                 <button class="start-playing" type="button" @click="startFreePlay"><PhPlay :size="17" weight="fill" />{{ isMidi ? '自由演奏' : '开始弹奏' }}<PhArrowRight :size="18" /></button>
                 <div class="menu-links">
                     <button type="button" @click="changeMode('play')"><PhMusicNotes :size="20" /><span>MIDI 播放</span><PhArrowRight :size="16" /></button>
@@ -115,7 +114,7 @@ const Keyboard = inject('Keyboard')
 const route = useRoute()
 const router = useRouter()
 const session = useMidiSession({store, Keyboard})
-const recording = useRecordingSession({Keyboard, onSaved: async song => {
+const recording = useRecordingSession({Keyboard, getPlayerState: () => store.midiPlayerState, onSaved: async song => {
     await session.refreshLibrary()
     if (song?.id) await session.selectSong(song.id)
 }})
@@ -201,9 +200,8 @@ async function changeMode(mode) {
         if (mode !== 'free' && recording.state.status === 'recording') {
             if (!await recording.stop()) return false
         }
-        if (mode !== 'free' && recording.state.status === 'draft') {
-            if (!window.confirm('录制草稿尚未保存。切换模式后草稿仍会保留，返回自由演奏可保存或放弃。确定切换？')) return false
-        }
+        if (mode !== 'free' && recording.state.status === 'draft'
+            && !recording.state.backupSaved && !await recording.stop()) return false
         if (mode !== 'free' && recording.previewing && !await recording.stopPreview()) return false
         if (mode !== 'free' && isSimple.value && !await setDisplayMode('waterfall')) return false
         await session.initialize()
@@ -227,10 +225,20 @@ async function consumeRequestedMode() {
     }
 }
 async function requestQuit() {
-    if (recording.state.status === 'recording' || recording.state.status === 'draft') {
-        if (!window.confirm('当前录制或草稿尚未保存为 MIDI。退出时会保留草稿供下次恢复，确定退出？')) return
+    if (recording.state.status === 'recording'
+        || (recording.state.status === 'draft' && !recording.state.backupSaved)) {
+        if (!await recording.stop()) {
+            window.$message?.error('草稿未备份，请先保存 MIDI')
+            return
+        }
     }
-    if (recording.state.status === 'recording' && !await recording.stop()) return
+    if (recording.state.status === 'draft') {
+        if (!recording.state.backupSaved) {
+            window.$message?.error('草稿尚未备份，请先保存 MIDI')
+            return
+        }
+        if (!window.confirm('录制草稿将保留，下次可继续保存。确定退出？')) return
+    }
     try { await Keyboard.Quit() } catch (error) { window.$message?.error('退出失败：' + String(error)) }
 }
 async function openFullSettings() {

@@ -20,11 +20,12 @@ const (
 )
 
 type RecordingState struct {
-	Status     string  `json:"status"`
-	DraftID    string  `json:"draftId"`
-	DurationMs float64 `json:"durationMs"`
-	NoteCount  int     `json:"noteCount"`
-	Error      string  `json:"error"`
+	Status      string  `json:"status"`
+	DraftID     string  `json:"draftId"`
+	DurationMs  float64 `json:"durationMs"`
+	NoteCount   int     `json:"noteCount"`
+	Error       string  `json:"error"`
+	BackupSaved bool    `json:"backupSaved"`
 }
 
 type recordingTrackKey struct {
@@ -43,11 +44,11 @@ type recordingPedalKey struct {
 }
 
 type recordingInputEvent struct {
-	AtUS       int64             `json:"atUs"`
-	Track      recordingTrackKey `json:"track"`
-	Kind       uint8             `json:"kind"`
-	Data1      uint8             `json:"data1"`
-	Data2      uint8             `json:"data2"`
+	AtUS  int64             `json:"atUs"`
+	Track recordingTrackKey `json:"track"`
+	Kind  uint8             `json:"kind"`
+	Data1 uint8             `json:"data1"`
+	Data2 uint8             `json:"data2"`
 }
 
 // Persist only a stopped draft; no frontend canvas history is involved.
@@ -60,27 +61,28 @@ type recordingSnapshot struct {
 }
 
 var recording = struct {
-	loaded     bool
-	status     string
-	id         string
-	started    time.Time
-	durationUS int64
-	noteCount  int
-	lastError  string
-	events     []recordingInputEvent
-	held       map[recordingNoteKey]bool
-	pedals     map[recordingPedalKey]uint8
-	tracks     map[recordingTrackKey]bool
-	physical   map[recordingTrackKey]uint8
-	software   bool
-	saving     bool
+	loaded         bool
+	status         string
+	id             string
+	started        time.Time
+	durationUS     int64
+	noteCount      int
+	lastError      string
+	events         []recordingInputEvent
+	held           map[recordingNoteKey]bool
+	pedals         map[recordingPedalKey]uint8
+	tracks         map[recordingTrackKey]bool
+	physical       map[recordingPedalKey]uint8
+	software       bool
+	saving         bool
 	backupRevision uint64
+	backupSaved    bool
 }{
-	status: "idle",
-	held:   make(map[recordingNoteKey]bool),
-	pedals: make(map[recordingPedalKey]uint8),
-	tracks: make(map[recordingTrackKey]bool),
-	physical: make(map[recordingTrackKey]uint8),
+	status:   "idle",
+	held:     make(map[recordingNoteKey]bool),
+	pedals:   make(map[recordingPedalKey]uint8),
+	tracks:   make(map[recordingTrackKey]bool),
+	physical: make(map[recordingPedalKey]uint8),
 }
 
 func recordingDraftPath() string {
@@ -192,6 +194,7 @@ func loadRecordingDraftLocked() {
 	recording.durationUS, recording.noteCount = snap.DurationUS, snap.NoteCount
 	recording.lastError = snap.Error
 	recording.events = snap.Events
+	recording.backupSaved = true
 }
 
 func recordingStateLocked() RecordingState {
@@ -203,7 +206,8 @@ func recordingStateLocked() RecordingState {
 	return RecordingState{
 		Status: recording.status, DraftID: recording.id,
 		DurationMs: float64(duration) / 1000,
-		NoteCount: recording.noteCount, Error: recording.lastError,
+		NoteCount:  recording.noteCount, Error: recording.lastError,
+		BackupSaved: recording.backupSaved,
 	}
 }
 
@@ -228,11 +232,12 @@ func (k *Keyboard) StartRecording() (RecordingState, error) {
 	recording.started = time.Now()
 	recording.durationUS, recording.noteCount = 0, 0
 	recording.lastError = ""
+	recording.backupSaved = false
 	recording.events = make([]recordingInputEvent, 0, 1024)
 	recording.held = make(map[recordingNoteKey]bool)
 	recording.pedals = make(map[recordingPedalKey]uint8)
 	recording.tracks = make(map[recordingTrackKey]bool)
-	recording.physical = make(map[recordingTrackKey]uint8)
+	recording.physical = make(map[recordingPedalKey]uint8)
 	recording.software = false
 	recordingSoftwareSustainLocked(softwareSustain)
 	recordingCheckpointOnce.Do(func() { go recordingCheckpointLoop() })
@@ -258,12 +263,12 @@ func recordingAppendLocked(track recordingTrackKey, kind, data1, data2 uint8) {
 		return
 	}
 	if len(recording.events) >= recordingEventLimit {
-		stopRecordingLocked("录制事件已达到上限，已自动停止，请保存当前草稿")
+		stopRecordingLocked("录制已达上限，草稿已保留", true)
 		return
 	}
 	recording.tracks[track] = true
 	recording.events = append(recording.events, recordingInputEvent{
-		AtUS: time.Since(recording.started).Microseconds(),
+		AtUS:  time.Since(recording.started).Microseconds(),
 		Track: track, Kind: kind, Data1: data1, Data2: data2,
 	})
 }
@@ -273,8 +278,13 @@ func recordingNoteOnLocked(deviceID int, channel, note, velocity uint8) {
 		return
 	}
 	track := recordingTrackKey{deviceID, channel}
-	if recording.software && !recording.tracks[track] {
-		recordingEmitControlLocked(track, 64, 127)
+	// Exported source tracks use distinct channels, so seed the controller
+	// state that the shared live output applies to this source before its note.
+	for _, controller := range []uint8{64, 66, 67} {
+		recordingEmitControlLocked(track, controller, recordingControlValueLocked(track, controller))
+	}
+	if recording.status != "recording" {
+		return
 	}
 	key := recordingNoteKey{track, note}
 	// A retrigger without a release must not create an endless preceding note.
@@ -309,13 +319,32 @@ func recordingControlLocked(deviceID int, channel, controller, value uint8) {
 		return
 	}
 	track := recordingTrackKey{deviceID, channel}
-	if controller == 64 {
-		recording.physical[track] = value
-		if recording.software && value < 64 {
-			value = 127
+	recording.physical[recordingPedalKey{track, controller}] = value
+	recordingEmitControlLocked(track, controller, recordingControlValueLocked(track, controller))
+	// A connected keyboard's pedals also affect computer/mouse notes on the
+	// same live channel. Preserve that relationship after channel separation.
+	if deviceID >= 0 {
+		for linked := range recording.tracks {
+			if linked.DeviceID == interactiveDeviceID && linked.Channel == channel {
+				recordingEmitControlLocked(linked, controller, recordingControlValueLocked(linked, controller))
+			}
 		}
 	}
-	recordingEmitControlLocked(track, controller, value)
+}
+
+func recordingControlValueLocked(track recordingTrackKey, controller uint8) uint8 {
+	value := recording.physical[recordingPedalKey{track, controller}]
+	if track.DeviceID == interactiveDeviceID {
+		for key, physical := range recording.physical {
+			if key.Track.DeviceID >= 0 && key.Track.Channel == track.Channel && key.Controller == controller {
+				value = max(value, physical)
+			}
+		}
+	}
+	if controller == 64 && recording.software && value < 64 {
+		value = 127
+	}
+	return value
 }
 
 func recordingEmitControlLocked(track recordingTrackKey, controller, value uint8) {
@@ -338,15 +367,11 @@ func recordingSoftwareSustainLocked(enabled bool) {
 	interactive := recordingTrackKey{interactiveDeviceID, channel}
 	recording.tracks[interactive] = true
 	for track := range recording.tracks {
-		value := recording.physical[track]
-		if enabled && value < 64 {
-			value = 127
-		}
-		recordingEmitControlLocked(track, 64, value)
+		recordingEmitControlLocked(track, 64, recordingControlValueLocked(track, 64))
 	}
 }
 
-func stopRecordingLocked(reason string) {
+func stopRecordingLocked(reason string, asyncBackup bool) {
 	if recording.status != "recording" {
 		return
 	}
@@ -369,6 +394,7 @@ func stopRecordingLocked(reason string) {
 	clear(recording.physical)
 	recording.software = false
 	recording.lastError = reason
+	recording.backupSaved = false
 	if recording.noteCount == 0 {
 		recording.status, recording.id = "idle", ""
 		recording.lastError = "录制为空，没有可保存的音符"
@@ -379,28 +405,57 @@ func stopRecordingLocked(reason string) {
 		return
 	}
 	recording.status = "draft"
+	recording.backupRevision++
+	// File serialization and disk flush must never block physical MIDI input.
+	if asyncBackup {
+		go func() { _ = persistStoppedRecording() }()
+	}
+}
+
+// Serialize an immutable draft snapshot outside inputEventsMu. The backup
+// revision fence ensures a stale checkpoint cannot overwrite a newer save.
+func persistStoppedRecording() error {
+	inputEventsMu.Lock()
+	if recording.status != "draft" || recording.noteCount == 0 {
+		inputEventsMu.Unlock()
+		return nil
+	}
 	snap := recordingSnapshot{
 		ID: recording.id, DurationUS: recording.durationUS,
 		NoteCount: recording.noteCount, Error: recording.lastError,
 		Events: recording.events,
 	}
-	recording.backupRevision++
-	if err := writeRecordingBackup(snap, recording.backupRevision); err != nil {
-		recording.lastError = "草稿未能写入本地备份，请在退出前保存：" + err.Error()
+	revision := recording.backupRevision
+	inputEventsMu.Unlock()
+	err := writeRecordingBackup(snap, revision)
+	inputEventsMu.Lock()
+	if recording.status == "draft" && recording.id == snap.ID && recording.backupRevision == revision {
+		recording.backupSaved = err == nil
+		if err != nil {
+			recording.lastError = "草稿备份失败，请保存 MIDI 后再退出：" + err.Error()
+		} else if strings.HasPrefix(recording.lastError, "草稿备份失败") {
+			recording.lastError = ""
+		}
 	}
+	inputEventsMu.Unlock()
+	return err
 }
 
-func (k *Keyboard) StopRecording() RecordingState {
+func (k *Keyboard) StopRecording() (RecordingState, error) {
 	inputEventsMu.Lock()
-	defer inputEventsMu.Unlock()
-	stopRecordingLocked("")
-	return recordingStateLocked()
+	stopRecordingLocked("", false)
+	inputEventsMu.Unlock()
+	err := persistStoppedRecording()
+	return k.GetRecordingState(), err
 }
 
 func stopRecordingForShutdown() {
 	inputEventsMu.Lock()
-	defer inputEventsMu.Unlock()
-	stopRecordingLocked("录制因退出或设备状态变化而停止")
+	stopRecordingLocked("录制因退出而停止", false)
+	inputEventsMu.Unlock()
+	if err := persistStoppedRecording(); err != nil {
+		fmt.Println("recording backup failed at shutdown:", err)
+	}
 }
 
 func recordingBytes(snap recordingSnapshot) ([]byte, error) {
@@ -565,6 +620,7 @@ func (k *Keyboard) DiscardRecording() error {
 		return fmt.Errorf("删除录制草稿失败：%w", err)
 	}
 	recording.status, recording.id, recording.lastError = "idle", "", ""
+	recording.backupSaved = false
 	recording.events = nil
 	recording.durationUS, recording.noteCount = 0, 0
 	inputEventsMu.Unlock()
@@ -606,13 +662,15 @@ func (k *Keyboard) SaveRecording(name string) (UserMidi, error) {
 	if name == "" {
 		name = "自由演奏-" + time.Now().Format("20060102-150405")
 	}
-	if strings.EqualFold(filepath.Ext(name), ".mid") { name = name[:len(name)-4] }
+	if strings.EqualFold(filepath.Ext(name), ".mid") {
+		name = name[:len(name)-4]
+	}
 	if len([]rune(name)) > 120 {
 		name = string([]rune(name)[:120])
 	}
 	path, err := App.Dialog.SaveFile().
 		SetMessage("保存录制 MIDI").
-		SetFilename(name + ".mid").
+		SetFilename(name+".mid").
 		AddFilter("MIDI 文件", "*.mid").
 		PromptForSingleSelection()
 	if err != nil {
@@ -670,6 +728,7 @@ func (k *Keyboard) SaveRecording(name string) (UserMidi, error) {
 			return UserMidi{}, errors.New(recording.lastError)
 		}
 		recording.status, recording.id, recording.lastError = "idle", "", ""
+		recording.backupSaved = false
 		recording.events = nil
 		recording.durationUS, recording.noteCount = 0, 0
 	}
