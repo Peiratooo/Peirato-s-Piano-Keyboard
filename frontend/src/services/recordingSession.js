@@ -1,4 +1,5 @@
 import {reactive, ref} from 'vue'
+import {Events} from '@wailsio/runtime'
 
 const emptyState = {status: 'idle', draftId: '', durationMs: 0, noteCount: 0, error: '', backupSaved: false}
 
@@ -14,6 +15,7 @@ export function useRecordingSession({Keyboard, onSaved, getPlayerState}) {
     let refreshVersion = 0
     let disposed = false
     let previewStartTime = 0
+    let unsubscribeExit = null
 
     function applyState(next) {
         if (disposed || !next) return
@@ -36,6 +38,10 @@ export function useRecordingSession({Keyboard, onSaved, getPlayerState}) {
     }
 
     async function initialize() {
+        if (!unsubscribeExit) unsubscribeExit = Events.On('recordingExitBlocked', event => {
+            applyState(event.data)
+            report('草稿备份失败，已保留窗口', event.data?.error || '请先保存 MIDI 后退出')
+        })
         try { await refresh() } catch (error) { report('无法读取录制状态', error) }
         if (ticker) return
         ticker = setInterval(() => {
@@ -130,6 +136,8 @@ export function useRecordingSession({Keyboard, onSaved, getPlayerState}) {
         ++refreshVersion
         if (ticker) clearInterval(ticker)
         ticker = null
+        unsubscribeExit?.()
+        unsubscribeExit = null
     }
     return reactive({state, name, durationMs, busy, previewing, initialize, refresh,
         start, stop, preview, stopPreview, save, discard, dispose})

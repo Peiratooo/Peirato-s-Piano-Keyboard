@@ -78,6 +78,7 @@ func Run(assets embed.FS) {
 	})
 	App.Window.Add(PianoWin)
 	installMainWindowPresentation()
+	installRecordingExitGuard()
 
 	// 窗口创建完成后再开始扫描设备，避免 App.Event.Emit 早于 App 初始化。
 	go ListenDevices()
@@ -85,6 +86,43 @@ func Run(assets embed.FS) {
 	if err := App.Run(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// Native close requests (for example Alt+F4) must use the same durability
+// requirement as the frontend Quit action. Disk work stays off the UI thread.
+func installRecordingExitGuard() {
+	pending := false // protected by inputEventsMu
+	PianoWin.RegisterHook(events.Common.WindowClosing, func(event *application.WindowEvent) {
+		inputEventsMu.Lock()
+		needsBackup := recording.status == "recording" || (recording.status == "draft" && !recording.backupSaved)
+		if !needsBackup {
+			inputEventsMu.Unlock()
+			return
+		}
+		event.Cancel()
+		if pending {
+			inputEventsMu.Unlock()
+			return
+		}
+		pending = true
+		inputEventsMu.Unlock()
+		go func() {
+			defer func() {
+				inputEventsMu.Lock()
+				pending = false
+				inputEventsMu.Unlock()
+			}()
+			state, err := (&Keyboard{}).StopRecording()
+			if err != nil || (state.Status == "draft" && !state.BackupSaved) {
+				if state.Error == "" {
+					state.Error = "录制草稿尚未备份，请先保存 MIDI 后退出"
+				}
+				App.Event.Emit("recordingExitBlocked", state)
+				return
+			}
+			PianoWin.Close()
+		}()
+	})
 }
 
 func (k *Keyboard) OpenUrl(url string) {
