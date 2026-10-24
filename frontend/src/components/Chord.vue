@@ -1,6 +1,8 @@
 <template>
-    <transition enter-active-class="blurFadeIN" leave-active-class="blurFadeOUT">
-        <div class="chord" v-if="Object.keys(displayChord).length > 0 && displayChord.type === 'chord'">
+    <!-- Keep one stable display node. Rapid note changes no longer create
+         overlapping enter/leave elements or repeatedly restart animations. -->
+    <div v-if="displayChord.type" class="chord-display" aria-live="off">
+        <div class="chord" v-if="displayChord.type === 'chord'">
             <div class="top">
                 <div class="left">{{ displayChord.chord }}</div>
                 <div class="right">
@@ -20,46 +22,82 @@
             </div>
         </div>
 
-        <div class="note" v-else-if="Object.keys(displayChord).length > 0 && displayChord.type === 'note'">
+        <div class="note" v-else-if="displayChord.type === 'note'">
             {{ displayChord.note }}
         </div>
 
-        <div class="note unknown" v-else-if="Object.keys(displayChord).length > 0 && displayChord.type === 'unknown'">
+        <div class="note unknown" v-else-if="displayChord.type === 'unknown'">
             <span v-for="(item,index) in displayChord.notes" :key="index">
                 {{ item }}
             </span>
         </div>
-    </transition>
+    </div>
 </template>
 
 <script setup>
-import {computed, inject, ref, watch} from 'vue'
+import {computed, inject, onBeforeUnmount, shallowRef, watch} from 'vue'
 import {detectChord} from '../services/chordEngine'
 
 const store = inject('store')
 
-// rawChord 完全实时；displayChord 做轻微防抖，避免用户按下和弦时因为手指先后落键而频繁闪烁。
+// Recognition follows physical key presses, not sustain-held visual notes.
+// A small semantic hold preserves a settled chord through staggered finger
+// releases/retriggers without feeding stale notes back into the piano.
 const rawChord = computed(() => detectChord(store.pressedKey, store.chordsName))
-const displayChord = ref({})
-let debounceTimer = null
+const displayChord = shallowRef({})
+const signature = chord => JSON.stringify(chord ?? {})
+let committedSignature = signature({})
+let pendingSignature = ''
+let pendingTimer = null
 
-watch(
-    rawChord,
-    (value) => {
-        clearTimeout(debounceTimer)
-        debounceTimer = setTimeout(() => {
-            displayChord.value = value
-        }, 50)
-    },
-    {immediate: true, deep: true},
-)
+function cancelPending() {
+    if (pendingTimer !== null) clearTimeout(pendingTimer)
+    pendingTimer = null
+    pendingSignature = ''
+}
+function settleDelay(next) {
+    if (!next?.type) return 170 // Short gaps and final release
+    if (displayChord.value.type === 'chord' && next.type !== 'chord') return 155
+    if (next.type === 'unknown') return 125
+    if (next.type === 'chord') return 85
+    return 75 // Single note
+}
+
+watch(rawChord, next => {
+    const nextSignature = signature(next)
+    if (nextSignature === committedSignature) {
+        cancelPending()
+        return
+    }
+    // A second backend/input event yielding the same musical identity must
+    // not restart the settling interval indefinitely.
+    if (nextSignature === pendingSignature) return
+    cancelPending()
+    pendingSignature = nextSignature
+    pendingTimer = setTimeout(() => {
+        pendingTimer = null
+        pendingSignature = ''
+        // Ignore callbacks superseded by more recent input.
+        if (signature(rawChord.value) !== nextSignature) return
+        committedSignature = nextSignature
+        displayChord.value = next
+    }, settleDelay(next))
+}, {immediate: true, flush: 'sync'})
+
+onBeforeUnmount(cancelPending)
 </script>
 
 <style lang="scss" scoped>
-* {
-    user-select: none;
+* { user-select: none; }
+
+.chord-display {
+    display: flex;
+    align-items: flex-end;
+    min-width: 76px;
+    min-height: 50px;
 }
-.chord,.note {
+
+.chord, .note {
     background-color: #eeeeee55;
     border-radius: 4px;
     display: flex;
@@ -77,6 +115,7 @@ watch(
         .left {
             width: 100%;
             font-size: 36px;
+            white-space: nowrap;
         }
 
         .right {
@@ -99,6 +138,8 @@ watch(
     font-size: 18px;
     display: flex;
     flex-direction: row;
+    white-space: nowrap;
+    gap: 4px;
 }
 
 .synonym-notes {

@@ -1,8 +1,9 @@
 import {reactive, ref} from 'vue'
+import {Events} from '@wailsio/runtime'
 
-const emptyState = {status: 'idle', draftId: '', durationMs: 0, noteCount: 0, error: ''}
+const emptyState = {status: 'idle', draftId: '', durationMs: 0, noteCount: 0, error: '', backupSaved: false}
 
-export function useRecordingSession({Keyboard, onSaved}) {
+export function useRecordingSession({Keyboard, onSaved, getPlayerState}) {
     const state = ref({...emptyState})
     const name = ref('')
     const durationMs = ref(0)
@@ -13,6 +14,8 @@ export function useRecordingSession({Keyboard, onSaved}) {
     let pollCount = 0
     let refreshVersion = 0
     let disposed = false
+    let previewStartTime = 0
+    let unsubscribeExit = null
 
     function applyState(next) {
         if (disposed || !next) return
@@ -35,12 +38,22 @@ export function useRecordingSession({Keyboard, onSaved}) {
     }
 
     async function initialize() {
+        if (!unsubscribeExit) unsubscribeExit = Events.On('recordingExitBlocked', event => {
+            applyState(event.data)
+            report('草稿备份失败，已保留窗口', event.data?.error || '请先保存 MIDI 后退出')
+        })
         try { await refresh() } catch (error) { report('无法读取录制状态', error) }
         if (ticker) return
         ticker = setInterval(() => {
             if (disposed) return
             if (state.value.status === 'recording') {
                 durationMs.value = Math.max(durationMs.value, Date.now() - clockStart)
+            }
+            if (previewing.value && Date.now() - previewStartTime > 700) {
+                const player = getPlayerState?.()
+                if (player?.midiId?.startsWith('recording:') && player.status === 'idle') {
+                    previewing.value = false
+                }
             }
             pollCount++
             if (pollCount % 4 === 0 && state.value.status === 'recording' && !busy.value) {
@@ -72,7 +85,8 @@ export function useRecordingSession({Keyboard, onSaved}) {
         })
     }
     async function stop() {
-        if (state.value.status !== 'recording') return true
+        if (state.value.status !== 'recording'
+            && !(state.value.status === 'draft' && !state.value.backupSaved)) return true
         return operation('无法停止录制', async () => {
             await Keyboard.StopRecording()
         })
@@ -80,6 +94,7 @@ export function useRecordingSession({Keyboard, onSaved}) {
     async function preview() {
         return operation('无法试听录制', async () => {
             await Keyboard.PreviewRecording()
+            previewStartTime = Date.now()
             previewing.value = true
         })
     }
@@ -121,6 +136,8 @@ export function useRecordingSession({Keyboard, onSaved}) {
         ++refreshVersion
         if (ticker) clearInterval(ticker)
         ticker = null
+        unsubscribeExit?.()
+        unsubscribeExit = null
     }
     return reactive({state, name, durationMs, busy, previewing, initialize, refresh,
         start, stop, preview, stopPreview, save, discard, dispose})

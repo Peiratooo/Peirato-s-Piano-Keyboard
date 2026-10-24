@@ -147,17 +147,29 @@ func ImportMidiByPath(path string) (UserMidi, error) {
 }
 
 func RemoveMidi(id string) error {
-	config := GetUserConfig()
-
-	for i := range config.MidiStore {
-		if config.MidiStore[i].ID == id {
-			config.MidiStore = append(config.MidiStore[:i], config.MidiStore[i+1:]...)
+	for attempt := 0; attempt < 4; attempt++ {
+		config := GetUserConfig()
+		index := -1
+		for i := range config.MidiStore {
+			if config.MidiStore[i].ID == id {
+				index = i
+				break
+			}
+		}
+		if index < 0 {
+			return nil
+		}
+		config.MidiStore = append(config.MidiStore[:index], config.MidiStore[index+1:]...)
+		err := SaveConfig(config)
+		if err == nil {
 			RemoveMidiCacheByID(id)
-			return SaveConfig(config)
+			return nil
+		}
+		if !strings.Contains(err.Error(), "设置已被其他窗口修改") {
+			return err
 		}
 	}
-
-	return SaveConfig(config)
+	return fmt.Errorf("移除 MIDI 时配置持续变化，请重试")
 }
 
 func GetMidiStore() []UserMidi {
@@ -209,20 +221,25 @@ func (k *Keyboard) AddMidiByPath(path string) (UserMidi, error) {
 	if err != nil {
 		return UserMidi{}, err
 	}
-
-	config := GetUserConfig()
-	for _, item := range config.MidiStore {
-		if item.ID == userMidi.ID || IsSamePath(item.Path, userMidi.Path) {
-			return item, nil
+	// Window size/config changes can advance Revision while importing.
+	// Re-read the store before retrying to avoid duplicate entries.
+	for attempt := 0; attempt < 4; attempt++ {
+		config := GetUserConfig()
+		for _, item := range config.MidiStore {
+			if item.ID == userMidi.ID || IsSamePath(item.Path, userMidi.Path) {
+				return item, nil
+			}
+		}
+		config.MidiStore = append(config.MidiStore, userMidi)
+		err = SaveConfig(config)
+		if err == nil {
+			return userMidi, nil
+		}
+		if !strings.Contains(err.Error(), "设置已被其他窗口修改") {
+			return UserMidi{}, err
 		}
 	}
-
-	config.MidiStore = append(config.MidiStore, userMidi)
-	if err := SaveConfig(config); err != nil {
-		return UserMidi{}, err
-	}
-
-	return userMidi, nil
+	return UserMidi{}, fmt.Errorf("导入 MIDI 时配置持续变化，请重试：%w", err)
 }
 
 func (k *Keyboard) RemoveMidiByID(id string) error {
