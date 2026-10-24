@@ -13,6 +13,10 @@
             </NButton>
             <div class="track-details"><strong>{{ session.selectedSong?.name || '请先选择曲目' }}</strong><span>{{ statusLabel }}</span></div>
             <div class="transport-end">
+                <div class="range-shortcuts" v-if="enabled">
+                    <NButton size="tiny" quaternary title="当前位置设为 A" aria-label="当前位置设为练习起点 A" @click="markA">设 A</NButton>
+                    <NButton size="tiny" quaternary title="当前位置设为 B" aria-label="当前位置设为练习终点 B" @click="markB">设 B</NButton>
+                </div>
                 <span class="time-readout">{{ formatMidiTime(currentValue) }} <i>/</i> {{ formatMidiTime(duration) }}</span>
                 <NButton v-if="hasCustomRange" quaternary circle size="tiny" title="重置为整首曲目"
                     aria-label="重置练习区间" :disabled="!enabled" @click="resetRange">
@@ -58,7 +62,7 @@
             </button>
         </div>
         <p class="timeline-hint" :aria-live="dragging ? 'off' : 'polite'">
-            <span>{{ measures.marks.length > 1 ? "按小节划分 · 每 5 小节加粗" : "无可用小节信息" }}</span>
+            <span>{{ hasMeasureGrid ? "小节吸附 · Alt 自由拖动" : "自由选取区间" }}</span>
             <span>A {{ formatMidiTime(rangeValue[0]) }} — B {{ formatMidiTime(rangeValue[1]) }}</span>
         </p>
     </section>
@@ -110,6 +114,8 @@ const measures = computed(() => {
     return {marks, times: times.filter((value, index) => index === 0 || value > times[index - 1] + .001)}
 })
 
+const hasMeasureGrid = computed(() => measures.value.times.length > 2)
+
 // Render at the available pixel density, preserving strong 5-bar lines.
 // Snapping still uses *all* actual measure boundaries, including hidden lines.
 const visibleMeasures = computed(() => {
@@ -148,7 +154,9 @@ function fromPointer(event) {
     if (!rect || rect.width <= 0) return 0
     return clamp((event.clientX - rect.left) / rect.width * duration.value, 0, duration.value)
 }
-function nearestMeasure(value, lower, upper) {
+function nearestMeasure(value, lower, upper, precise = false) {
+    const safe = clamp(value, lower, upper)
+    if (precise || !hasMeasureGrid.value) return safe
     const times = measures.value.times
     let lo = 0, hi = times.length
     while (lo < hi) {
@@ -219,8 +227,8 @@ function moveRange(side, event) {
     const next = rangeDraft.value?.slice()
     if (!next) return
     const minimumGap = Math.min(1, duration.value)
-    if (side === 'A') next[0] = nearestMeasure(fromPointer(event), 0, next[1] - minimumGap)
-    else next[1] = nearestMeasure(fromPointer(event), next[0] + minimumGap, duration.value)
+    if (side === 'A') next[0] = nearestMeasure(fromPointer(event), 0, next[1] - minimumGap, event.altKey)
+    else next[1] = nearestMeasure(fromPointer(event), next[0] + minimumGap, duration.value, event.altKey)
     rangeDraft.value = next
 }
 async function finishRange(side, event) {
@@ -245,8 +253,14 @@ function seekByKeyboard(event) {
     const times = measures.value.times
     const min = rangeValue.value[0], max = rangeValue.value[1]
     let target = event.key === 'Home' ? min : event.key === 'End' ? max : currentValue.value
-    if (event.key === 'ArrowRight') target = times.find(ms => ms > currentValue.value + .5 && ms <= max) ?? max
-    if (event.key === 'ArrowLeft') target = times.slice().reverse().find(ms => ms < currentValue.value - .5 && ms >= min) ?? min
+    if (hasMeasureGrid.value) {
+        if (event.key === 'ArrowRight') target = times.find(ms => ms > currentValue.value + .5 && ms <= max) ?? max
+        if (event.key === 'ArrowLeft') target = times.slice().reverse().find(ms => ms < currentValue.value - .5 && ms >= min) ?? min
+    } else {
+        const step = Math.max(10, duration.value / 100)
+        if (event.key === 'ArrowRight') target = clamp(currentValue.value + step, min, max)
+        if (event.key === 'ArrowLeft') target = clamp(currentValue.value - step, min, max)
+    }
     void props.session.seek(target)
 }
 function rangeByKeyboard(side, event) {
@@ -259,6 +273,15 @@ function rangeByKeyboard(side, event) {
     const lower = side === 'A' ? 0 : range[0] + minGap
     const upper = side === 'A' ? range[1] - minGap : duration.value
     let target = range[index]
+    if (!hasMeasureGrid.value || event.altKey) {
+        const step = Math.max(10, duration.value / 100)
+        if (event.key === 'Home') target = lower
+        if (event.key === 'End') target = upper
+        if (event.key === 'ArrowRight') target = clamp(target + step, lower, upper)
+        if (event.key === 'ArrowLeft') target = clamp(target - step, lower, upper)
+        if (target !== range[index]) { range[index] = target; void props.session.setRange(range[0], range[1]) }
+        return
+    }
     if (event.key === 'Home') target = nearestMeasure(lower, lower, upper)
     if (event.key === 'End') target = nearestMeasure(upper, lower, upper)
     if (event.key === 'ArrowRight') target = nearestMeasure(target + Math.max(1, duration.value / 1000), Math.min(target + .001, upper), upper)
@@ -266,6 +289,18 @@ function rangeByKeyboard(side, event) {
     if (target === range[index]) return
     range[index] = target
     void props.session.setRange(range[0], range[1])
+}
+function markA() {
+    if (!enabled.value) return
+    const gap = Math.min(1, duration.value)
+    const a = clamp(currentValue.value, 0, duration.value - gap)
+    void props.session.setRange(a, Math.max(rangeValue.value[1], a + gap))
+}
+function markB() {
+    if (!enabled.value) return
+    const gap = Math.min(1, duration.value)
+    const b = clamp(currentValue.value, gap, duration.value)
+    void props.session.setRange(Math.min(rangeValue.value[0], b - gap), b)
 }
 function resetRange() {
     if (enabled.value) void props.session.setRange(0, duration.value)
@@ -294,6 +329,8 @@ onBeforeUnmount(() => { resizeObserver?.disconnect(); clearDrafts() })
 .track-details strong { font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .track-details span { font-size: 10px; color: #a2a2a2; }
 .transport-end { display: flex; align-items: center; gap: 7px; }
+.range-shortcuts { display: flex; align-items: center; gap: 1px; }
+.range-shortcuts :deep(.n-button) { min-width: 31px; padding: 0 3px; font-size: 11px; }
 .time-readout { font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; color: #c0c0c0; }
 .time-readout i { color: #656565; font-style: normal; margin: 0 4px; }
 .unified-timeline { position: relative; height: 35px; margin: 6px 4px 1px; touch-action: none; user-select: none; }
@@ -308,14 +345,15 @@ onBeforeUnmount(() => { resizeObserver?.disconnect(); clearDrafts() })
 .measure-mark.major { top: 10px; width: 2px; height: 15px; background: #eaeaeaab; }
 .measure-label { position: absolute; bottom: 16px; left: 0; transform: translateX(-50%); font-size: 9px; color: #bababa; font-variant-numeric: tabular-nums; }
 .play-head { position: absolute; top: 5px; width: 2px; height: 25px; background: #eeeeee; transform: translateX(-50%); box-shadow: 0 0 7px #ffffff73; pointer-events: none; }
-.range-handle { position: absolute; top: 4px; width: 18px; height: 27px; padding: 0; transform: translateX(-50%); border: 1px solid var(--ui-accent, #c5c5c5); border-radius: 5px; color: #202020; background: #d0d0d0; box-shadow: 0 1px 7px #0008; cursor: ew-resize; touch-action: none; z-index: 2; font-size: 10px; font-weight: 700; }
+.range-handle { position: absolute; top: 1px; width: 24px; height: 33px; padding: 0; transform: translateX(-50%); border: 1px solid var(--ui-accent, #c5c5c5); border-radius: 5px; color: #202020; background: #d0d0d0; box-shadow: 0 1px 7px #0008; cursor: ew-resize; touch-action: none; z-index: 2; font-size: 10px; font-weight: 700; }
 .range-handle span { pointer-events: none; }
 .range-handle:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
 .range-handle:disabled { cursor: default; }
 .timeline-hint { display: flex; justify-content: space-between; gap: 12px; margin: 1px 0 0; font-size: 10px; color: #999; font-variant-numeric: tabular-nums; }
 @media (max-width: 600px) {
     .midi-transport { padding: 10px 12px 7px; }
-    .transport-main { gap: 7px; }
+    .transport-main { gap: 7px; flex-wrap: wrap; }
+    .transport-end { margin-left: auto; }
     .timeline-hint span:first-child { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { .range-handle, .play-head { transition: none; } }

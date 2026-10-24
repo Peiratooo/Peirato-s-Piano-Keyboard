@@ -769,7 +769,7 @@ func (k *Keyboard) AllNotesOff() {
 }
 
 func (k *Keyboard) allNotesOffLocked() {
-	stopRecordingLocked("录制因清音或设备切换而停止")
+	stopRecordingLocked("录制因清音或设备切换而停止", true)
 	clearLivePerformance()
 	interactiveNotes = make(map[uint8]struct {
 		Channel uint8
@@ -901,6 +901,24 @@ func playSelectedOutputProgramChange(channel, program uint8) {
 	}
 	if err := outDevice.Device.Send(midi.ProgramChange(channel, program)); err != nil {
 		fmt.Println("发送 MIDI ProgramChange 失败:", err)
+	}
+}
+
+// Transport cleanup must reach the selected hardware output as well as the
+// built-in synth. Do not reset live input or stop a recording here.
+func clearMidiPlaybackOutput() {
+	AllSynthNotesOff()
+	selected, device, ok := currentOutputDevice()
+	if selected == midiOutputNone || selected == midiOutputSoftwareSynth || !ok || device.Device == nil {
+		return
+	}
+	for channel := uint8(0); channel < 16; channel++ {
+		for _, controller := range []uint8{midiCCAllSoundOff, midiCCResetControllers, midiCCAllNotesOff} {
+			if err := device.Device.Send(midi.ControlChange(channel, controller, 0)); err != nil {
+				fmt.Println("清理 MIDI 播放输出失败:", err)
+				return
+			}
+		}
 	}
 }
 
