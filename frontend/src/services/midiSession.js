@@ -281,7 +281,8 @@ export function useMidiSession({store, Keyboard}) {
     function setRange(left, right) {
         const duration = durationMs.value
         if (!duration) return Promise.resolve(false)
-        const gap = Math.min(100, duration)
+        // Keep short MIDI measures selectable without imposing a 100ms minimum.
+        const gap = Math.min(1, duration)
         const leftMs = clamp(left, 0, duration - gap)
         const rightMs = clamp(right, leftMs + gap, duration)
         return updateOptions({leftMs, rightMs}, '调整练习区间失败')

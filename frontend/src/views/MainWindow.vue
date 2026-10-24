@@ -29,14 +29,17 @@
                 <button class="window-button" type="button" aria-label="最小化" title="最小化" @pointerdown.prevent @click="minimize"><PhMinus :size="16" /></button>
                 <button v-if="!isSimple" class="window-button" type="button" aria-label="最大化或还原" title="最大化 / 还原"
                     @pointerdown.prevent @click="toggleMaximize"><PhArrowsOutSimple :size="15" /></button>
-                <button class="window-button close-window" type="button" aria-label="退出软件" title="退出" @pointerdown.prevent @click="Keyboard.Quit"><PhX :size="17" /></button>
+                <button class="window-button close-window" type="button" aria-label="退出软件" title="退出" @pointerdown.prevent @click="requestQuit"><PhX :size="17" /></button>
             </div>
         </header>
+
+        <RecordingControls v-if="!isMidi" :recording="recording" :simple="isSimple"
+            @show-draft="setDisplayMode('waterfall')" />
 
         <div v-show="isMidi && !isSimple" ref="midiControlsRef" class="midi-workspace-controls" data-piano-control>
             <div class="midi-options-row">
                 <NButton class="library-toggle" :type="panel === 'library' ? 'primary' : 'default'" size="small" :aria-expanded="panel === 'library'" @click="openPanel('library')">
-                    <template #icon><PhMusicNotes :size="18" /></template>曲库 / 导入
+                    <template #icon><PhMusicNotes :size="18" /></template>曲库
                 </NButton>
                 <MidiPracticeControls :session="session" />
             </div>
@@ -48,7 +51,6 @@
                 <button class="menu-close" type="button" aria-label="收起菜单" @click="closePanel"><PhX :size="17" /></button>
                 <PhPianoKeys class="menu-mark" :size="36" weight="light" />
                 <h1>Peirato’s Piano</h1>
-                <p class="menu-description">{{ isMidi ? '播放与跟弹' : '自由演奏' }}</p>
                 <button class="start-playing" type="button" @click="startFreePlay"><PhPlay :size="17" weight="fill" />{{ isMidi ? '自由演奏' : '开始弹奏' }}<PhArrowRight :size="18" /></button>
                 <div class="menu-links">
                     <button type="button" @click="changeMode('play')"><PhMusicNotes :size="20" /><span>MIDI 播放</span><PhArrowRight :size="16" /></button>
@@ -57,7 +59,7 @@
                 </div>
                 <footer class="menu-footer">
                     <span class="input-status"><i :class="{ connected: hasMidiInput }"></i>{{ hasMidiInput ? 'MIDI 键盘已连接' : '电脑键盘 / 鼠标演奏' }}</span>
-                    <button type="button" @click="Keyboard.Quit"><PhPower :size="15" />退出</button>
+                    <button type="button" @click="requestQuit"><PhPower :size="15" />退出</button>
                 </footer>
                 <p class="menu-hint">{{ isMidi ? '选择曲目后开始播放或跟弹' : '弹下第一个音，菜单自动收起' }}</p>
             </section>
@@ -100,9 +102,11 @@ import MidiLibraryPanel from '../components/MidiLibraryPanel.vue'
 import MidiPracticeControls from '../components/MidiPracticeControls.vue'
 import MidiTransport from '../components/MidiTransport.vue'
 import MidiWaterfallCanvas from '../components/MidiWaterfallCanvas.vue'
+import RecordingControls from '../components/RecordingControls.vue'
 import {createKeyboardLayout} from '../services/keyboardLayout'
 import {subscribeLivePerformance} from '../services/livePerformance'
 import {useMidiSession} from '../services/midiSession'
+import {useRecordingSession} from '../services/recordingSession'
 import {getPianoUiTheme} from '../services/uiTheme'
 
 const store = inject('store')
@@ -110,6 +114,10 @@ const Keyboard = inject('Keyboard')
 const route = useRoute()
 const router = useRouter()
 const session = useMidiSession({store, Keyboard})
+const recording = useRecordingSession({Keyboard, getPlayerState: () => store.midiPlayerState, onSaved: async song => {
+    await session.refreshLibrary()
+    if (song?.id) await session.selectSong(song.id)
+}})
 const uiTheme = computed(() => getPianoUiTheme(store.config.colors))
 const containerRef = ref(null)
 const midiControlsRef = ref(null)
@@ -189,6 +197,12 @@ async function changeMode(mode) {
     if (modeSwitching.value) return false
     modeSwitching.value = true
     try {
+        if (mode !== 'free' && recording.state.status === 'recording') {
+            if (!await recording.stop()) return false
+        }
+        if (mode !== 'free' && recording.state.status === 'draft'
+            && !recording.state.backupSaved && !await recording.stop()) return false
+        if (mode !== 'free' && recording.previewing && !await recording.stopPreview()) return false
         if (mode !== 'free' && isSimple.value && !await setDisplayMode('waterfall')) return false
         await session.initialize()
         if (!await session.setMode(mode)) return false
@@ -209,6 +223,23 @@ async function consumeRequestedMode() {
         delete query.midiMode
         await router.replace({path: '/', query})
     }
+}
+async function requestQuit() {
+    if (recording.state.status === 'recording'
+        || (recording.state.status === 'draft' && !recording.state.backupSaved)) {
+        if (!await recording.stop()) {
+            window.$message?.error('草稿未备份，请先保存 MIDI')
+            return
+        }
+    }
+    if (recording.state.status === 'draft') {
+        if (!recording.state.backupSaved) {
+            window.$message?.error('草稿尚未备份，请先保存 MIDI')
+            return
+        }
+        if (!window.confirm('录制草稿将保留，下次可继续保存。确定退出？')) return
+    }
+    try { await Keyboard.Quit() } catch (error) { window.$message?.error('退出失败：' + String(error)) }
 }
 async function openFullSettings() {
     closePanel()
@@ -256,6 +287,7 @@ onMounted(async () => {
         store.mainDisplayMode = state.mode
     } catch (error) { console.error('无法读取主窗口状态', error) }
     await session.initialize()
+    await recording.initialize()
     await consumeRequestedMode()
 })
 watch(() => route.query.midiMode, consumeRequestedMode)
@@ -264,6 +296,7 @@ onBeforeUnmount(() => {
     unsubscribeLive?.()
     unsubscribeMidiRequest?.()
     session.dispose()
+    recording.dispose()
     clearTimeout(hideTimer)
     window.removeEventListener('keydown', keydown, true)
 })
