@@ -213,7 +213,7 @@ func (p *MidiPlayerRuntime) Start(midiFile *Midi, options MidiPlaybackOptions) e
 		p.state.CurrentStep = cloneMidiPracticeStep(&followSteps[p.followIndex])
 	}
 
-	AllSynthNotesOff()
+	clearMidiPlaybackOutput()
 	emitMidiVisualClear()
 	p.restoreAtLocked(startMs)
 	p.startLocked()
@@ -273,7 +273,7 @@ func (p *MidiPlayerRuntime) Tick() {
 		if p.state.Loop {
 			p.resetToRangeStartLocked()
 			state = p.state
-			AllSynthNotesOff()
+			clearMidiPlaybackOutput()
 			emitMidiVisualClear()
 			p.restoreAtLocked(p.state.LeftMs)
 			p.mu.Unlock()
@@ -285,7 +285,7 @@ func (p *MidiPlayerRuntime) Tick() {
 			p.resetToRangeStartLocked()
 			state = p.state
 			p.mu.Unlock()
-			AllSynthNotesOff()
+			clearMidiPlaybackOutput()
 			emitMidiVisualClear()
 			emitMidiPlayerState(state)
 			return
@@ -567,7 +567,7 @@ func (p *MidiPlayerRuntime) Pause() error {
 	p.baseMs = p.state.CurrentMs
 	p.baseTime = time.Now()
 	p.stopLocked()
-	AllSynthNotesOff()
+	clearMidiPlaybackOutput()
 	emitMidiVisualClear()
 	emitMidiPlayerState(p.state)
 	return nil
@@ -597,7 +597,7 @@ func (p *MidiPlayerRuntime) Stop() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.stopLocked()
-	AllSynthNotesOff()
+	clearMidiPlaybackOutput()
 	emitMidiVisualClear()
 	p.state.Status = MidiPlayIdle
 	p.resetToRangeStartLocked()
@@ -620,7 +620,7 @@ func (p *MidiPlayerRuntime) Reset() error {
 	state := p.state
 	p.mu.Unlock()
 
-	AllSynthNotesOff()
+	clearMidiPlaybackOutput()
 	emitMidiVisualClear()
 	emitMidiPlayerState(state)
 	return nil
@@ -630,7 +630,7 @@ func (p *MidiPlayerRuntime) Seek(ms float64) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	ms = clampFloat(ms, p.state.LeftMs, p.state.RightMs)
-	AllSynthNotesOff()
+	clearMidiPlaybackOutput()
 	emitMidiVisualClear()
 	p.state.CurrentMs = ms
 	p.state.Waiting = false
@@ -712,7 +712,7 @@ func (p *MidiPlayerRuntime) SetOptions(options MidiPlaybackOptions) error {
 
 	currentMs = clampFloat(currentMs, options.LeftMs, options.RightMs)
 
-	AllSynthNotesOff()
+	clearMidiPlaybackOutput()
 	emitMidiVisualClear()
 
 	p.state.MidiID = options.MidiID
@@ -772,7 +772,7 @@ func (p *MidiPlayerRuntime) SetTrackMuted(trackIndex int, muted bool) error {
 	}
 	p.state.MutedTracks[trackIndex] = muted
 	if muted {
-		AllSynthNotesOff()
+		clearMidiPlaybackOutput()
 		emitMidiVisualClear()
 	}
 	emitMidiPlayerState(p.state)
@@ -787,7 +787,7 @@ func (p *MidiPlayerRuntime) SetHandMuted(hand MidiHand, muted bool) error {
 	}
 	p.state.MutedHands[hand] = muted
 	if muted {
-		AllSynthNotesOff()
+		clearMidiPlaybackOutput()
 		emitMidiVisualClear()
 	}
 	emitMidiPlayerState(p.state)
@@ -858,6 +858,7 @@ func (p *MidiPlayerRuntime) loop(ticker *time.Ticker, stopCh <-chan struct{}) {
 		}
 	}
 }
+
 // Reconstruct only the notes and MIDI channel state that are alive at the
 // requested song position. Old attacks are not played as a historical stream.
 // This is called on transport changes, never for each render/audio tick.
@@ -907,6 +908,7 @@ func (p *MidiPlayerRuntime) restoreAtLocked(ms float64) {
 					}
 				}
 			case 121:
+				controllers[ch] = make(map[int]int)
 				sustain[ch] = false
 				for key := range sustained {
 					if key.channel == ch {

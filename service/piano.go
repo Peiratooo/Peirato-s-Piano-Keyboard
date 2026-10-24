@@ -904,6 +904,24 @@ func playSelectedOutputProgramChange(channel, program uint8) {
 	}
 }
 
+// Transport cleanup must reach the selected hardware output as well as the
+// built-in synth. Do not reset live input or stop a recording here.
+func clearMidiPlaybackOutput() {
+	AllSynthNotesOff()
+	selected, device, ok := currentOutputDevice()
+	if selected == midiOutputNone || selected == midiOutputSoftwareSynth || !ok || device.Device == nil {
+		return
+	}
+	for channel := uint8(0); channel < 16; channel++ {
+		for _, controller := range []uint8{midiCCAllSoundOff, midiCCResetControllers, midiCCAllNotesOff} {
+			if err := device.Device.Send(midi.ControlChange(channel, controller, 0)); err != nil {
+				fmt.Println("清理 MIDI 播放输出失败:", err)
+				return
+			}
+		}
+	}
+}
+
 func currentOutputDevice() (int, OutMidiDevice, bool) {
 	midiMu.RLock()
 	defer midiMu.RUnlock()
