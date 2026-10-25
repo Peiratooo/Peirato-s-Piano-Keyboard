@@ -159,3 +159,4 @@ vite.config.ts.timestamp-*
 /design-qa.md
 /docs/
 /packaging
+/*.syso

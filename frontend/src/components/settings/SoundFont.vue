@@ -211,26 +211,10 @@ function formatSize(size) {
 
 <style lang="scss" scoped>
 .soundfont-page {
-    position: relative;
     overflow: hidden;
-
-    &::before {
-        content: '';
-        position: absolute;
-        top: -150px;
-        right: -140px;
-        width: 320px;
-        height: 320px;
-        pointer-events: none;
-        background:
-            radial-gradient(circle, rgba(37, 99, 235, 0.12), transparent 62%),
-            radial-gradient(circle at 30% 30%, rgba(99, 102, 241, 0.08), transparent 54%);
-    }
 }
 
 .soundfont-hero {
-    position: relative;
-    z-index: 1;
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
@@ -246,7 +230,7 @@ function formatSize(size) {
     font-weight: 720;
     letter-spacing: 0.14em;
     text-transform: uppercase;
-    color: rgba(37, 99, 235, 0.82);
+    color: var(--setting-brand);
 }
 
 .hero-title {
@@ -268,8 +252,6 @@ function formatSize(size) {
 }
 
 .soundfont-alert {
-    position: relative;
-    z-index: 1;
     display: flex;
     align-items: flex-start;
     gap: 9px;
@@ -293,8 +275,6 @@ function formatSize(size) {
 }
 
 .soundfont-toolbar {
-    position: relative;
-    z-index: 1;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -303,8 +283,6 @@ function formatSize(size) {
 }
 
 .soundfont-list {
-    position: relative;
-    z-index: 1;
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -341,26 +319,20 @@ function formatSize(size) {
 
     &:hover {
         transform: translateY(-1px);
-        border-color: rgba(37, 99, 235, 0.2);
+        border-color: var(--ui-accent-ring);
         background: rgba(255, 255, 255, 0.86);
         box-shadow: 0 14px 32px rgba(15, 23, 42, 0.065);
     }
 
     &.active {
-        border-color: rgba(37, 99, 235, 0.32);
-        background:
-            linear-gradient(135deg, rgba(37, 99, 235, 0.075), rgba(255, 255, 255, 0.82)),
-            rgba(255, 255, 255, 0.88);
-        box-shadow: 0 14px 34px rgba(37, 99, 235, 0.08);
-
+        border-color: var(--ui-accent);
+        background: var(--ui-accent-soft);
+        box-shadow: var(--setting-shadow-hover);
 
         .soundfont-icon {
-            color: #fff;
-            background:
-                linear-gradient(160deg, rgba(37, 99, 235, 0.96), rgba(99, 102, 241, 0.82)),
-                rgba(37, 99, 235, 0.9);
-            box-shadow: 0 10px 22px rgba(37, 99, 235, 0.18);
-            border-color: rgba(255, 255, 255, 0.52);
+            color: var(--ui-accent-text);
+            background: var(--ui-accent);
+            border-color: var(--ui-accent);
         }
     }
 
@@ -384,12 +356,11 @@ function formatSize(size) {
     font-size: 12px;
     font-weight: 780;
     color: var(--setting-brand);
-    background: rgba(37, 99, 235, 0.085);
-    border: 1px solid rgba(37, 99, 235, 0.1);
+    background: var(--ui-accent-soft);
+    border: 1px solid var(--ui-accent-ring);
     transition:
         color 0.18s ease,
         background 0.18s ease,
-        box-shadow 0.18s ease,
         border-color 0.18s ease;
 
     span {
@@ -440,10 +411,8 @@ function formatSize(size) {
     gap: 14px;
     padding: 16px;
     border-radius: 20px;
-    border: 1px dashed rgba(37, 99, 235, 0.24);
-    background:
-        linear-gradient(135deg, rgba(37, 99, 235, 0.045), rgba(255, 255, 255, 0.72)),
-        rgba(255, 255, 255, 0.62);
+    border: 1px dashed var(--ui-accent-ring);
+    background: var(--setting-subtle-bg);
 }
 
 .empty-orb {
@@ -457,7 +426,7 @@ function formatSize(size) {
     font-size: 22px;
     line-height: 1;
     background: rgba(255, 255, 255, 0.76);
-    border: 1px solid rgba(37, 99, 235, 0.12);
+    border: 1px solid var(--ui-accent-ring);
 }
 
 @media (max-width: 720px) {

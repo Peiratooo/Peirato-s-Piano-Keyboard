@@ -1,14 +1,36 @@
-import {reactive, ref} from 'vue'
+import {computed, reactive, ref} from 'vue'
 import {Events} from '@wailsio/runtime'
 
 const emptyState = {status: 'idle', draftId: '', durationMs: 0, noteCount: 0, error: '', backupSaved: false}
 
-export function useRecordingSession({Keyboard, onSaved, getPlayerState}) {
+function recordingErrorMessage(error) {
+    let message = error
+    for (let depth = 0; depth < 4; depth++) {
+        if (message && typeof message === 'object') {
+            message = message.message || message.error || '操作未完成，请重试'
+            continue
+        }
+        message = String(message || '操作未完成，请重试').replace(/^Error:\s*/, '')
+        try {
+            const details = JSON.parse(message)
+            if (details && typeof details === 'object' && (details.message || details.error)) {
+                message = details.message || details.error
+                continue
+            }
+        } catch { /* Plain text is already suitable for display. */ }
+        break
+    }
+    return String(message).replace(/Access is denied\.?|permission denied\.?/gi,
+        '无法写入目标位置，请检查路径或权限后重试。')
+}
+
+export function useRecordingSession({Keyboard, onSaved, getPlayerState, canStart = () => true}) {
     const state = ref({...emptyState})
     const name = ref('')
     const durationMs = ref(0)
     const busy = ref(false)
     const previewing = ref(false)
+    const available = computed(() => canStart())
     let clockStart = 0
     let ticker = null
     let pollCount = 0
@@ -19,15 +41,16 @@ export function useRecordingSession({Keyboard, onSaved, getPlayerState}) {
 
     function applyState(next) {
         if (disposed || !next) return
-        state.value = {...emptyState, ...next}
+        state.value = {...emptyState, ...next, error: next.error ? recordingErrorMessage(next.error) : ''}
         durationMs.value = Number(next.durationMs) || 0
         if (next.status === 'recording') clockStart = Date.now() - durationMs.value
         if (next.status !== 'draft') previewing.value = false
     }
 
     function report(message, error) {
-        window.$notify?.error?.(message, String(error))
-        if (!window.$notify) window.$message?.error(message + '：' + String(error))
+        const detail = recordingErrorMessage(error)
+        window.$notify?.error?.(message, detail)
+        if (!window.$notify) window.$message?.error(message + '：' + detail)
     }
 
     async function refresh() {
@@ -70,8 +93,8 @@ export function useRecordingSession({Keyboard, onSaved, getPlayerState}) {
             await refresh()
             return true
         } catch (error) {
-            report(title, error)
             try { await refresh() } catch {}
+            report(typeof title === 'function' ? title() : title, error)
             return false
         } finally {
             busy.value = false
@@ -79,7 +102,9 @@ export function useRecordingSession({Keyboard, onSaved, getPlayerState}) {
     }
 
     async function start() {
+        if (!available.value) return false
         return operation('无法开始录制', async () => {
+            if (!available.value) return
             await Keyboard.StartRecording()
             previewing.value = false
         })
@@ -87,7 +112,7 @@ export function useRecordingSession({Keyboard, onSaved, getPlayerState}) {
     async function stop() {
         if (state.value.status !== 'recording'
             && !(state.value.status === 'draft' && !state.value.backupSaved)) return true
-        return operation('无法停止录制', async () => {
+        return operation(() => state.value.status === 'draft' ? '录制已停止，草稿尚未备份' : '无法停止录制', async () => {
             await Keyboard.StopRecording()
         })
     }
@@ -139,6 +164,6 @@ export function useRecordingSession({Keyboard, onSaved, getPlayerState}) {
         unsubscribeExit?.()
         unsubscribeExit = null
     }
-    return reactive({state, name, durationMs, busy, previewing, initialize, refresh,
+    return reactive({state, name, durationMs, busy, previewing, available, initialize, refresh,
         start, stop, preview, stopPreview, save, discard, dispose})
 }

@@ -1,8 +1,8 @@
 <template>
-    <section class="quick-settings" data-piano-control aria-label="钢琴设置">
+    <section class="quick-settings" data-piano-control aria-label="设置">
         <header>
-            <div><PhSlidersHorizontal :size="20" /><h2>钢琴设置</h2></div>
-            <button type="button" aria-label="关闭钢琴设置" @click="$emit('close')"><PhX :size="18" /></button>
+            <div><PhGearSix :size="20" /><h2>设置</h2></div>
+            <button type="button" aria-label="关闭设置" @click="$emit('close')"><PhX :size="18" /></button>
         </header>
         <div class="settings-body">
             <label id="quick-volume-label" class="setting-label" for="quick-volume" @click="focusControl('quick-volume')">钢琴音量 <output>{{ store.config.volume }}%</output></label>
@@ -34,7 +34,7 @@
             </div>
         </div>
         <button class="advanced-settings" type="button" @click="$emit('open-full')">
-            设备、音源与完整设置 <PhArrowUpRight :size="17" />
+            打开完整设置 <PhArrowUpRight :size="17" />
         </button>
     </section>
 </template>
@@ -42,7 +42,7 @@
 <script setup>
 import {computed, inject, reactive} from 'vue'
 import {NSelect, NSlider, NSwitch} from 'naive-ui'
-import {PhArrowUpRight, PhSlidersHorizontal, PhX} from '@phosphor-icons/vue'
+import {PhArrowUpRight, PhGearSix, PhX} from '@phosphor-icons/vue'
 import {tonicOptions} from '../services/keyDisplay'
 
 defineEmits(['close', 'open-full'])

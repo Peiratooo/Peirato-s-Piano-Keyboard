@@ -22,7 +22,7 @@ const store = inject('store')
 <style lang="scss" scoped>
 .control-window {
     min-height: 100vh;
-    background: linear-gradient(135deg, #f8f8f8, #eeeeee);
+    background: #f3f3f3;
     color: #303030;
     user-select: none;
 }

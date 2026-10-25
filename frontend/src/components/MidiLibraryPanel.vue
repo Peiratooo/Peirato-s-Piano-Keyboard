@@ -2,9 +2,9 @@
     <section class="midi-library" data-piano-control aria-label="MIDI 曲库">
         <header>
             <div><PhMusicNotes :size="20" /><h2>曲库</h2><span>{{ session.library.length }} 首</span></div>
-            <NButton size="small" type="primary" :loading="session.importing" :disabled="session.importing" @click="importSong">
-                <template #icon><PhUploadSimple /></template>导入 MIDI
-            </NButton>
+            <div class="library-actions"><NButton size="small" type="primary" :loading="session.importing" :disabled="session.importing" @click="importSong">
+                <template #icon><PhDownloadSimple /></template>导入 MIDI
+            </NButton><NButton quaternary circle size="small" aria-label="关闭曲库" @click="$emit('close')"><template #icon><PhX :size="19" /></template></NButton></div>
         </header>
         <NInput v-model:value="search" placeholder="搜索曲目" clearable size="small" aria-label="搜索曲目">
             <template #prefix><PhMagnifyingGlass :size="16" /></template>
@@ -34,10 +34,10 @@
 <script setup>
 import {computed, ref} from 'vue'
 import {NButton, NInput, NPopconfirm, NScrollbar} from 'naive-ui'
-import {PhCheck, PhMagnifyingGlass, PhMusicNote, PhMusicNotes, PhTrash, PhUploadSimple} from '@phosphor-icons/vue'
+import {PhCheck, PhDownloadSimple, PhMagnifyingGlass, PhMusicNote, PhMusicNotes, PhTrash, PhX} from '@phosphor-icons/vue'
 import {formatMidiTime} from '../services/midiSession'
 const props = defineProps({session: {type: Object, required: true}})
-const emit = defineEmits(['selected'])
+const emit = defineEmits(['selected', 'close'])
 const search = ref('')
 const filteredSongs = computed(() => props.session.library.filter(song => song.name.toLowerCase().includes(search.value.trim().toLowerCase())))
 async function choose(id) {
@@ -49,13 +49,14 @@ async function importSong() {
 </script>
 
 <style scoped>
-.midi-library { display: flex; flex-direction: column; width: 380px; max-width: calc(100vw - 40px); max-height: inherit; padding: 18px; border: 1px solid #ffffff19; border-radius: 12px; background: #282828f8; box-shadow: 0 18px 60px #0005; color: #ededed; }
+.midi-library { display: flex; flex-direction: column; width: 720px; max-width: calc(100vw - 48px); max-height: calc(100vh - 80px); padding: 24px; border: 1px solid #ffffff19; border-radius: 14px; background: #282828; box-shadow: 0 24px 100px #0008; color: #ededed; }
+.library-actions { display: flex; align-items: center; gap: 10px; }
 header, .midi-library > :deep(.n-input), footer { flex-shrink: 0; }
 header, header > div { display: flex; align-items: center; gap: 9px; }
 header { justify-content: space-between; margin-bottom: 16px; }
 h2 { font-size: 15px; font-weight: 550; }
 header span { font-size: 11px; color: #939393; }
-.library-scroll { flex: 1; min-height: 0; margin: 12px -5px 0; max-height: min(350px, 44vh); }
+.library-scroll { flex: 1; min-height: 0; margin: 16px -5px 0; max-height: min(450px, 55vh); }
 .library-scroll :deep(.n-scrollbar-rail.n-scrollbar-rail--vertical) { width: 6px; right: 1px; }
 .library-scroll :deep(.n-scrollbar-rail .n-scrollbar-rail__scrollbar) { border-radius: 6px; background: #a6a6a65e; }
 .library-scroll :deep(.n-scrollbar-rail:hover .n-scrollbar-rail__scrollbar) { background: #bcbcbc99; }

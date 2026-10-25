@@ -1,9 +1,9 @@
 <template>
     <section class="midi-transport" data-piano-control aria-label="MIDI 播放控制">
         <div class="transport-main">
-            <NButton circle type="primary" size="large" :loading="session.loading"
+            <NButton class="play-button" circle type="primary" :loading="session.loading"
                 :disabled="!session.selectedId || session.busy || session.mode === 'free'"
-                :aria-label="playLabel" @click="session.togglePlayback">
+                :aria-label="playLabel" aria-keyshortcuts="Space" title="播放 / 暂停（空格）" @click="session.togglePlayback">
                 <template #icon><PhPause v-if="session.state.status === 'playing'" :size="20" weight="fill" />
                     <PhPlay v-else :size="20" weight="fill" /></template>
             </NButton>
@@ -12,18 +12,21 @@
                 <template #icon><PhStop :size="18" weight="fill" /></template>
             </NButton>
             <div class="track-details"><strong>{{ session.selectedSong?.name || '请先选择曲目' }}</strong><span>{{ statusLabel }}</span></div>
-            <div class="transport-end">
+        </div>
+        <div class="timeline-editor">
+            <div class="timeline-meta">
+                <span class="time-readout">{{ formatMidiTime(currentValue) }} <i>/</i> {{ formatMidiTime(duration) }}</span>
+                <span class="timeline-guide" :title="hasMeasureGrid ? 'A–B 边界吸附到小节，按住 Alt 可自由定位' : '拖动 A–B 边界选取区间'">{{ hasMeasureGrid ? '小节吸附 · Alt 自由拖动' : '拖动定位与选取区间' }}</span>
                 <div class="range-shortcuts" v-if="enabled">
                     <NButton size="tiny" quaternary title="当前位置设为 A" aria-label="当前位置设为练习起点 A" @click="markA">设 A</NButton>
                     <NButton size="tiny" quaternary title="当前位置设为 B" aria-label="当前位置设为练习终点 B" @click="markB">设 B</NButton>
                 </div>
-                <span class="time-readout">{{ formatMidiTime(currentValue) }} <i>/</i> {{ formatMidiTime(duration) }}</span>
+                <span class="range-readout">A {{ formatMidiTime(rangeValue[0]) }} <i>—</i> B {{ formatMidiTime(rangeValue[1]) }}</span>
                 <NButton v-if="hasCustomRange" quaternary circle size="tiny" title="重置为整首曲目"
                     aria-label="重置练习区间" :disabled="!enabled" @click="resetRange">
                     <template #icon><PhArrowCounterClockwise :size="15" /></template>
                 </NButton>
             </div>
-        </div>
 
         <!-- One timeline only: click/drag to seek; drag A/B handles to set the
              practice loop. Every grid line is an actual MIDI bar boundary. -->
@@ -41,7 +44,7 @@
                 <div class="progress-fill" aria-hidden="true" :style="{width: percent(currentValue) + '%'}"></div>
                 <div v-for="bar in visibleMeasures" :key="bar.index" class="measure-mark"
                     :class="{major: bar.major}" :style="{left: bar.percent + '%'}" aria-hidden="true">
-                    <span v-if="bar.label" class="measure-label">{{ bar.index - 1 }}</span>
+                    <span v-if="bar.label" class="measure-label">{{ bar.index }}</span>
                 </div>
                 <div class="play-head" :style="{left: percent(currentValue) + '%'}" aria-hidden="true"></div>
             </div>
@@ -58,13 +61,10 @@
                 @pointerdown="beginRange(side, $event)" @pointermove="moveRange(side, $event)"
                 @pointerup="finishRange(side, $event)" @pointercancel="cancelRange"
                 @keydown="rangeByKeyboard(side, $event)">
-                <span>{{ side }}</span>
+                <span class="range-letter">{{ side }}</span>
             </button>
         </div>
-        <p class="timeline-hint" :aria-live="dragging ? 'off' : 'polite'">
-            <span>{{ hasMeasureGrid ? "小节吸附 · Alt 自由拖动" : "自由选取区间" }}</span>
-            <span>A {{ formatMidiTime(rangeValue[0]) }} — B {{ formatMidiTime(rangeValue[1]) }}</span>
-        </p>
+        </div>
     </section>
 </template>
 
@@ -94,9 +94,11 @@ const playLabel = computed(() => props.session.state.status === 'playing' ? '暂
     : props.session.state.status === 'paused' ? '继续'
     : props.session.mode === 'follow' ? '开始练习' : '播放')
 const statusLabel = computed(() => props.session.loading ? '正在加载曲目…'
+    : props.session.state.scrubbing ? '拖动预览'
+    : props.session.state.status === 'paused' ? '已暂停'
+    : props.session.state.leadInMs > 0 ? '音符进入中'
     : props.session.state.waiting ? '等待按对琴键'
     : props.session.state.status === 'playing' ? (props.session.mode === 'follow' ? '跟弹练习中' : '正在播放')
-    : props.session.state.status === 'paused' ? '已暂停'
     : props.session.selectedId ? '已就绪' : '支持 .mid / .midi')
 
 const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, value))
@@ -122,7 +124,7 @@ const visibleMeasures = computed(() => {
     const width = Math.max(1, timelineWidth.value)
     const marks = measures.value.marks.filter(mark => mark.index > 1 && mark.ms < duration.value)
         .map(mark => ({index: mark.index, percent: percent(mark.ms),
-            x: percent(mark.ms) / 100 * width, major: (mark.index - 1) % 5 === 0}))
+            x: percent(mark.ms) / 100 * width, major: mark.index % 5 === 0}))
     const majors = []
     let lastMajor = -100
     for (const mark of marks) {
@@ -192,11 +194,11 @@ function beginSeek(event) {
     activePointer = {type: 'seek', id: event.pointerId}
     event.currentTarget.setPointerCapture(event.pointerId)
     dragging.value = true
-    seekDraft.value = fromPointer(event)
+    seekDraft.value = props.session.previewSeek(fromPointer(event))
 }
 function moveSeek(event) {
     if (activePointer?.type === 'seek' && activePointer.id === event.pointerId)
-        seekDraft.value = fromPointer(event)
+        seekDraft.value = props.session.previewSeek(fromPointer(event))
 }
 async function finishSeek(event) {
     if (activePointer?.type !== 'seek' || activePointer.id !== event.pointerId) return
@@ -205,13 +207,17 @@ async function finishSeek(event) {
     dragging.value = false
     const epoch = editEpoch
     if (target !== null) await props.session.seek(target)
-    if (epoch === editEpoch && seekDraft.value === target) seekDraft.value = null
+    if (epoch === editEpoch && seekDraft.value === target) {
+        seekDraft.value = null
+        props.session.endSeekPreview()
+    }
 }
 function cancelSeek() {
     if (activePointer?.type !== 'seek') return
     activePointer = null
     dragging.value = false
     seekDraft.value = null
+    props.session.endSeekPreview()
 }
 function beginRange(side, event) {
     if (!enabled.value || event.button !== 0) return
@@ -310,8 +316,10 @@ function clearDrafts() {
     activePointer = null
     dragging.value = false
     seekDraft.value = rangeDraft.value = null
+    props.session.endSeekPreview()
 }
 watch(() => props.session.selectedId, clearDrafts, {flush: 'sync'})
+watch(() => props.session.mode, clearDrafts, {flush: 'sync'})
 watch(() => props.session.loading, loading => { if (loading) clearDrafts() }, {flush: 'sync'})
 onMounted(() => {
     resizeObserver = new ResizeObserver(entries => {
@@ -323,38 +331,41 @@ onBeforeUnmount(() => { resizeObserver?.disconnect(); clearDrafts() })
 </script>
 
 <style scoped>
-.midi-transport { width: min(680px, calc(100vw - 40px)); padding: 14px 19px 9px; border: 1px solid #ffffff1a; border-radius: 11px; background: #242424ed; backdrop-filter: blur(18px); box-shadow: 0 12px 45px #0003; color: #e8e8e8; }
-.transport-main { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
-.track-details { display: flex; flex: 1; flex-direction: column; min-width: 0; gap: 7px; }
-.track-details strong { font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.midi-transport { width: 100%; display: grid; grid-template-columns: minmax(180px, 260px) minmax(0, 1fr); gap: 22px; align-items: center; color: #e8e8e8; }
+.transport-main { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.play-button { width: 38px; height: 38px; flex-shrink: 0; }
+.track-details { display: flex; flex: 1; flex-direction: column; min-width: 0; gap: 4px; }
+.track-details strong { font-size: 12px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .track-details span { font-size: 10px; color: #a2a2a2; }
-.transport-end { display: flex; align-items: center; gap: 7px; }
-.range-shortcuts { display: flex; align-items: center; gap: 1px; }
-.range-shortcuts :deep(.n-button) { min-width: 31px; padding: 0 3px; font-size: 11px; }
-.time-readout { font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; color: #c0c0c0; }
-.time-readout i { color: #656565; font-style: normal; margin: 0 4px; }
-.unified-timeline { position: relative; height: 35px; margin: 6px 4px 1px; touch-action: none; user-select: none; }
+.timeline-editor { min-width: 0; padding: 0 7px; }
+.timeline-meta { height: 20px; display: flex; align-items: center; gap: 10px; font-variant-numeric: tabular-nums; }
+.timeline-guide { color: #858585; font-size: 10px; flex: 1; white-space: nowrap; }
+.range-shortcuts { display: flex; align-items: center; gap: 1px; margin-left: auto; }
+.range-shortcuts :deep(.n-button) { min-width: 30px; padding: 0 4px; font-size: 10px; height: 20px; }
+.time-readout, .range-readout { font-size: 10px; font-variant-numeric: tabular-nums; white-space: nowrap; color: #bdbdbd; }
+.time-readout i, .range-readout i { color: #656565; font-style: normal; margin: 0 3px; }
+.range-readout { color: #909090; }
+.unified-timeline { position: relative; height: 29px; margin: 1px 0 0; touch-action: none; user-select: none; }
 .unified-timeline.is-disabled { opacity: .48; }
-.seek-surface { position: absolute; inset: 0; cursor: crosshair; border-radius: 8px; touch-action: none; }
+.seek-surface { position: absolute; inset: 0; cursor: pointer; border-radius: 3px; touch-action: none; }
 .seek-surface:focus-visible { outline: 2px solid var(--ui-accent, #c4c4c4); outline-offset: 3px; }
-.timeline-rail, .selected-range { position: absolute; top: 13px; height: 9px; border-radius: 3px; }
-.timeline-rail { left: 0; right: 0; background: #555555; box-shadow: inset 0 1px 3px #0008; }
-.selected-range { background: var(--ui-accent-soft, #a0a0a040); box-shadow: inset 0 0 0 1px var(--ui-accent, #b5b5b5); opacity: .8; }
-.progress-fill { position: absolute; top: 19px; left: 0; height: 3px; background: var(--ui-accent, #cecece); opacity: .9; }
-.measure-mark { position: absolute; top: 13px; width: 1px; height: 9px; background: #ffffff47; pointer-events: none; }
-.measure-mark.major { top: 10px; width: 2px; height: 15px; background: #eaeaeaab; }
-.measure-label { position: absolute; bottom: 16px; left: 0; transform: translateX(-50%); font-size: 9px; color: #bababa; font-variant-numeric: tabular-nums; }
-.play-head { position: absolute; top: 5px; width: 2px; height: 25px; background: #eeeeee; transform: translateX(-50%); box-shadow: 0 0 7px #ffffff73; pointer-events: none; }
-.range-handle { position: absolute; top: 1px; width: 24px; height: 33px; padding: 0; transform: translateX(-50%); border: 1px solid var(--ui-accent, #c5c5c5); border-radius: 5px; color: #202020; background: #d0d0d0; box-shadow: 0 1px 7px #0008; cursor: ew-resize; touch-action: none; z-index: 2; font-size: 10px; font-weight: 700; }
-.range-handle span { pointer-events: none; }
+.timeline-rail, .selected-range { position: absolute; top: 13px; height: 6px; border-radius: 0; }
+.timeline-rail { left: 0; right: 0; background: #ffffff08; }
+.selected-range { background: #ffffff24; }
+.progress-fill { position: absolute; top: 13px; left: 0; height: 6px; background: var(--ui-accent, #cecece); opacity: .24; pointer-events: none; }
+.measure-mark { position: absolute; top: 22px; width: 1px; height: 4px; background: #ffffff50; pointer-events: none; }
+.measure-mark.major { height: 6px; background: #ffffff95; }
+.measure-label { position: absolute; top: -23px; left: 0; transform: translateX(-50%); font-size: 8px; color: #999; font-variant-numeric: tabular-nums; }
+.play-head { position: absolute; top: 12px; width: 9px; height: 11px; background: var(--ui-accent); transform: translateX(-50%); clip-path: polygon(0 0, 100% 0, 100% 55%, 50% 100%, 0 55%); pointer-events: none; }
+.range-handle { position: absolute; top: 5px; width: 16px; height: 24px; padding: 0; transform: translateX(-50%); border: 0; background: transparent; color: var(--ui-accent); cursor: ew-resize; touch-action: none; z-index: 2; }
+.range-handle::before { content: ''; position: absolute; top: 7px; bottom: 9px; width: 4px; border: 1px solid currentColor; }
+.handle-a::before { left: 8px; border-right: 0; }
+.handle-b::before { right: 8px; border-left: 0; }
+.range-letter { position: absolute; left: 50%; top: -9px; transform: translateX(-50%); font-size: 9px; opacity: 0; pointer-events: none; transition: opacity 120ms; }
+.range-handle:hover .range-letter, .range-handle:focus-visible .range-letter { opacity: 1; }
 .range-handle:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
 .range-handle:disabled { cursor: default; }
-.timeline-hint { display: flex; justify-content: space-between; gap: 12px; margin: 1px 0 0; font-size: 10px; color: #999; font-variant-numeric: tabular-nums; }
-@media (max-width: 600px) {
-    .midi-transport { padding: 10px 12px 7px; }
-    .transport-main { gap: 7px; flex-wrap: wrap; }
-    .transport-end { margin-left: auto; }
-    .timeline-hint span:first-child { display: none; }
-}
+@media (max-width: 1150px) { .timeline-guide { display: none; } .midi-transport { grid-template-columns: minmax(160px, 220px) minmax(0, 1fr); gap: 14px; } }
+@media (max-width: 700px) { .midi-transport { grid-template-columns: minmax(130px, 170px) minmax(0, 1fr); gap: 6px; } .range-readout { display: none; } }
 @media (prefers-reduced-motion: reduce) { .range-handle, .play-head { transition: none; } }
 </style>

@@ -30,6 +30,7 @@ export function useMidiSession({store, Keyboard}) {
     const receivedAt = ref(performance.now())
     const localCurrent = ref(0)
     const pendingPosition = ref(null)
+    const previewPosition = ref(null)
     const options = reactive({mode: store.mainMode === 'follow' ? 'follow' : 'play', handMode: 'both', speed: 1, leftMs: 0, rightMs: 0, loop: true})
     let selectionVersion = 0
     let disposed = false
@@ -48,6 +49,8 @@ export function useMidiSession({store, Keyboard}) {
         speed: options.speed, loop: options.loop, waiting: false,
         ...(matchingState.value?.status === 'idle' ? {} : matchingState.value),
         ...(pendingPosition.value === null ? {} : {currentMs: pendingPosition.value, waiting: false}),
+        ...(previewPosition.value === null ? {} : {currentMs: previewPosition.value, waiting: false,
+            currentStep: null, leadInMs: 0, scrubbing: true}),
         clockRevision: clockRevision.value,
         receivedAt: receivedAt.value,
     }))
@@ -108,6 +111,7 @@ export function useMidiSession({store, Keyboard}) {
             localCurrent.value = current.currentMs || 0
         }
         pendingPosition.value = null
+        previewPosition.value = null
         clockRevision.value++
         return true
     }
@@ -207,7 +211,7 @@ export function useMidiSession({store, Keyboard}) {
     async function startBackend() {
         if (!selectedId.value || !timeline.value || loading.value || mode.value === 'free') return false
         options.mode = mode.value === 'follow' ? 'follow' : 'play'
-        await Keyboard.StartMidiPlayback(buildOptions({startMs: localCurrent.value}))
+        await Keyboard.StartMidiPlayback(buildOptions({startMs: localCurrent.value, leadIn: true}))
         clockRevision.value++
         await syncState()
         return true
@@ -229,6 +233,7 @@ export function useMidiSession({store, Keyboard}) {
             await Keyboard.StopMidiPlayback()
             localCurrent.value = options.leftMs
             pendingPosition.value = null
+            previewPosition.value = null
             clockRevision.value++
             await syncState()
             return true
@@ -252,6 +257,13 @@ export function useMidiSession({store, Keyboard}) {
             } finally { pendingPosition.value = null }
         }, '跳转播放位置失败')
     }
+    // Dragging previews locally. Only its final position seeks the MIDI output.
+    function previewSeek(ms) {
+        previewPosition.value = clamp(ms, options.leftMs, options.rightMs || durationMs.value)
+        clockRevision.value++
+        return previewPosition.value
+    }
+    function endSeekPreview() { previewPosition.value = null; clockRevision.value++ }
     function updateOptions(changes, title) {
         const id = selectedId.value
         const version = selectionVersion
@@ -272,7 +284,7 @@ export function useMidiSession({store, Keyboard}) {
             return true
         }, title)
     }
-    function setSpeed(speed) { return updateOptions({speed: clamp(speed, .25, 3)}, '调整速度失败') }
+    function setSpeed(speed) { return updateOptions({speed: clamp(speed, .25, 5)}, '调整速度失败') }
     function setHand(handMode) {
         if (!['left', 'right', 'both'].includes(handMode)) return Promise.resolve(false)
         return updateOptions({handMode}, '调整演奏手失败')
@@ -298,10 +310,12 @@ export function useMidiSession({store, Keyboard}) {
     }, {flush: 'sync'})
     function dispose() {
         disposed = true
+        previewPosition.value = null
         ++selectionVersion
         stopWatching()
     }
     return reactive({library, selectedId, selectedSong, timeline, loading, importing, ready, busy, mode,
         options, state, durationMs, clockRevision, initialize, refreshLibrary, selectSong, importSong,
-        removeSong, setMode, start, togglePlayback, stop, seek, setSpeed, setHand, setLoop, setRange, dispose})
+        removeSong, setMode, start, togglePlayback, stop, seek, previewSeek, endSeekPreview,
+        setSpeed, setHand, setLoop, setRange, dispose})
 }

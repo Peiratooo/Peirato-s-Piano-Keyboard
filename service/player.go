@@ -11,6 +11,7 @@ const (
 	defaultMidiWindowMs = 100.0
 	playerTickInterval  = 4 * time.Millisecond
 	stateEmitInterval   = 50 * time.Millisecond
+	midiLeadInMs        = 5000.0
 )
 
 type MidiPlayStatus string
@@ -48,6 +49,7 @@ type MidiPlaybackOptions struct {
 	StartMs float64 `json:"startMs,omitempty"`
 	Speed   float64 `json:"speed"`
 	Loop    bool    `json:"loop"`
+	LeadIn  bool    `json:"leadIn,omitempty"`
 
 	LeadWindowMs  float64 `json:"leadWindowMs"`
 	GroupWindowMs float64 `json:"groupWindowMs"`
@@ -67,6 +69,7 @@ type MidiPlayerState struct {
 	LeadWindowMs  float64           `json:"leadWindowMs"`
 	GroupWindowMs float64           `json:"groupWindowMs"`
 	Waiting       bool              `json:"waiting"`
+	LeadInMs      float64           `json:"leadInMs"`
 	CurrentStep   *MidiPracticeStep `json:"currentStep,omitempty"`
 	MutedTracks   map[int]bool      `json:"mutedTracks"`
 	MutedHands    map[MidiHand]bool `json:"mutedHands"`
@@ -94,6 +97,7 @@ type MidiVisualEvent struct {
 	Hand     MidiHand `json:"hand"`
 	Source   string   `json:"source"`
 	Active   bool     `json:"active"`
+	Attack   bool     `json:"attack"`
 }
 
 type MidiPlayerRuntime struct {
@@ -212,10 +216,15 @@ func (p *MidiPlayerRuntime) Start(midiFile *Midi, options MidiPlaybackOptions) e
 	if options.Mode == MidiPlaybackModeFollow && p.followIndex < len(followSteps) {
 		p.state.CurrentStep = cloneMidiPracticeStep(&followSteps[p.followIndex])
 	}
+	if options.LeadIn {
+		p.state.LeadInMs = midiLeadInMs * options.Speed
+	}
 
 	clearMidiPlaybackOutput()
 	emitMidiVisualClear()
-	p.restoreAtLocked(startMs)
+	if !p.startingLocked() {
+		p.restoreAtLocked(startMs)
+	}
 	p.startLocked()
 	state := p.state
 	p.mu.Unlock()
@@ -233,7 +242,7 @@ func normalizeMidiPlaybackOptions(options MidiPlaybackOptions, durationMs float6
 	if options.Speed <= 0 {
 		options.Speed = 1
 	}
-	options.Speed = clampFloat(options.Speed, 0.25, 3.0)
+	options.Speed = clampFloat(options.Speed, 0.25, 5.0)
 	if options.LeadWindowMs <= 0 {
 		options.LeadWindowMs = defaultMidiWindowMs
 	}
@@ -265,6 +274,20 @@ func (p *MidiPlayerRuntime) Tick() {
 	p.mu.Lock()
 	if p.state.Status != MidiPlayPlaying {
 		p.mu.Unlock()
+		return
+	}
+	// Notes enter immediately. Output starts after the five-second visual lead-in.
+	p.advanceStartupLocked()
+	if p.startingLocked() {
+		if time.Since(p.lastStateEmit) >= stateEmitInterval {
+			state = p.state
+			p.lastStateEmit = time.Now()
+			emitState = true
+		}
+		p.mu.Unlock()
+		if emitState {
+			emitMidiPlayerState(state)
+		}
 		return
 	}
 
@@ -357,6 +380,7 @@ func (p *MidiPlayerRuntime) advanceFollowLocked(currentMs float64) (*MidiPractic
 
 func (p *MidiPlayerRuntime) HandleUserNoteOn(note int) {
 	var state MidiPlayerState
+	var hintStep *MidiPracticeStep
 	var clearHint bool
 	var shouldEmit bool
 
@@ -371,7 +395,7 @@ func (p *MidiPlayerRuntime) HandleUserNoteOn(note int) {
 	}
 
 	step := &p.followSteps[p.followIndex]
-	if !stepContainsNote(step, note) {
+	if !stepContainsNote(step, note) || p.acceptedNotes[note] {
 		p.mu.Unlock()
 		return
 	}
@@ -382,15 +406,30 @@ func (p *MidiPlayerRuntime) HandleUserNoteOn(note int) {
 		state = p.state
 		clearHint = true
 		shouldEmit = true
+	} else {
+		hintStep = p.pendingPracticeStepLocked(step)
 	}
 	p.mu.Unlock()
 
 	if clearHint {
 		emitMidiFollowHint(nil)
+	} else if hintStep != nil {
+		emitMidiFollowHint(hintStep)
 	}
 	if shouldEmit {
 		emitMidiPlayerState(state)
 	}
+}
+
+func (p *MidiPlayerRuntime) pendingPracticeStepLocked(step *MidiPracticeStep) *MidiPracticeStep {
+	remaining := cloneMidiPracticeStep(step)
+	remaining.Notes = remaining.Notes[:0]
+	for _, note := range step.Notes {
+		if !p.acceptedNotes[note.Note] {
+			remaining.Notes = append(remaining.Notes, note)
+		}
+	}
+	return remaining
 }
 
 func (p *MidiPlayerRuntime) stepAcceptedLocked(step *MidiPracticeStep) bool {
@@ -561,6 +600,7 @@ func (p *MidiPlayerRuntime) Pause() error {
 	if p.state.Status != MidiPlayPlaying {
 		return nil
 	}
+	p.advanceStartupLocked()
 	p.state.CurrentMs = clampFloat(p.calcCurrentMsLocked(), p.state.LeftMs, p.state.RightMs)
 	p.state.Status = MidiPlayPaused
 	p.state.Waiting = false
@@ -582,11 +622,13 @@ func (p *MidiPlayerRuntime) Resume() error {
 	p.baseMs = p.state.CurrentMs
 	p.baseTime = time.Now()
 	p.state.Status = MidiPlayPlaying
-	p.restoreAtLocked(p.state.CurrentMs)
+	if !p.startingLocked() {
+		p.restoreAtLocked(p.state.CurrentMs)
+	}
 	// Pause clears visual hints but preserves accepted notes. Restore the active
 	// step before releasing the lock so the resumed ticker cannot overtake it.
 	if p.state.Mode == MidiPlaybackModeFollow && p.hintActive && p.followIndex < len(p.followSteps) {
-		emitMidiFollowHint(cloneMidiPracticeStep(&p.followSteps[p.followIndex]))
+		emitMidiFollowHint(p.pendingPracticeStepLocked(&p.followSteps[p.followIndex]))
 	}
 	emitMidiPlayerState(p.state)
 	p.startLocked()
@@ -633,6 +675,7 @@ func (p *MidiPlayerRuntime) Seek(ms float64) error {
 	clearMidiPlaybackOutput()
 	emitMidiVisualClear()
 	p.state.CurrentMs = ms
+	p.state.LeadInMs = 0
 	p.state.Waiting = false
 	p.eventIndex = findMidiEventIndexByMs(p.events, ms)
 	p.followIndex = findPracticeStepIndexByMs(p.followSteps, ms)
@@ -655,9 +698,13 @@ func (p *MidiPlayerRuntime) Seek(ms float64) error {
 func (p *MidiPlayerRuntime) SetSpeed(speed float64) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	speed = clampFloat(speed, 0.25, 3.0)
+	speed = clampFloat(speed, 0.25, 5.0)
 	if p.state.Status == MidiPlayPlaying {
+		p.advanceStartupLocked()
 		p.state.CurrentMs = clampFloat(p.calcCurrentMsLocked(), p.state.LeftMs, p.state.RightMs)
+	}
+	if p.startingLocked() {
+		p.state.LeadInMs *= speed / p.state.Speed
 	}
 	p.state.Speed = speed
 	p.baseMs = p.state.CurrentMs
@@ -692,6 +739,9 @@ func (p *MidiPlayerRuntime) SetOptions(options MidiPlaybackOptions) error {
 		return errors.New("MIDI 尚未加载")
 	}
 
+	if p.state.Status == MidiPlayPlaying {
+		p.advanceStartupLocked()
+	}
 	currentMs := p.state.CurrentMs
 	if p.state.Status == MidiPlayPlaying && !p.state.Waiting {
 		currentMs = p.calcCurrentMsLocked()
@@ -720,6 +770,9 @@ func (p *MidiPlayerRuntime) SetOptions(options MidiPlaybackOptions) error {
 	p.state.Hand = options.HandMode
 	p.state.LeftMs = options.LeftMs
 	p.state.RightMs = options.RightMs
+	if p.startingLocked() {
+		p.state.LeadInMs *= options.Speed / p.state.Speed
+	}
 	p.state.Speed = options.Speed
 	p.state.Loop = options.Loop
 	p.state.LeadWindowMs = options.LeadWindowMs
@@ -741,7 +794,7 @@ func (p *MidiPlayerRuntime) SetOptions(options MidiPlaybackOptions) error {
 	p.eventIndex = findMidiEventIndexByMs(p.events, currentMs)
 	p.baseMs = currentMs
 	p.baseTime = time.Now()
-	if p.state.Status == MidiPlayPlaying {
+	if p.state.Status == MidiPlayPlaying && !p.startingLocked() {
 		p.restoreAtLocked(currentMs)
 	}
 	emitMidiPlayerState(p.state)
@@ -750,6 +803,7 @@ func (p *MidiPlayerRuntime) SetOptions(options MidiPlaybackOptions) error {
 
 func (p *MidiPlayerRuntime) resetToRangeStartLocked() {
 	p.state.CurrentMs = p.state.LeftMs
+	p.state.LeadInMs = 0
 	p.state.Waiting = false
 	p.eventIndex = findMidiEventIndexByMs(p.events, p.state.LeftMs)
 	p.followIndex = findPracticeStepIndexByMs(p.followSteps, p.state.LeftMs)
@@ -805,11 +859,33 @@ func (p *MidiPlayerRuntime) State() MidiPlayerState {
 }
 
 func (p *MidiPlayerRuntime) calcCurrentMsLocked() float64 {
-	if p.state.Status != MidiPlayPlaying || p.state.Waiting {
+	if p.state.Status != MidiPlayPlaying || p.state.Waiting || p.startingLocked() {
 		return p.state.CurrentMs
 	}
 	elapsedMs := float64(time.Since(p.baseTime).Microseconds()) / 1000.0
 	return p.baseMs + elapsedMs*p.state.Speed
+}
+
+func (p *MidiPlayerRuntime) startingLocked() bool {
+	return p.state.LeadInMs > 0
+}
+
+// Rebase at each update so pause/resume and speed changes preserve the
+// remaining lead-in without delaying commands or queuing timer callbacks.
+func (p *MidiPlayerRuntime) advanceStartupLocked() {
+	if p.state.Status != MidiPlayPlaying || !p.startingLocked() {
+		return
+	}
+	now := time.Now()
+	elapsed := max(0, float64(now.Sub(p.baseTime).Microseconds())/1000)
+	leadIn := min(elapsed*p.state.Speed, p.state.LeadInMs)
+	p.state.LeadInMs -= leadIn
+	elapsed -= leadIn / p.state.Speed
+	p.baseTime = now
+	if !p.startingLocked() {
+		p.baseTime = now.Add(-time.Duration(elapsed * float64(time.Millisecond)))
+		p.restoreAtLocked(p.baseMs)
+	}
 }
 
 func (p *MidiPlayerRuntime) startLocked() {
@@ -950,7 +1026,7 @@ func (p *MidiPlayerRuntime) restoreAtLocked(ms float64) {
 	}
 	for _, note := range active {
 		playSelectedOutputNoteOn(uint8(note.Channel), uint8(note.Note), uint8(clampMidiByte(note.Velocity)))
-		emitMidiPlaybackKey(note, uint8(note.Channel), true)
+		emitMidiPlaybackKey(note, uint8(note.Channel), true, false)
 	}
 }
 
@@ -989,12 +1065,12 @@ func dispatchMidiEvent(event MidiEvent, emitVisual bool) {
 	case MidiEventNoteOn:
 		playSelectedOutputNoteOn(channel, uint8(event.Note), uint8(clampMidiByte(event.Velocity)))
 		if emitVisual {
-			emitMidiPlaybackKey(event, channel, true)
+			emitMidiPlaybackKey(event, channel, true, true)
 		}
 	case MidiEventNoteOff:
 		playSelectedOutputNoteOff(channel, uint8(event.Note))
 		if emitVisual {
-			emitMidiPlaybackKey(event, channel, false)
+			emitMidiPlaybackKey(event, channel, false, false)
 		}
 	case MidiEventControlChange:
 		playSelectedOutputControlChange(channel, uint8(clampMidiByte(event.Controller)), uint8(clampMidiByte(event.Value)))
@@ -1019,7 +1095,7 @@ func emitMidiPlayerState(state MidiPlayerState) {
 	}
 }
 
-func emitMidiPlaybackKey(event MidiEvent, channel uint8, active bool) {
+func emitMidiPlaybackKey(event MidiEvent, channel uint8, active, attack bool) {
 	if App == nil {
 		return
 	}
@@ -1030,6 +1106,7 @@ func emitMidiPlaybackKey(event MidiEvent, channel uint8, active bool) {
 		Hand:     event.Hand,
 		Source:   "playback",
 		Active:   active,
+		Attack:   attack,
 	})
 }
 

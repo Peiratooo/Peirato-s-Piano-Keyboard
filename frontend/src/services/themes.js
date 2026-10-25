@@ -1,117 +1,27 @@
-export const colorPalettes = [
-    {
-        key: 'fresh',
-        label: '清透薄荷',
-        desc: '清爽明亮，接近默认风格。',
-        preview: ['#9AF7B3', '#5FFF5F', '#f7e89a', '#ffd25f', '#10e786'],
-        colors: {
-            whiteKey: '#9AF7B3',
-            blackKey: '#5FFF5F',
-            whiteKeyLeft: '#f7e89a',
-            blackKeyLeft: '#ffd25f',
-            damperPedal: '#e7b510',
-            softPedal: '#10e786',
-            sostenutoPedal: '#1054e7',
-        },
-    },
-    {
-        key: 'apple-blue',
-        label: '苹果蓝紫',
-        desc: '现代冷色，高亮清晰。',
-        preview: ['#7DD3FC', '#38BDF8', '#C4B5FD', '#8B5CF6', '#34D399'],
-        colors: {
-            whiteKey: '#7DD3FC',
-            blackKey: '#38BDF8',
-            whiteKeyLeft: '#C4B5FD',
-            blackKeyLeft: '#8B5CF6',
-            damperPedal: '#F59E0B',
-            softPedal: '#34D399',
-            sostenutoPedal: '#60A5FA',
-        },
-    },
-    {
-        key: 'warm-stage',
-        label: '暖色舞台',
-        desc: '偏演奏氛围，温暖。',
-        preview: ['#FDBA74', '#FB923C', '#FDE68A', '#F59E0B', '#A78BFA'],
-        colors: {
-            whiteKey: '#FDBA74',
-            blackKey: '#FB923C',
-            whiteKeyLeft: '#FDE68A',
-            blackKeyLeft: '#F59E0B',
-            damperPedal: '#FACC15',
-            softPedal: '#4ADE80',
-            sostenutoPedal: '#A78BFA',
-        },
-    },
-    {
-        key: 'soft-pro',
-        label: '低饱和专业',
-        desc: '更克制，适合长时间练习。',
-        preview: ['#A7F3D0', '#6EE7B7', '#BFDBFE', '#93C5FD', '#FCD34D'],
-        colors: {
-            whiteKey: '#A7F3D0',
-            blackKey: '#6EE7B7',
-            whiteKeyLeft: '#BFDBFE',
-            blackKeyLeft: '#93C5FD',
-            damperPedal: '#FCD34D',
-            softPedal: '#86EFAC',
-            sostenutoPedal: '#93C5FD',
-        },
-    },
-    {
-        key: 'neon-practice',
-        label: '霓虹练习',
-        desc: '对比更强，适合快速观察按键反馈。',
-        preview: ['#22D3EE', '#06B6D4', '#F0ABFC', '#D946EF', '#FDE047'],
-        colors: {
-            whiteKey: '#22D3EE',
-            blackKey: '#06B6D4',
-            whiteKeyLeft: '#F0ABFC',
-            blackKeyLeft: '#D946EF',
-            damperPedal: '#FDE047',
-            softPedal: '#4ADE80',
-            sostenutoPedal: '#60A5FA',
-        },
-    },
-    {
-        key: 'classic-ivory',
-        label: '古典象牙',
-        desc: '柔和暖白，适合浅色界面。',
-        preview: ['#FDECC8', '#E9B872', '#D8F3DC', '#95D5B2', '#8ECAE6'],
-        colors: {
-            whiteKey: '#FDECC8',
-            blackKey: '#E9B872',
-            whiteKeyLeft: '#D8F3DC',
-            blackKeyLeft: '#95D5B2',
-            damperPedal: '#FFB703',
-            softPedal: '#52B788',
-            sostenutoPedal: '#8ECAE6',
-        },
-    },
-    {
-        key: 'studio-focus',
-        label: '录音棚聚焦',
-        desc: '灰蓝基调，状态色更稳重。',
-        preview: ['#CBD5E1', '#94A3B8', '#BAE6FD', '#38BDF8', '#FBBF24'],
-        colors: {
-            whiteKey: '#CBD5E1',
-            blackKey: '#94A3B8',
-            whiteKeyLeft: '#BAE6FD',
-            blackKeyLeft: '#38BDF8',
-            damperPedal: '#FBBF24',
-            softPedal: '#6EE7B7',
-            sostenutoPedal: '#93C5FD',
-        },
-    },
-]
+export const paletteGroups = ['清晰练习', '柔和耐看', '演奏展示', '经典质感']
 
-
-export function applyColorPalette(config, key) {
-    const palette = colorPalettes.find(item => item.key === key)
-    if (!palette) return false
-    for (const [name, color] of Object.entries(palette.colors)) {
-        if (config.colors[name]) config.colors[name] = {...config.colors[name], color}
-    }
-    return true
+function palette(key, label, group, desc, right, rightBlack, left, leftBlack) {
+    return {key, label, group, desc, recommended: key === 'blue-amber', colors: {
+        whiteKey: right, blackKey: rightBlack, whiteKeyLeft: left, blackKeyLeft: leftBlack,
+        damperPedal: '#D3AD68', softPedal: '#87BEA5', sostenutoPedal: '#8EAFE0',
+    }}
 }
+
+export const colorPalettes = [
+    palette('blue-amber', '蓝橙练习', '清晰练习', '柔蓝与琥珀，冷暖分明，优先推荐。', '#8DB8DF', '#6095C5', '#E1B881', '#BD8E55'),
+    palette('teal-coral', '冰青珊瑚', '清晰练习', '冰青与珊瑚，清爽、声部清楚。', '#85C8C1', '#57A39B', '#E0A28F', '#BC7B68'),
+    palette('apple-blue', '苹果蓝紫', '清晰练习', '蓝紫色调，柔化高亮，保留冷色层次。', '#88B5E5', '#5F8BC5', '#B7A7DF', '#8E7ABB'),
+    palette('indigo-gold', '靛蓝金砂', '清晰练习', '靛蓝与金砂，稳重的冷暖对照。', '#9EABE1', '#7887BE', '#D9BD78', '#B6974F'),
+    palette('fresh', '清透薄荷', '柔和耐看', '薄荷与琥珀，收敛荧光感，清爽柔和。', '#91D1AE', '#64AB86', '#E5BE84', '#BF955D'),
+    palette('soft-pro', '低饱和专业', '柔和耐看', '灰绿与淡紫，克制的练习配色。', '#A5C1B2', '#7D9D8C', '#BCB5CC', '#928AA7'),
+    palette('mist-almond', '雾蓝杏仁', '柔和耐看', '柔和雾蓝与暖杏，安静耐看。', '#AABFD0', '#809AAE', '#D5BDA4', '#B2977C'),
+    palette('sage-clay', '鼠尾草陶土', '柔和耐看', '鼠尾草绿与陶土，自然温和。', '#AEC2A4', '#829B76', '#CCA18A', '#AA7B64'),
+    palette('lilac-peach', '丁香蜜桃', '柔和耐看', '淡紫与蜜桃，轻柔的暖冷搭配。', '#BDAED6', '#9786B4', '#DFB69D', '#BC9076'),
+    palette('warm-stage', '暖色舞台', '演奏展示', '暖橙与冷蓝，温暖又能分清左右手。', '#EBA779', '#C78052', '#94BCCB', '#6797AA'),
+    palette('neon-practice', '霓虹练习', '演奏展示', '鲜明青紫，适合演示与快速观察。', '#58CFE1', '#2CA7BF', '#D18ACC', '#AD5EAC'),
+    palette('sakura-ice', '樱粉冰青', '演奏展示', '樱粉与冰青，明快而有辨识度。', '#E0A0B8', '#BD7792', '#93CCD5', '#66A6B2'),
+    palette('twilight-rose', '暮紫玫瑰', '演奏展示', '暮紫与玫瑰，柔和的舞台氛围。', '#AAA2D8', '#8077B5', '#D69CAE', '#B4758A'),
+    palette('classic-ivory', '古典象牙', '经典质感', '象牙金与灰绿，加深激活色以便辨认。', '#D2B684', '#AD8D56', '#9FB9A8', '#6F9581'),
+    palette('studio-focus', '录音棚聚焦', '经典质感', '冷灰蓝与暖灰，简洁、专注。', '#B7C1CE', '#8998AA', '#CCB69B', '#A58B6D'),
+    palette('silver-copper', '银灰铜金', '经典质感', '银灰与铜金，稳重的金属色搭配。', '#C1C8D0', '#929EAB', '#CFA879', '#AB8359'),
+]

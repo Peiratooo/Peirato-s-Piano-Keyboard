@@ -15,14 +15,14 @@ type MidiTimeline struct {
 	MidiID     string             `json:"midiId"`
 	DurationMs float64            `json:"durationMs"`
 	Notes      []MidiTimelineNote `json:"notes"`
-	Measures   []MidiMeasureMark `json:"measures"`
+	Measures   []MidiMeasureMark  `json:"measures"`
 }
 
 // Measure 1 starts at 0. Later markers are the true bar starts derived from
 // the MIDI time signature, PPQ and tempo map (never equal-width approximations).
 type MidiMeasureMark struct {
-	Index int `json:"index"`
-	Ms float64 `json:"ms"`
+	Index int     `json:"index"`
+	Ms    float64 `json:"ms"`
 }
 
 type MidiTimelineNote struct {
@@ -110,19 +110,11 @@ func buildMidiTimeline(midiFile *Midi) MidiTimeline {
 	return timeline
 }
 
-
-type midiTempoMark struct {
-	tick float64
-	bpm float64
-	startMs float64
-	track int
-}
-
 type midiMeterMark struct {
-	tick float64
-	numerator float64
+	tick        float64
+	numerator   float64
 	denominator float64
-	track int
+	track       int
 }
 
 // Build markers from musical time, not evenly divided duration. The original
@@ -132,61 +124,32 @@ func midiMeasureMarkers(file *Midi) []MidiMeasureMark {
 		// SMPTE-timed files have no PPQ: do not present invented measure lines.
 		return nil
 	}
-	tempoChanges := []midiTempoMark{{tick: 0, bpm: 120, track: -1}}
-	meterChanges := []midiMeterMark{{tick: 0, numerator: 4, denominator: 4, track: -1}}
-	reader := smf.ReadTracks(file.Path)
-	reader.Do(func(ev smf.TrackEvent) {
-		if ev.AbsTicks < 0 {
-			return
-		}
-		var bpm float64
-		if ev.Message.GetMetaTempo(&bpm) && bpm > 0 && !math.IsNaN(bpm) && !math.IsInf(bpm, 0) {
-			tempoChanges = append(tempoChanges, midiTempoMark{
-				tick: float64(ev.AbsTicks), bpm: bpm, track: ev.TrackNo,
-			})
-		}
-		var numerator, denominator uint8
-		if ev.Message.GetMetaMeter(&numerator, &denominator) &&
-			numerator > 0 && denominator > 0 && denominator <= 64 {
-			meterChanges = append(meterChanges, midiMeterMark{
-				tick: float64(ev.AbsTicks), numerator: float64(numerator),
-				denominator: float64(denominator), track: ev.TrackNo,
-			})
-		}
-	})
-	if reader.Error() != nil {
+	source, err := smf.ReadFile(file.Path)
+	if err != nil {
 		return nil
 	}
-	// On conflicting simultaneous tempo/meter changes, favor the lowest
-	// (conductor) track number, and retain the default only as fallback.
-	sort.SliceStable(tempoChanges, func(i, j int) bool {
-		if tempoChanges[i].tick == tempoChanges[j].tick {
-			return tempoChanges[i].track > tempoChanges[j].track
-		}
-		return tempoChanges[i].tick < tempoChanges[j].tick
-	})
-	tempos := make([]midiTempoMark, 0, len(tempoChanges))
-	for _, change := range tempoChanges {
-		if len(tempos) > 0 && tempos[len(tempos)-1].tick == change.tick {
-			tempos[len(tempos)-1] = change
-		} else {
-			tempos = append(tempos, change)
+	if _, ok := source.TimeFormat.(smf.MetricTicks); !ok {
+		return nil
+	}
+	// Use exactly the same tempo map as note playback, including tempo at tick
+	// zero. A fallback tempo must never replace a conductor-track tempo event.
+	toMs := func(tick float64) float64 {
+		return float64(source.TimeAt(int64(math.Round(tick)))) / 1000
+	}
+	const fallbackTrack = 1 << 30
+	meterChanges := []midiMeterMark{{tick: 0, numerator: 4, denominator: 4, track: fallbackTrack}}
+	for trackIndex, track := range source.Tracks {
+		var tick uint64
+		for _, event := range track {
+			tick += uint64(event.Delta)
+			var numerator, denominator uint8
+			if event.Message.GetMetaMeter(&numerator, &denominator) && numerator > 0 && denominator > 0 && denominator <= 64 {
+				meterChanges = append(meterChanges, midiMeterMark{tick: float64(tick),
+					numerator: float64(numerator), denominator: float64(denominator), track: trackIndex})
+			}
 		}
 	}
 	ppq := float64(file.PPQ)
-	for i := 1; i < len(tempos); i++ {
-		last := tempos[i-1]
-		tempos[i].startMs = last.startMs +
-			(tempos[i].tick-last.tick)*60000/(ppq*last.bpm)
-	}
-	toMs := func(tick float64) float64 {
-		index := sort.Search(len(tempos), func(i int) bool {return tempos[i].tick > tick}) - 1
-		if index < 0 {
-			index = 0
-		}
-		t := tempos[index]
-		return t.startMs + (tick-t.tick)*60000/(ppq*t.bpm)
-	}
 	sort.SliceStable(meterChanges, func(i, j int) bool {
 		if meterChanges[i].tick == meterChanges[j].tick {
 			return meterChanges[i].track > meterChanges[j].track

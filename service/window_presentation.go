@@ -119,6 +119,18 @@ func (k *Keyboard) SetMainDisplayMode(mode string) (MainWindowPresentation, erro
 	if current.Mode == mode {
 		return current, nil
 	}
+	if mode == mainDisplaySimple {
+		inputEventsMu.Lock()
+		recordingActive := recording.status == "recording" || recording.saving
+		inputEventsMu.Unlock()
+		if recordingActive {
+			return current, fmt.Errorf("请先停止录制并备份草稿，再切换简单模式")
+		}
+		player := MidiPlayer.State()
+		if player.Status == MidiPlayPlaying || player.Status == MidiPlayPaused {
+			return current, fmt.Errorf("简单模式仅支持自由演奏，请先停止播放或练习")
+		}
+	}
 	area, err := mainWindowWorkArea()
 	if err != nil {
 		return current, err

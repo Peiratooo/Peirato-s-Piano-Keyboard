@@ -1,51 +1,37 @@
 {
-  "fill" : {
-    "automatic-gradient" : "extended-gray:1.00000,1.00000"
+  "fill": {
+    "automatic-gradient": "extended-gray:1.00000,1.00000"
   },
-  "groups" : [
+  "groups": [
     {
-      "layers" : [
+      "layers": [
         {
-          "fill-specializations" : [
-            {
-              "appearance" : "dark",
-              "value" : {
-                "solid" : "srgb:0.92143,0.92145,0.92144,1.00000"
-              }
-            },
-            {
-              "appearance" : "tinted",
-              "value" : {
-                "solid" : "srgb:0.83742,0.83744,0.83743,1.00000"
-              }
-            }
-          ],
-          "image-name" : "wails_icon_vector.svg",
-          "name" : "wails_icon_vector",
-          "position" : {
-            "scale" : 1.25,
-            "translation-in-points" : [
-              36.890625,
-              4.96875
+          "image-name": "appicon.png",
+          "name": "appicon",
+          "position": {
+            "scale": 1,
+            "translation-in-points": [
+              0,
+              0
             ]
           }
         }
       ],
-      "shadow" : {
-        "kind" : "neutral",
-        "opacity" : 0.5
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
       },
-      "specular" : true,
-      "translucency" : {
-        "enabled" : true,
-        "value" : 0.5
+      "specular": false,
+      "translucency": {
+        "enabled": false,
+        "value": 0.5
       }
     }
   ],
-  "supported-platforms" : {
-    "circles" : [
+  "supported-platforms": {
+    "circles": [
       "watchOS"
     ],
-    "squares" : "shared"
+    "squares": "shared"
   }
 }

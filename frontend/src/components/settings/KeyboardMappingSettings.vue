@@ -410,9 +410,6 @@ onBeforeUnmount(() => {
     flex-direction: column;
     gap: 12px;
     overflow: hidden;
-    background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(248, 250, 252, 0.76)),
-        var(--setting-panel-bg);
 }
 
 .keymap-top,
@@ -605,7 +602,7 @@ onBeforeUnmount(() => {
         transform 0.14s ease;
 
     &:focus-visible {
-        outline: 2px solid rgba(37, 99, 235, 0.5);
+        outline: 2px solid var(--ui-accent);
         outline-offset: -2px;
     }
 }
@@ -616,8 +613,7 @@ onBeforeUnmount(() => {
     border-left: 1px solid #cbd5e1;
     border-bottom: 1px solid #cbd5e1;
     border-radius: 0 0 5px 5px;
-    background:
-        linear-gradient(180deg, #ffffff, #eef2f7);
+    background: #f8f8f8;
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.9),
         inset 0 -8px 14px rgba(15, 23, 42, 0.045);
@@ -645,26 +641,24 @@ onBeforeUnmount(() => {
 
 .mini-key:hover {
     box-shadow:
-        inset 0 0 0 2px rgba(37, 99, 235, 0.22),
+        inset 0 0 0 2px var(--ui-accent-ring),
         0 8px 18px rgba(15, 23, 42, 0.08);
 }
 
 .mini-key.mapped.white {
-    background:
-        linear-gradient(180deg, #f0fdf4, #dcfce7);
+    background: #e6f6ec;
     border-left-color: rgba(34, 197, 94, 0.38);
     border-bottom-color: rgba(34, 197, 94, 0.42);
 }
 
 .mini-key.mapped.black {
-    background:
-        linear-gradient(180deg, #14532d, #052e16);
+    background: #104127;
 }
 
 .mini-key.selected {
     box-shadow:
-        inset 0 0 0 2px rgba(37, 99, 235, 0.78),
-        0 0 0 1px rgba(37, 99, 235, 0.18);
+        inset 0 0 0 2px var(--ui-accent),
+        0 0 0 1px var(--ui-accent-ring);
 }
 
 .mini-key.selected::after {
@@ -675,7 +669,7 @@ onBeforeUnmount(() => {
     width: 5px;
     height: 5px;
     border-radius: 50%;
-    background: #2563eb;
+    background: var(--ui-accent);
     transform: translateX(-50%);
 }
 
@@ -710,8 +704,8 @@ onBeforeUnmount(() => {
     flex: 0 0 auto;
     padding: 4px 7px;
     border-radius: 999px;
-    color: #1d4ed8;
-    background: rgba(37, 99, 235, 0.1);
+    color: var(--setting-brand);
+    background: var(--ui-accent-soft);
     font-size: 11px;
     font-weight: 650;
 }

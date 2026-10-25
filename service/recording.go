@@ -89,6 +89,15 @@ func recordingDraftPath() string {
 	return filepath.Join(filepath.Dir(configFilePath), "recording-draft.json")
 }
 
+// A readable backup has already recovered from a previous write failure.
+// Keep other recording warnings, but do not persist obsolete backup errors.
+func recordingSavedDraftError(message string) string {
+	if strings.HasPrefix(message, "草稿备份失败") || strings.HasPrefix(message, "自动草稿备份失败") {
+		return ""
+	}
+	return message
+}
+
 // Background checkpoints and finalization cannot overwrite each other out of
 // order; in-flight snapshots are sequenced against discard and final save.
 var recordingBackupMu sync.Mutex
@@ -192,7 +201,7 @@ func loadRecordingDraftLocked() {
 	}
 	recording.status, recording.id = "draft", snap.ID
 	recording.durationUS, recording.noteCount = snap.DurationUS, snap.NoteCount
-	recording.lastError = snap.Error
+	recording.lastError = recordingSavedDraftError(snap.Error)
 	recording.events = snap.Events
 	recording.backupSaved = true
 }
@@ -218,6 +227,15 @@ func (k *Keyboard) GetRecordingState() RecordingState {
 }
 
 func (k *Keyboard) StartRecording() (RecordingState, error) {
+	c := mainWindowPresentation
+	c.operationMu.Lock()
+	defer c.operationMu.Unlock()
+	c.stateMu.Lock()
+	simple := c.mode == mainDisplaySimple
+	c.stateMu.Unlock()
+	if simple {
+		return k.GetRecordingState(), errors.New("简单模式不支持录制，请切回瀑布模式")
+	}
 	inputEventsMu.Lock()
 	defer inputEventsMu.Unlock()
 	loadRecordingDraftLocked()
@@ -422,7 +440,7 @@ func persistStoppedRecording() error {
 	}
 	snap := recordingSnapshot{
 		ID: recording.id, DurationUS: recording.durationUS,
-		NoteCount: recording.noteCount, Error: recording.lastError,
+		NoteCount: recording.noteCount, Error: recordingSavedDraftError(recording.lastError),
 		Events: recording.events,
 	}
 	revision := recording.backupRevision
@@ -433,8 +451,8 @@ func persistStoppedRecording() error {
 		recording.backupSaved = err == nil
 		if err != nil {
 			recording.lastError = "草稿备份失败，请保存 MIDI 后再退出：" + err.Error()
-		} else if strings.HasPrefix(recording.lastError, "草稿备份失败") {
-			recording.lastError = ""
+		} else {
+			recording.lastError = recordingSavedDraftError(recording.lastError)
 		}
 	}
 	inputEventsMu.Unlock()

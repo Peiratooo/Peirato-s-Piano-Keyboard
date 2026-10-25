@@ -40,7 +40,8 @@ import {data} from './store'
 import {useUpdater} from './store/updater'
 import {createComputerKeyboard} from './services/computerKeyboard'
 import {acceptLivePerformance} from './services/livePerformance'
-import {getPianoUiTheme} from './services/uiTheme'
+import {getKeyLabelColor, getPianoUiTheme} from './services/uiTheme'
+import {changeColor, composite, rgba} from 'seemly'
 
 const store = data()
 const updater = useUpdater()
@@ -263,22 +264,17 @@ function formatComputerKeyLabel(key) {
     return key
 }
 
-function darkenHexColor(hex, factor = 0.7) {
-    hex = hex.replace('#', '')
-    let r = parseInt(hex.slice(0, 2), 16)
-    let g = parseInt(hex.slice(2, 4), 16)
-    let b = parseInt(hex.slice(4, 6), 16)
-    r = Math.round(r * factor)
-    g = Math.round(g * factor)
-    b = Math.round(b * factor)
-    return `#${(1 << 24 | r << 16 | g << 8 | b).toString(16).slice(1)}`
-}
-
 function setKeyColor() {
-    if (!store.config.colors) return
-    for (const key in store.config.colors) {
-        document.documentElement.style.setProperty('--' + key, store.config.colors[key].color)
-        document.documentElement.style.setProperty('--' + key + '-o', darkenHexColor(store.config.colors[key].color, 0.1) + '66')
+    for (const [key, {color}] of Object.entries(store.config.colors)) {
+        const style = document.documentElement.style
+        const [r, g, b] = rgba(color)
+        style.setProperty('--' + key, color)
+        style.setProperty('--' + key + '-o', `rgba(${Math.round(r * .1)}, ${Math.round(g * .1)}, ${Math.round(b * .1)}, .4)`)
+        if (key.includes('Key')) {
+            style.setProperty('--' + key + '-label', getKeyLabelColor(color))
+            const base = key.startsWith('black') ? '#333333' : '#f6f6f6'
+            style.setProperty('--' + key + '-sustained-label', getKeyLabelColor(composite(base, changeColor(color, {alpha: .38}))))
+        }
     }
 }
 
@@ -312,13 +308,28 @@ function changeKeyboardType() {
 // 实时按键状态
 // ========================
 
+const interactiveRequests = new Map()
+function setInteractiveKey(note, pressed) {
+    store.setKeyState(note, pressed)
+    const send = () => pressed ? Keyboard.KeyboardPlay(note) : Keyboard.KeyboardStop(note)
+    const previous = interactiveRequests.get(note)
+    const request = previous ? previous.then(send, send) : send()
+    interactiveRequests.set(note, request)
+    request.then(() => {
+        if (interactiveRequests.get(note) === request) interactiveRequests.delete(note)
+    }, error => {
+        if (interactiveRequests.get(note) === request) interactiveRequests.delete(note)
+        window.$message?.error(`演奏输入失败：${String(error)}`)
+    })
+}
+
 function keyboardListener() {
     unsubscribeKeyboardListener?.()
     const input = createComputerKeyboard({
         mapping: () => store.activeKeyMapping || {},
         enabled: () => isMainWindow.value,
-        press: note => { store.setKeyState(note, true); Keyboard.KeyboardPlay(note) },
-        release: note => { store.setKeyState(note, false); Keyboard.KeyboardStop(note) },
+        press: note => setInteractiveKey(note, true),
+        release: note => setInteractiveKey(note, false),
     })
     window.addEventListener('keydown', input.keydown)
     window.addEventListener('keyup', input.keyup)
@@ -487,6 +498,7 @@ provide('resetConfig', resetConfig)
 provide('applyConfig', applyConfig)
 provide('updateKeyboardMappingLabels', updateKeyboardMappingLabels)
 provide('Keyboard', Keyboard)
+provide('setInteractiveKey', setInteractiveKey)
 provide('resize', resize)
 </script>
 

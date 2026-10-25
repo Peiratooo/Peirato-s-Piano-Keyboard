@@ -12,12 +12,15 @@ const props = defineProps({
     timeline: {type: Object, default: null},
     playerState: {type: Object, default: () => ({})},
 })
-const PREVIEW_MS = 6000
+const PREVIEW_MS = 5000
 const canvas = ref(null)
 let context, frameRequest = 0, mounted = false
 let clock = {ms: 0, at: 0, state: {}}
 let revision = null
 const keys = computed(() => new Map(props.layout.map(key => [key.note, key])))
+const measures = computed(() => (props.timeline?.measures || [])
+    .filter(mark => Number.isFinite(mark.ms)).slice().sort((a, b) => a.ms - b.ms))
+const viewSpanMs = () => PREVIEW_MS * (Number(clock.state.speed) || 1)
 
 // An interval tree keeps long songs cheap to draw, including notes held across
 // many seconds. Rendering visits only intersecting notes and their ancestors.
@@ -51,6 +54,11 @@ function captureClock() {
 }
 function currentMs(now) {
     const state = clock.state
+    if (state.scrubbing) return clock.ms
+    if (state.leadInMs > 0) {
+        const elapsed = state.status === 'playing' ? Math.min(200, Math.max(0, now - clock.at)) : 0
+        return clock.ms - Math.max(0, state.leadInMs - elapsed * (Number(state.speed) || 1))
+    }
     let current = clock.ms
     if (state.status === 'playing' && !state.waiting) {
         current += Math.min(200, Math.max(0, now - clock.at)) * (Number(state.speed) || 1)
@@ -95,10 +103,11 @@ function drawNote(note, time) {
     if (note.startMs < left || note.startMs >= right) return
     const expected = state.mode === 'follow' && state.currentStep?.notes?.some(target => target.note === note.note
         && target.trackIndex === note.trackIndex && Math.abs(target.ms - note.startMs) < 1)
-    const start = state.waiting && expected ? state.currentStep.ms : note.startMs
+    let start = state.waiting && expected ? state.currentStep.ms : note.startMs
     const end = Math.min(right, start + note.endMs - note.startMs)
-    const top = props.height - (end - time) / PREVIEW_MS * props.height
-    const bottom = props.height - (start - time) / PREVIEW_MS * props.height
+    if (state.leadInMs > 0) start = Math.max(start, clock.ms)
+    const top = props.height - (end - time) / viewSpanMs() * props.height
+    const bottom = props.height - (start - time) / viewSpanMs() * props.height
     if (bottom < 0 || top > props.height) return
     const y = Math.max(-6, top), height = Math.min(props.height, bottom) - y
     if (height <= 0) return
@@ -118,6 +127,32 @@ function drawNote(note, time) {
     context.stroke()
     context.globalAlpha = 1
 }
+function drawMeasures(time) {
+    const marks = measures.value
+    let left = 0, right = marks.length
+    while (left < right) {
+        const middle = (left + right) >> 1
+        if (marks[middle].ms < time) left = middle + 1
+        else right = middle
+    }
+    context.font = '10px "Segoe UI", sans-serif'
+    context.textAlign = 'left'
+    for (let index = left; index < marks.length && marks[index].ms <= time + viewSpanMs(); index++) {
+        const mark = marks[index]
+        const y = Math.round(props.height - (mark.ms - time) / viewSpanMs() * props.height) + .5
+        const strong = (mark.index - 1) % 4 === 0
+        context.strokeStyle = strong ? 'rgba(255,255,255,.19)' : 'rgba(255,255,255,.09)'
+        context.lineWidth = 1
+        context.beginPath()
+        context.moveTo(0, y)
+        context.lineTo(props.width, y)
+        context.stroke()
+        if (y > 16 && y < props.height - 8) {
+            context.fillStyle = 'rgba(255,255,255,.4)'
+            context.fillText(String(mark.index), 9, y - 6)
+        }
+    }
+}
 function render(now) {
     if (!context || props.width <= 0 || props.height <= 0) return
     context.clearRect(0, 0, props.width, props.height)
@@ -135,7 +170,8 @@ function render(now) {
         context.stroke()
     }
     const time = currentMs(now), visible = []
-    visibleNotes(noteTree.value, time, time + PREVIEW_MS, visible)
+    drawMeasures(time)
+    visibleNotes(noteTree.value, time, time + viewSpanMs(), visible)
     for (const note of visible) drawNote(note, time)
     context.strokeStyle = 'rgba(255,255,255,.32)'
     context.beginPath()
@@ -144,7 +180,7 @@ function render(now) {
     context.stroke()
 }
 function isAnimating() {
-    return clock.state.status === 'playing' && !clock.state.waiting
+    return clock.state.status === 'playing' && !clock.state.waiting && !clock.state.scrubbing
 }
 function tick(now) {
     frameRequest = 0
@@ -168,7 +204,8 @@ watch(() => props.playerState, () => {
 }, {deep: true})
 watch(() => props.active, syncAnimation)
 watch(() => [props.width, props.height], () => { resize(); if (props.active) render(performance.now()) })
-watch(() => [props.timeline, props.layout, props.colors], () => { if (props.active) render(performance.now()) })
+watch(() => [props.timeline, props.layout], () => { if (props.active) render(performance.now()) })
+watch(() => props.colors, () => { if (props.active) render(performance.now()) }, {deep: true})
 onMounted(() => { mounted = true; resize(); window.addEventListener('resize', resize); syncAnimation() })
 onBeforeUnmount(() => { mounted = false; if (frameRequest) cancelAnimationFrame(frameRequest); window.removeEventListener('resize', resize) })
 </script>

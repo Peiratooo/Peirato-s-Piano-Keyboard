@@ -7,11 +7,16 @@
     "dev": "vite",
     "build": "vite build --mode production",
     "build:dev": "vite build --minify false --mode development",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "branding:sync": "node scripts/sync-branding.mjs",
+    "predev": "node scripts/sync-branding.mjs",
+    "prebuild": "node scripts/sync-branding.mjs",
+    "prebuild:dev": "node scripts/sync-branding.mjs"
   },
   "dependencies": {
     "@phosphor-icons/vue": "^2.2.1",
     "pinia": "^3.0.4",
+    "seemly": "0.3.10",
     "tonal": "^6.4.3",
     "vue": "^3.5.34",
     "vue-router": "^5.0.6"
@@ -21,6 +26,7 @@
     "@wailsio/runtime": "3.0.0-alpha.79",
     "naive-ui": "^2.44.1",
     "sass-embedded": "^1.99.0",
+    "sharp": "0.35.5",
     "vite": "^8.0.12"
   }
 }

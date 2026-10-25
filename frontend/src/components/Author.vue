@@ -111,7 +111,7 @@ const donate = [
 .social { display:flex; gap:8px; margin-top:8px; }
 .item { display:flex; padding:0; border:0; background:transparent; border-radius:7px; overflow:hidden; cursor:pointer; transition:transform .15s; }
 .item:hover { transform:translateY(-2px); }
-.item:focus-visible { outline:2px solid #2563eb; outline-offset:3px; }
+.item:focus-visible { outline:2px solid var(--ui-accent); outline-offset:3px; }
 .desc { margin-top:16px; color:#64748b; font-size:12px; line-height:1.8; }
 .title { font-size:12px; color:#64748b; margin-bottom:12px; }
 .qrcodes { display:flex; gap:16px; }

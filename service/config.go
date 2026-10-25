@@ -29,6 +29,7 @@ type Config struct {
 	KeyLabel              string            `json:"keyLabel"`
 	KeyTonic              int               `json:"keyTonic"`
 	KeyboardType          int               `json:"keyboardType"`
+	KeyboardHeightRatio   float64           `json:"keyboardHeightRatio"`
 	Velocity              uint8             `json:"velocity"`
 	Opacity               int               `json:"opacity"`
 	Version               string            `json:"version"`
@@ -50,31 +51,31 @@ var DefaultConfig = Config{
 	Colors: map[string]Color{
 		"whiteKey": {
 			Label: "白键按下",
-			Color: "#9AF7B3",
+			Color: "#91D1AE",
 		},
 		"blackKey": {
 			Label: "黑键按下",
-			Color: "#5FFF5F",
+			Color: "#64AB86",
 		},
 		"whiteKeyLeft": {
 			Label: "白键按下(左)",
-			Color: "#f7e89a",
+			Color: "#E5BE84",
 		},
 		"blackKeyLeft": {
 			Label: "黑键按下(左)",
-			Color: "#ffd25f",
+			Color: "#BF955D",
 		},
 		"damperPedal": {
 			Label: "延音踏板踩下",
-			Color: "#e7b510",
+			Color: "#D3AD68",
 		},
 		"softPedal": {
 			Label: "柔音踏板踩下",
-			Color: "#10e786",
+			Color: "#87BEA5",
 		},
 		"sostenutoPedal": {
-			Label: "消音踏板踩下",
-			Color: "#1054e7",
+			Label: "持音踏板踩下",
+			Color: "#8EAFE0",
 		},
 	},
 	KeyLabel:              "octave_key",
@@ -166,6 +167,10 @@ func normalizeConfigRanges(config Config) Config {
 	}
 	if config.KeyboardType < 0 || config.KeyboardType > 5 {
 		config.KeyboardType = DefaultConfig.KeyboardType
+	}
+	// Zero keeps the responsive default; manual heights scale with the window.
+	if config.KeyboardHeightRatio < 0 || config.KeyboardHeightRatio > .5 {
+		config.KeyboardHeightRatio = 0
 	}
 	if config.Opacity < 20 || config.Opacity > 100 {
 		config.Opacity = DefaultConfig.Opacity

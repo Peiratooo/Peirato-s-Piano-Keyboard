@@ -8,8 +8,6 @@
 		<string>A simple and lightweight piano keyboard for desktop practice.</string>
 		<key>CFBundleIconFile</key>
 		<string>icons</string>
-		<key>CFBundleIconName</key>
-		<string>appicon</string>
 		<key>CFBundleIdentifier</key>
 		<string>com.peirato.piano</string>
 		<key>CFBundleName</key>

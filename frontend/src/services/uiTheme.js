@@ -1,4 +1,6 @@
-const DEFAULT_ACCENT = '#9af7b3'
+import {rgba} from 'seemly'
+
+const DEFAULT_ACCENT = '#91d1ae'
 const CONTROL_SURFACE = [42, 42, 42]
 
 function parseColor(value) {
@@ -21,6 +23,12 @@ function contrast(a, b) {
     const first = luminance(a)
     const second = luminance(b)
     return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05)
+}
+
+export function getKeyLabelColor(color) {
+    const [r, g, b] = rgba(color)
+    const rgb = [r, g, b]
+    return contrast(rgb, [0, 0, 0]) >= contrast(rgb, [255, 255, 255]) ? '#000000' : '#FFFFFF'
 }
 
 function mix(rgb, target, amount) {

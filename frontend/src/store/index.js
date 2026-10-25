@@ -5,6 +5,7 @@ const safeConfig = {
     keyLabel: '',
     keyTonic: 0,
     keyboardType: 0,
+    keyboardHeightRatio: 0,
     velocity: 80,
     volume: 80,
     sampleRate: 44100,
