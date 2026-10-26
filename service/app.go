@@ -52,16 +52,18 @@ func Run(assets embed.FS) {
 	PianoWin = App.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title: "Peirato's Piano Keyboard",
 		Mac: application.MacWindow{
-			InvisibleTitleBarHeight: 50,
-			TitleBar:                application.MacTitleBarHidden,
-			Backdrop:                application.MacBackdropTransparent,
+			// The frontend marks its blank title area as draggable so toolbar
+			// buttons keep receiving clicks, including in compact mode.
+			TitleBar: application.MacTitleBarHiddenInset,
+			Backdrop: application.MacBackdropTransparent,
 		},
 		Windows: application.WindowsWindow{
 			BackdropType:                      0,
 			WindowMaskDraggable:               true,
 			DisableFramelessWindowDecorations: true,
 		},
-		Frameless:              true,
+		// Keep native macOS window controls; the frontend reserves their space.
+		Frameless:              runtime.GOOS != "darwin",
 		Width:                  size.Width,
 		Height:                 size.Height,
 		MinHeight:              600,

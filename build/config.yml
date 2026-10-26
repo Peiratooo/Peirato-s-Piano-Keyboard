@@ -2,7 +2,6 @@
 # When you update `info` or `fileAssociations`, run `wails3 task common:update:build-assets` to update the assets.
 # Note that this will overwrite any changes you have made to the assets.
 version: '3'
-
 # This information is used to generate the build assets.
 info:
   companyName: "Peirato" # The company or developer name
@@ -11,11 +10,10 @@ info:
   description: "A lightweight desktop piano keyboard for MIDI playback and practice." # The application description
   copyright: "(c) 2026, Peirato" # Copyright text
   comments: "A simple and lightweight piano keyboard for desktop practice." # Comments
-  version: "1.3.0" # The application version
+  version: "1.3.1" # The application version
   # cfBundleIconName: "appicon" # The macOS icon name in Assets.car icon bundles (optional)
   #                               # Should match the name of your .icon file without the extension
   #                               # If not set and Assets.car exists, defaults to "appicon"
-
 # iOS build configuration (uncomment to customise iOS project generation)
 # Note: Keys under `ios` OVERRIDE values under `info` when set.
 # ios:
@@ -58,7 +56,6 @@ dev_mode:
       type: background
     - cmd: wails3 task run
       type: primary
-
 # File Associations
 # More information at: https://v3.wails.io/noit/done/yet
 fileAssociations:

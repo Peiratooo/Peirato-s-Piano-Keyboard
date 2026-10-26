@@ -1,5 +1,5 @@
 <template>
-    <main ref="containerRef" class="piano-window" :class="{ 'is-simple': isSimple, 'is-midi': isMidi, 'resizing-keyboard': keyboardResizing, 'show-tools': toolbarVisible || panel }"
+    <main ref="containerRef" class="piano-window" :class="{ 'is-mac': isMac, 'is-fullscreen': isFullscreen, 'is-simple': isSimple, 'is-midi': isMidi, 'resizing-keyboard': keyboardResizing, 'show-tools': toolbarVisible || panel }"
         :style="windowStyle" @pointerdown="dismissOutside" @mouseenter="showToolbar" @mouseleave="hideToolbar">
         <div class="waterfall-area" :aria-hidden="isSimple">
             <WaterfallCanvas v-show="!isMidi" :layout="layout" :width="size.width" :height="waterfallHeight"
@@ -35,11 +35,13 @@
                 </NRadioGroup>
                 <button class="tool-button settings-toggle" type="button" :aria-expanded="panel === 'settings'" title="设置"
                     @pointerdown.prevent @click="openPanel('settings')"><PhGearSix :size="20" /><span>设置</span></button>
-                <span class="toolbar-separator"></span>
-                <button class="window-button" type="button" aria-label="最小化" title="最小化" @pointerdown.prevent @click="minimize"><PhMinus :size="16" /></button>
-                <button v-if="!isSimple" class="window-button" type="button" aria-label="最大化或还原" title="最大化 / 还原"
-                    @pointerdown.prevent @click="toggleMaximize"><PhArrowsOutSimple :size="15" /></button>
-                <button class="window-button close-window" type="button" aria-label="退出软件" title="退出" @pointerdown.prevent @click="requestQuit"><PhX :size="17" /></button>
+                <template v-if="!isMac">
+                    <span class="toolbar-separator"></span>
+                    <button class="window-button" type="button" aria-label="最小化" title="最小化" @pointerdown.prevent @click="minimize"><PhMinus :size="16" /></button>
+                    <button v-if="!isSimple" class="window-button" type="button" aria-label="最大化或还原" title="最大化 / 还原"
+                        @pointerdown.prevent @click="toggleMaximize"><PhArrowsOutSimple :size="15" /></button>
+                    <button class="window-button close-window" type="button" aria-label="退出软件" title="退出" @pointerdown.prevent @click="requestQuit"><PhX :size="17" /></button>
+                </template>
             </div>
         </header>
 
@@ -103,7 +105,7 @@
 <script setup>
 import {computed, inject, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch} from 'vue'
 import {useRoute, useRouter} from 'vue-router'
-import {Events, Window} from '@wailsio/runtime'
+import {Events, System, Window} from '@wailsio/runtime'
 import {NButton, NModal, NRadioButton, NRadioGroup} from 'naive-ui'
 import {PhList, PhMinus, PhArrowsOutSimple, PhX, PhPianoKeys, PhPlay,
     PhArrowRight, PhArrowUpRight, PhMusicNotes, PhGearSix, PhPower} from '@phosphor-icons/vue'
@@ -128,6 +130,8 @@ const Keyboard = inject('Keyboard')
 const saveConfig = inject('changeConfig')
 const route = useRoute()
 const router = useRouter()
+const isMac = System.IsMac()
+const isFullscreen = ref(false)
 const session = useMidiSession({store, Keyboard})
 const recording = useRecordingSession({Keyboard,
     canStart: () => store.mainDisplayMode !== 'simple' && store.mainMode === 'free' && !switching.value && !modeSwitching.value,
@@ -190,6 +194,7 @@ let observer
 let hideTimer
 let unsubscribeLive
 let unsubscribeMidiRequest
+const unsubscribeWindowEvents = []
 
 function beginKeyboardResize(event) {
     if (event.button !== 0 || isSimple.value) return
@@ -359,6 +364,23 @@ async function toggleMaximize() {
 }
 
 onMounted(async () => {
+    if (isMac) {
+        let fullscreenChanged = false
+        const setFullscreen = fullscreen => {
+            fullscreenChanged = true
+            isFullscreen.value = fullscreen
+        }
+        unsubscribeWindowEvents.push(
+            Events.On(Events.Types.Common.WindowFullscreen, () => setFullscreen(true)),
+            // Clear the traffic-light area before the native exit animation starts.
+            Events.On(Events.Types.Mac.WindowWillExitFullScreen, () => setFullscreen(false)),
+            Events.On(Events.Types.Common.WindowUnFullscreen, () => setFullscreen(false)),
+        )
+        // Initialise restored/reloaded windows without overwriting a newer native event.
+        void Window.IsFullscreen().then(fullscreen => {
+            if (!fullscreenChanged) isFullscreen.value = fullscreen
+        }).catch(error => console.error('无法读取全屏状态', error))
+    }
     observer = new ResizeObserver(entries => {
         for (const entry of entries) {
             if (entry.target === containerRef.value) {
@@ -396,6 +418,7 @@ onBeforeUnmount(() => {
     observer?.disconnect()
     unsubscribeLive?.()
     unsubscribeMidiRequest?.()
+    unsubscribeWindowEvents.forEach(unsubscribe => unsubscribe())
     session.dispose()
     recording.dispose()
     clearTimeout(hideTimer)
@@ -485,5 +508,10 @@ button:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 3px;
     .is-midi .drag-region { grid-column: 2; grid-row: 1; }
     .is-midi .midi-header-controls { grid-column: 1 / -1; grid-row: 2; }
 }
+/* Slide left only after the lights disappear; reserve their space immediately on exit. */
+.is-mac .toolbar { transition: padding-left 180ms cubic-bezier(.2, .7, .2, 1), opacity 160ms, transform 160ms; }
+.is-mac:not(.is-fullscreen) .toolbar { padding-left: 88px; transition-duration: 0ms, 160ms, 160ms; }
+/* Anchor the title to the whole toolbar instead of the remaining drag space. */
+.is-mac .drag-region span { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
 @media (prefers-reduced-motion: reduce) { *, .is-simple .toolbar { transition: none !important; } }
 </style>
