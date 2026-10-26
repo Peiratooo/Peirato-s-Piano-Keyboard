@@ -7,14 +7,17 @@ export function createKeyboardLayout(keys, width) {
 
     const whiteWidth = availableWidth / whiteCount
     const blackWidth = whiteWidth * 0.62
+    // Share pixel-aligned edges instead of rounding each key's left and width
+    // independently in the browser, which can expose dark subpixel gaps.
+    const whiteEdge = index => index === whiteCount ? availableWidth : Math.round(index * whiteWidth)
     let whiteIndex = 0
 
     return keys.map(key => {
         const isBlack = key.color === 'black'
-        const keyWidth = isBlack ? blackWidth : whiteWidth
         const x = isBlack
-            ? Math.max(0, Math.min(availableWidth - keyWidth, whiteIndex * whiteWidth - keyWidth / 2))
-            : whiteIndex++ * whiteWidth
+            ? Math.max(0, Math.min(availableWidth - blackWidth, whiteEdge(whiteIndex) - blackWidth / 2))
+            : whiteEdge(whiteIndex)
+        const keyWidth = isBlack ? blackWidth : whiteEdge(++whiteIndex) - x
         return {
             ...key,
             pitchName: key.note,
