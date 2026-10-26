@@ -10,7 +10,7 @@ import (
 
 const (
 	appName    = "Peirato's Piano Keyboard"
-	AppVersion = "1.3.0"
+	AppVersion = "1.3.1"
 )
 
 var (
