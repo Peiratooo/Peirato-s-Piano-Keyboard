@@ -80,7 +80,7 @@ func Run(assets embed.FS) {
 	})
 	App.Window.Add(PianoWin)
 	installMainWindowPresentation()
-	installRecordingExitGuard()
+	installMainWindowCloseHandler()
 
 	// 窗口创建完成后再开始扫描设备，避免 App.Event.Emit 早于 App 初始化。
 	go ListenDevices()
@@ -90,14 +90,16 @@ func Run(assets embed.FS) {
 	}
 }
 
-// Native close requests (for example Alt+F4) must use the same durability
-// requirement as the frontend Quit action. Disk work stays off the UI thread.
-func installRecordingExitGuard() {
+// Closing the main window on macOS quits the app, including any settings window.
+// Native close requests must first preserve recording drafts, just like the
+// frontend Quit action. Disk work and shutdown stay off the UI thread.
+func installMainWindowCloseHandler() {
+	quitOnClose := runtime.GOOS == "darwin"
 	pending := false // protected by inputEventsMu
 	PianoWin.RegisterHook(events.Common.WindowClosing, func(event *application.WindowEvent) {
 		inputEventsMu.Lock()
 		needsBackup := recording.status == "recording" || (recording.status == "draft" && !recording.backupSaved)
-		if !needsBackup {
+		if !needsBackup && !quitOnClose {
 			inputEventsMu.Unlock()
 			return
 		}
@@ -114,15 +116,21 @@ func installRecordingExitGuard() {
 				pending = false
 				inputEventsMu.Unlock()
 			}()
-			state, err := (&Keyboard{}).StopRecording()
-			if err != nil || (state.Status == "draft" && !state.BackupSaved) {
-				if state.Error == "" {
-					state.Error = "录制草稿尚未备份，请先保存 MIDI 后退出"
+			if needsBackup {
+				state, err := (&Keyboard{}).StopRecording()
+				if err != nil || (state.Status == "draft" && !state.BackupSaved) {
+					if state.Error == "" {
+						state.Error = "录制草稿尚未备份，请先保存 MIDI 后退出"
+					}
+					App.Event.Emit("recordingExitBlocked", state)
+					return
 				}
-				App.Event.Emit("recordingExitBlocked", state)
-				return
 			}
-			PianoWin.Close()
+			if quitOnClose {
+				(&Keyboard{}).Quit()
+			} else {
+				PianoWin.Close()
+			}
 		}()
 	})
 }
