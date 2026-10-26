@@ -180,14 +180,28 @@ wails3 task dev
 
 ### 通过 Wails3 Manager 打包
 
-1. 在 Wails3 Manager 中导入项目根目录，版本信息来自 `build/config.yml`，当前为 `1.3.0`。
+1. 按当前平台复制下方打包配置，然后在 Wails3 Manager 中导入项目根目录，版本信息来自 `build/config.yml`，当前为 `1.3.1`。
 2. 构建配置使用 `Taskfile.yml` 的 `release` 任务，应用名 `pp_keyboard`，开启生产构建和 CGO。
 3. 启动程序使用默认主程序入口；Windows 为 `bin/pp_keyboard.exe`，macOS 为应用包，不再使用独立启动器。
 4. 在 Manager 中执行构建与打包，安装包输出到 `builder/release/`。
 
-仓库保留 `builder/packaging.json` 作为当前 Windows Manager 配置，路径均相对于项目。Windows 附加资源为 `bin/updater.exe` 和三个运行库 DLL；`release` 任务会从仓库资源复制这些文件。安装脚本由 Manager 生成到 `builder/windows/inno.iss`。
+仓库分别保存 Windows 和 macOS 配置模板，路径均相对于项目根目录。Manager 实际读取的 `builder/packaging.json` 是本机配置，由 Git 忽略，避免两台机器互相覆盖平台资产或写入本机绝对路径。首次使用或切换平台时复制对应模板：
 
-macOS 在原生环境中使用 Manager 打包时，将附加资源列表中的 Windows updater 和 DLL 移除，保留默认应用包入口。Manager 使用项目的 `darwin:create:app:bundle` 任务组装应用，通用 updater 会复制到 `Contents/MacOS/updater`，随后签名。
+Windows PowerShell：
+
+```powershell
+New-Item -ItemType Directory -Force builder | Out-Null
+Copy-Item build/windows/packaging.json builder/packaging.json
+```
+
+macOS：
+
+```bash
+mkdir -p builder
+cp build/darwin/packaging.json builder/packaging.json
+```
+
+Windows 模板包含 `bin/updater.exe` 和三个运行库 DLL；`release` 任务会从仓库资源复制这些文件。安装脚本由 Manager 生成到 `builder/windows/inno.iss`。macOS 模板使用仓库内的 `dmg-background.png`，保留默认应用包入口，无须额外添加 updater 资产：Manager 使用项目的 `darwin:create:app:bundle` 任务组装应用，通用 updater 会复制到 `Contents/MacOS/updater`，随后签名。
 
 只检查构建、不生成安装包时，可以运行与 Manager 相同的任务：
 
@@ -195,7 +209,7 @@ macOS 在原生环境中使用 Manager 打包时，将附加资源列表中的 W
 wails3 task release
 ```
 
-主程序与运行文件输出到 `bin/`。Windows 手工 Inno、NSIS/MSIX 和 Linux AppImage/发行包脚本已移除，安装包统一由 Manager 管理。
+主程序与运行文件输出到 `bin/`。Wails 生成的平台构建资产保留在 `build/`，面向用户的安装包统一由 Manager 管理。
 
 ---
 

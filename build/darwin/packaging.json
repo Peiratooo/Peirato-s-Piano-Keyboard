@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "build": {
+    "taskfile": "Taskfile.yml",
+    "task": "release",
+    "command": null,
+    "production": true,
+    "cgoEnabled": true,
+    "appName": "pp_keyboard"
+  },
+  "entry": {
+    "executablePath": ""
+  },
+  "assets": [],
+  "macos": {
+    "dmgMode": "official",
+    "enabled": true,
+    "appBundle": "bin/${project.name}.app",
+    "background": "dmg-background.png",
+    "windowWidth": 640,
+    "windowHeight": 420,
+    "iconSize": 108,
+    "appX": 180,
+    "appY": 210,
+    "applicationsX": 460,
+    "applicationsY": 210
+  },
+  "artifacts": {
+    "outputRoot": "builder/release"
+  }
+}

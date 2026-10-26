@@ -1,12 +1,12 @@
 {
 	"fixed": {
-		"file_version": "1.3.0.0",
-		"product_version": "1.3.0.0"
+		"file_version": "1.3.1.0",
+		"product_version": "1.3.1.0"
 	},
 	"info": {
 		"0000": {
-			"FileVersion": "1.3.0",
-			"ProductVersion": "1.3.0",
+			"FileVersion": "1.3.1",
+			"ProductVersion": "1.3.1",
 			"CompanyName": "Peirato",
 			"FileDescription": "A lightweight desktop piano keyboard for MIDI playback and practice.",
 			"LegalCopyright": "(c) 2026, Peirato",
