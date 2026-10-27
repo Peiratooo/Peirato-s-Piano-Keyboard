@@ -63,10 +63,13 @@ func masterVolumeGain(volume int32) float32 {
 		volume = 100
 	}
 
-	// Keep MeltySynth's 0.5 headroom while mapping the user control in dB.
-	// 50 ~= -12 dB, 80 ~= -5 dB, 100 = the synth's unity reference.
+	// Keep velocity untouched: this sets only the synth's output loudness.
+	// The previous 0.5 multiplier capped 100% at -6 dB and made the
+	// default 80% unnecessarily quiet. A linked output peak limiter below
+	// protects the PCM stream when dense chords approach full scale.
+	// 50 ~= -12 dB, 80 ~= -5 dB, 100 = 0 dB relative to unity.
 	db := -24.0 + 24.0*float64(volume)/100.0
-	return float32(0.5 * math.Pow(10, db/20.0))
+	return float32(math.Pow(10, db/20.0))
 }
 
 func SetMasterVolume(volume int32) {
@@ -184,6 +187,18 @@ func newSynthStreamer() beep.Streamer {
 	var leftBuf []float32
 	var rightBuf []float32
 
+	// One linked limiter for left/right preserves the stereo balance. Gain
+	// attacks instantly only above the ceiling, then recovers gently. No
+	// lookahead, allocations or additional audio-thread locks are required.
+	const peakCeiling = 0.98
+	const releaseSeconds = 0.08
+	rate := float64(speakerSampleRate)
+	if rate <= 0 {
+		rate = 44100
+	}
+	releaseFactor := 1 - math.Exp(-1/(rate*releaseSeconds))
+	limiterGain := 1.0
+
 	return beep.StreamerFunc(func(samples [][2]float64) (n int, ok bool) {
 		size := len(samples)
 
@@ -205,8 +220,16 @@ func newSynthStreamer() beep.Streamer {
 		synthMu.Unlock()
 
 		for i := range samples {
-			samples[i][0] = float64(left[i])
-			samples[i][1] = float64(right[i])
+			l, r := float64(left[i]), float64(right[i])
+			peak := math.Max(math.Abs(l), math.Abs(r))
+			if limiterGain < 1 {
+				limiterGain += (1 - limiterGain) * releaseFactor
+			}
+			if peak*limiterGain > peakCeiling {
+				limiterGain = peakCeiling / peak
+			}
+			samples[i][0] = l * limiterGain
+			samples[i][1] = r * limiterGain
 		}
 
 		return size, true
