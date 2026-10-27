@@ -5,7 +5,7 @@
             <div class="app-summary">
                 <div class="app-identity">
                     <img class="app-logo" src="/appicon.png" :alt="APP_NAME + ' 标志'" />
-                    <div><h3>{{ APP_NAME }}</h3><p>{{ APP_ENGLISH_NAME }}</p><span class="version-tag">当前版本 {{ store.config.version || '—' }}</span><p class="full-name">完整名称：{{ APP_FULL_NAME }}</p></div>
+                    <div><h3>{{ APP_NAME }}</h3><span class="version-tag">当前版本 {{ store.config.version || '—' }}</span><p class="full-name">完整名称：{{ APP_FULL_NAME }}</p></div>
                 </div>
                 <div class="update-action">
                     <span v-if="updater.phase === 'latest'" class="latest-badge"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 10 3 3 7-7" /></svg>已是最新版本</span>
@@ -59,7 +59,7 @@ import {computed, inject, onMounted, ref} from 'vue'
 import {NButton, NModal, NProgress} from 'naive-ui'
 import Author from '../Author.vue'
 import {useUpdater, updateErrorMessage} from '../../store/updater'
-import {APP_ENGLISH_NAME, APP_FULL_NAME, APP_NAME} from '../../services/appIdentity'
+import {APP_FULL_NAME, APP_NAME} from '../../services/appIdentity'
 const store = inject('store')
 const resetConfig = inject('resetConfig')
 const updater = useUpdater()

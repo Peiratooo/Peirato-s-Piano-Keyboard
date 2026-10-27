@@ -11,7 +11,7 @@
     !define INFO_COMPANYNAME "Peirato"
 !endif
 !ifndef INFO_PRODUCTNAME
-    !define INFO_PRODUCTNAME "PP 钢琴键盘（PP Keyboard）"
+    !define INFO_PRODUCTNAME "PP 钢琴键盘"
 !endif
 !ifndef INFO_PRODUCTVERSION
     !define INFO_PRODUCTVERSION "1.3.1"

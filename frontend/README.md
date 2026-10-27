@@ -1,4 +1,4 @@
-# PP 钢琴键盘（PP Keyboard）前端
+# PP 钢琴键盘前端
 
 Vue 3、Pinia、Naive UI 和 Vite 实现主钢琴窗口与设置中心，曲库、播放和练习整合在主窗口内。
 

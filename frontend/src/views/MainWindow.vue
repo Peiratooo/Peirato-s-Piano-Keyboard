@@ -56,7 +56,6 @@
                 <button class="menu-close" type="button" aria-label="收起菜单" @click="closePanel"><PhX :size="17" /></button>
                 <img class="menu-mark" src="/appicon.png" :alt="APP_NAME + ' Logo'" width="48" height="48" />
                 <h1>{{ APP_NAME }}</h1>
-                <p class="app-subtitle">{{ APP_ENGLISH_NAME }}</p>
                 <button class="start-playing" type="button" @click="startFreePlay"><PhPlay :size="17" weight="fill" />{{ isMidi ? '自由演奏' : '开始弹奏' }}<PhArrowRight :size="18" /></button>
                 <div class="menu-links">
                     <button type="button" @click="openPanel('library')"><PhMusicNotes :size="20" /><span>曲库</span><PhArrowRight :size="16" /></button>
@@ -68,7 +67,6 @@
                     <span class="input-status"><i :class="{ connected: hasMidiInput }"></i>{{ hasMidiInput ? 'MIDI 键盘已连接' : '电脑键盘 / 鼠标演奏' }}</span>
                     <button type="button" @click="requestQuit"><PhPower :size="15" />退出</button>
                 </footer>
-                <p class="menu-hint">{{ isMidi ? '选择曲目后开始播放或跟弹' : '弹下第一个音，菜单自动收起' }}</p>
             </section>
         </Transition>
 
@@ -125,7 +123,7 @@ import {useMidiSession} from '../services/midiSession'
 import {useRecordingSession} from '../services/recordingSession'
 import {getPianoUiTheme} from '../services/uiTheme'
 import {isPianoControlTarget} from '../services/computerKeyboard'
-import {APP_ENGLISH_NAME, APP_NAME} from '../services/appIdentity'
+import {APP_NAME} from '../services/appIdentity'
 
 const store = inject('store')
 const Keyboard = inject('Keyboard')
@@ -465,7 +463,6 @@ button:disabled { cursor: wait; opacity: .55; }
 .menu-close:hover { color: white; background: #ffffff0b; }
 .menu-mark { display: block; width: 48px; height: 48px; object-fit: contain; margin: 0 auto 16px; }
 h1 { font-size: 24px; font-weight: 500; line-height: 1.3; letter-spacing: -.025em; }
-.app-subtitle { margin-top: 6px; font-size: 12px; color: #a8a8a8; }
 .menu-description { font-size: 12px; color: #a8a8a8; margin-top: 9px; line-height: 1.6; }
 .start-playing { margin: 25px 0 14px; padding: 14px 16px; display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; color: var(--ui-accent-text); background: var(--ui-accent); border: 1px solid var(--ui-accent-ring); border-radius: 7px; font-size: 14px; font-weight: 600; transition: background 160ms; }
 .start-playing > :last-child { margin-left: auto; }

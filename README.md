@@ -1,7 +1,7 @@
 <p align="center">
   <img src="./appicon.png" alt="PP 钢琴键盘 Logo" width="96" />
 </p>
-<h1 align="center">PP 钢琴键盘（PP Keyboard）</h1>
+<h1 align="center">PP 钢琴键盘</h1>
 
 <p align="center">
   一款基于 <b>Wails 3 + Vue 3 + Go</b> 构建的桌面钢琴软件。<br>
@@ -20,7 +20,7 @@
 
 ## ✨ 项目简介
 
-**PP 钢琴键盘（PP Keyboard）** 的完整名称为 **Peirato's Piano Keyboard**。软件提供可以自由切换的完整瀑布流窗口和桌面迷你键盘。启动后即可自由演奏，浮动菜单会在弹下第一个音时自动收起；音条从琴键向上升起，实色部分表示按键时长，浅色尾迹表示踏板延音。
+**PP 钢琴键盘** 的完整名称为 **Peirato's Piano Keyboard**。软件提供可以自由切换的完整瀑布流窗口和桌面迷你键盘。启动后即可自由演奏，浮动菜单会在弹下第一个音时自动收起；音条从琴键向上升起，实色部分表示按键时长，浅色尾迹表示踏板延音。
 
 主窗口可以切换自由演奏、MIDI 播放和跟弹练习：自由演奏向上生成音条，播放／跟弹向下显示曲目音符。曲库、导入、进度和练习控制都在主窗口内完成。自由演奏支持录制、草稿试听和 MIDI 保存，保存后可直接加入曲库。
 
@@ -36,13 +36,22 @@
 
 ## 📸 预览
 
-![PP 钢琴键盘主窗口](./screenshot.png)
+瀑布流、跟弹练习与可自定义的钢琴键盘。
+
+![PP 钢琴键盘 MIDI 瀑布播放展示](./assets/screenshots/midi-playback.webp)
 
 | 等待跟弹 | 外观主题 |
 | --- | --- |
 | ![逐音提示的 MIDI 跟弹练习](./assets/screenshots/midi-practice.webp) | ![左右手与踏板配色实时预览](./assets/screenshots/appearance.webp) |
 
 ![新版主菜单](./assets/screenshots/main-menu.webp)
+
+<details>
+<summary>桌面键盘预览</summary>
+
+![桌面钢琴键盘](./screenshot.png)
+
+</details>
 
 ---
 

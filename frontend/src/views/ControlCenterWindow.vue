@@ -2,7 +2,7 @@
     <div class="control-window">
         <div class="titlebar">
             <div>
-                <div class="title">{{ APP_DISPLAY_NAME }} · 设置</div>
+                <div class="title">{{ APP_NAME }} · 设置</div>
                 <div class="subtitle">自定义你的键盘显示、声音与 MIDI 设备。</div>
             </div>
             <n-tag size="small" :bordered="false" type="info">v{{ store.config.version || '-' }}</n-tag>
@@ -15,7 +15,7 @@
 import {inject} from 'vue'
 import {NTag} from 'naive-ui'
 import Setting from '../components/Setting.vue'
-import {APP_DISPLAY_NAME} from '../services/appIdentity'
+import {APP_NAME} from '../services/appIdentity'
 
 const store = inject('store')
 </script>
