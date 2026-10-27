@@ -12,7 +12,7 @@ const props = defineProps({
     timeline: {type: Object, default: null},
     playerState: {type: Object, default: () => ({})},
 })
-const PREVIEW_MS = 5000
+const PREVIEW_MS = 3000
 const canvas = ref(null)
 let context, frameRequest = 0, mounted = false
 let clock = {ms: 0, at: 0, state: {}}
