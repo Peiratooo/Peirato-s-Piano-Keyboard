@@ -1,9 +1,9 @@
 module main
 
-go 1.26.5
+go 1.27.3
 
 require (
-	github.com/Peiratooo/simple-updater v0.2.7
+	github.com/Peiratooo/simple-updater v0.2.8
 	github.com/gopxl/beep/v2 v2.1.1
 	github.com/sinshu/go-meltysynth v0.0.0-20230205031334-05d311382fc4
 	github.com/wailsapp/wails/v3 v3.0.0-beta.24

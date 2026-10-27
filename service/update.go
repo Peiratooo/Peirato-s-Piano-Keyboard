@@ -220,6 +220,13 @@ func (k *Keyboard) InstallUpdate() (err error) {
 	if _, err = archive.Seek(0, io.SeekStart); err != nil {
 		return err
 	}
+	state, err := k.StopRecording()
+	if err != nil {
+		return fmt.Errorf("更新已暂停，录制草稿备份失败，请先保存 MIDI：%w", err)
+	}
+	if state.Status == "draft" && !state.BackupSaved {
+		return fmt.Errorf("更新已暂停，请先保存录制草稿")
+	}
 	_, err = simpleupdater.StartUpdater(simpleupdater.UpdaterLaunchOptions{
 		UpdaterPath: updaterPath, PID: os.Getpid(), InstallRoot: installRoot, RestartPath: restart, Archive: archive,
 	})

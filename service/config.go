@@ -9,8 +9,10 @@ import (
 )
 
 const (
-	appName    = "Peirato's Piano Keyboard"
-	AppVersion = "1.3.1"
+	appDisplayName = "PP 钢琴键盘（PP Keyboard）"
+	// This directory is the persistent data identity, independent of branding.
+	configDirectoryName = "Peirato's Piano Keyboard"
+	AppVersion          = "1.3.1"
 )
 
 var (
@@ -119,7 +121,7 @@ func LoadConfig() error {
 		ucd = "./assets"
 	}
 
-	configFilePath = filepath.Join(ucd, appName, "config.json")
+	configFilePath = filepath.Join(ucd, configDirectoryName, "config.json")
 	config := cloneDefaultConfig()
 
 	if _, err := os.Stat(configFilePath); os.IsNotExist(err) {

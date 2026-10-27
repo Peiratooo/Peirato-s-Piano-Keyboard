@@ -9,24 +9,26 @@
         <NInput v-model:value="search" placeholder="搜索曲目" clearable size="small" aria-label="搜索曲目">
             <template #prefix><PhMagnifyingGlass :size="16" /></template>
         </NInput>
-        <NScrollbar class="library-scroll" trigger="hover" :aria-busy="session.loading">
-            <div v-for="song in filteredSongs" :key="song.id" class="song-row" :class="{selected: song.id === session.selectedId}">
-                <NButton quaternary class="song-select" :aria-pressed="song.id === session.selectedId" @click="choose(song.id)">
-                    <template #icon><PhMusicNote :size="19" /></template>
-                    <span class="song-info"><strong>{{ song.name }}</strong><small>{{ song.missing ? '文件不可用，请重新导入' : formatMidiTime(song.durationMs) }}</small></span>
-                    <PhCheck v-if="song.id === session.selectedId" class="selection-mark" :size="16" />
-                </NButton>
-                <NPopconfirm :positive-button-props="{type: 'error'}" positive-text="移除" negative-text="保留" @positive-click="session.removeSong(song.id)">
-                    <template #trigger><NButton quaternary circle size="small" :disabled="session.busy" :aria-label="`移除 ${song.name}`"><template #icon><PhTrash :size="16" /></template></NButton></template>
-                    从曲库移除“{{ song.name }}”？原 MIDI 文件会保留。
-                </NPopconfirm>
-            </div>
-            <div v-if="!filteredSongs.length" class="empty-library">
-                <PhMusicNotes :size="30" weight="light" />
-                <span>{{ search ? '没有匹配的曲目' : '导入 MIDI，开始播放或跟弹' }}</span>
-                <NButton v-if="!search" size="small" secondary :loading="session.importing" @click="importSong">选择 MIDI 文件</NButton>
-            </div>
-        </NScrollbar>
+        <div class="library-scroll">
+            <NScrollbar style="height: auto; max-height: var(--library-list-height)" trigger="hover" :aria-busy="session.loading">
+                <div v-for="song in filteredSongs" :key="song.id" class="song-row" :class="{selected: song.id === session.selectedId}">
+                    <NButton quaternary class="song-select" :aria-pressed="song.id === session.selectedId" @click="choose(song.id)">
+                        <template #icon><PhMusicNote :size="19" /></template>
+                        <span class="song-info"><strong>{{ song.name }}</strong><small>{{ song.missing ? '文件不可用，请重新导入' : formatMidiTime(song.durationMs) }}</small></span>
+                        <PhCheck v-if="song.id === session.selectedId" class="selection-mark" :size="16" />
+                    </NButton>
+                    <NPopconfirm :positive-button-props="{type: 'error'}" positive-text="移除" negative-text="保留" @positive-click="session.removeSong(song.id)">
+                        <template #trigger><NButton quaternary circle size="small" :disabled="session.busy" :aria-label="`移除 ${song.name}`"><template #icon><PhTrash :size="16" /></template></NButton></template>
+                        从曲库移除“{{ song.name }}”？原 MIDI 文件会保留。
+                    </NPopconfirm>
+                </div>
+                <div v-if="!filteredSongs.length" class="empty-library">
+                    <PhMusicNotes :size="30" weight="light" />
+                    <span>{{ search ? '没有匹配的曲目' : '导入 MIDI，开始播放或跟弹' }}</span>
+                    <NButton v-if="!search" size="small" secondary :loading="session.importing" @click="importSong">选择 MIDI 文件</NButton>
+                </div>
+            </NScrollbar>
+        </div>
         <footer>选择曲目后，点击播放或开始练习。</footer>
     </section>
 </template>
@@ -56,7 +58,8 @@ header, header > div { display: flex; align-items: center; gap: 9px; }
 header { justify-content: space-between; margin-bottom: 16px; }
 h2 { font-size: 15px; font-weight: 550; }
 header span { font-size: 11px; color: #939393; }
-.library-scroll { flex: 1; min-height: 0; margin: 16px -5px 0; max-height: min(450px, 55vh); }
+.library-scroll { --library-list-height: min(450px, calc(100vh - 260px)); flex: 0 1 auto; min-height: 0; margin: 16px -5px 0; }
+.library-scroll :deep(.n-scrollbar-container) { height: auto; overscroll-behavior: contain; }
 .library-scroll :deep(.n-scrollbar-rail.n-scrollbar-rail--vertical) { width: 6px; right: 1px; }
 .library-scroll :deep(.n-scrollbar-rail .n-scrollbar-rail__scrollbar) { border-radius: 6px; background: #a6a6a65e; }
 .library-scroll :deep(.n-scrollbar-rail:hover .n-scrollbar-rail__scrollbar) { background: #bcbcbc99; }

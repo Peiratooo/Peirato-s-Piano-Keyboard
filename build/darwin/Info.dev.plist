@@ -5,7 +5,7 @@
 		<key>CFBundleExecutable</key>
 		<string>pp_keyboard</string>
 		<key>CFBundleGetInfoString</key>
-		<string>A simple and lightweight piano keyboard for desktop practice.</string>
+		<string>Peirato's Piano Keyboard — PP 钢琴键盘（PP Keyboard）</string>
 		<key>CFBundleIconFile</key>
 		<string>icons</string>
 		<key>CFBundleIconName</key>
@@ -13,7 +13,9 @@
 		<key>CFBundleIdentifier</key>
 		<string>com.peirato.piano</string>
 		<key>CFBundleName</key>
-		<string>Peirato&#39;s Piano Keyboard</string>
+		<string>PP Keyboard</string>
+		<key>CFBundleDisplayName</key>
+		<string>PP 钢琴键盘（PP Keyboard）</string>
 		<key>CFBundlePackageType</key>
 		<string>APPL</string>
 		<key>CFBundleShortVersionString</key>

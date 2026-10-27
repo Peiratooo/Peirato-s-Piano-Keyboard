@@ -5,7 +5,7 @@ version: '3'
 # This information is used to generate the build assets.
 info:
   companyName: "Peirato" # The company or developer name
-  productName: "Peirato's Piano Keyboard" # The official application name
+  productName: "PP 钢琴键盘（PP Keyboard）" # Display name; full name: Peirato's Piano Keyboard
   productIdentifier: "com.peirato.piano" # The unique product identifier
   description: "A lightweight desktop piano keyboard for MIDI playback and practice." # The application description
   copyright: "(c) 2026, Peirato" # Copyright text
@@ -20,9 +20,9 @@ info:
 #   # The iOS bundle identifier used in the generated Xcode project (CFBundleIdentifier)
 #   bundleID: "com.peirato.piano"
 #   # The display name shown under the app icon (CFBundleDisplayName/CFBundleName)
-#   displayName: "Peirato's Piano Keyboard"
+#   displayName: "PP 钢琴键盘（PP Keyboard）"
 #   # The app version to embed in Info.plist (CFBundleShortVersionString/CFBundleVersion)
-#   version: "1.3.0"
+#   version: "1.3.1"
 #   # The company/organisation name for templates and project settings
 #   company: "Peirato"
 #   # Additional comments to embed in Info.plist metadata
@@ -73,4 +73,4 @@ fileAssociations:
 
 # Other data
 other:
-  - name: Peirato Piano Keyboard Data
+  - name: PP Keyboard Data

@@ -1,6 +1,6 @@
-# Peirato's Piano 前端
+# PP 钢琴键盘（PP Keyboard）前端
 
-Vue 3、Pinia、Naive UI 和 Vite 实现主钢琴窗口、设置中心与 MIDI 中心。
+Vue 3、Pinia、Naive UI 和 Vite 实现主钢琴窗口与设置中心，曲库、播放和练习整合在主窗口内。
 
 在项目根目录运行 `wails3 task dev` 启动完整桌面开发环境；前端依赖通过 `npm ci` 安装。Wails 绑定由 `common:generate:bindings` 任务生成，不提交到仓库。
 

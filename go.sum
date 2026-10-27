@@ -1,7 +1,7 @@
 github.com/Peiratooo/innoextract-go v0.1.2 h1:srXH25h0/K8dIZGMGoB1blSW+6FsYn7NqdO5befdjnI=
 github.com/Peiratooo/innoextract-go v0.1.2/go.mod h1:N9aZznEceKQyULOsVKOe5znzaeA+rVrSjRjzR+MzOKE=
-github.com/Peiratooo/simple-updater v0.2.7 h1:mU/NOfU1FO0NyTXQGNYJcK64A+TLkYmQX77nPm47fG4=
-github.com/Peiratooo/simple-updater v0.2.7/go.mod h1:mHO521irnrx3bD7bueDprV6CJ66SbdYU7LoQ9CQyEN0=
+github.com/Peiratooo/simple-updater v0.2.8 h1:LleIS9WvG2z4wK0glj01yl5wX35iMhQR9EvHowWIY5U=
+github.com/Peiratooo/simple-updater v0.2.8/go.mod h1:8dQ+ScMhjZjek4tAKquxKJe17/7+QIIDr9PTQUZL/is=
 github.com/adrg/xdg v0.5.3 h1:xRnxJXne7+oWDatRhR1JLnvuccuIeCoBu2rtuLqQB78=
 github.com/adrg/xdg v0.5.3/go.mod h1:nlTsY+NNiCBGCK2tpm09vRqfVzrc2fLmXGpBLF0zlTQ=
 github.com/aliyun/aliyun-oss-go-sdk v3.0.2+incompatible h1:8psS8a+wKfiLt1iVDX79F7Y6wUM49Lcha2FMXt4UM8g=

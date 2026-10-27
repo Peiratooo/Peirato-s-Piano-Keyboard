@@ -1,7 +1,7 @@
 <p align="center">
-  <img src="./appicon.png" alt="Peirato's Piano Logo" width="96" />
+  <img src="./appicon.png" alt="PP 钢琴键盘 Logo" width="96" />
 </p>
-<h1 align="center">Peirato's Piano Keyboard</h1>
+<h1 align="center">PP 钢琴键盘（PP Keyboard）</h1>
 
 <p align="center">
   一款基于 <b>Wails 3 + Vue 3 + Go</b> 构建的桌面钢琴软件。<br>
@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Peiratooo/Peirato-s-Piano/releases">下载 Release</a>
+  <a href="https://github.com/Peiratooo/Peirato-s-Piano-Keyboard/releases">下载 Release</a>
   ·
   <a href="#-功能特性">功能特性</a>
   ·
@@ -20,7 +20,7 @@
 
 ## ✨ 项目简介
 
-**Peirato's Piano** 提供可以自由切换的完整瀑布流窗口和桌面迷你键盘。启动后即可自由演奏，浮动菜单会在弹下第一个音时自动收起；音条从琴键向上升起，实色部分表示按键时长，浅色尾迹表示踏板延音。
+**PP 钢琴键盘（PP Keyboard）** 的完整名称为 **Peirato's Piano Keyboard**。软件提供可以自由切换的完整瀑布流窗口和桌面迷你键盘。启动后即可自由演奏，浮动菜单会在弹下第一个音时自动收起；音条从琴键向上升起，实色部分表示按键时长，浅色尾迹表示踏板延音。
 
 主窗口可以切换自由演奏、MIDI 播放和跟弹练习：自由演奏向上生成音条，播放／跟弹向下显示曲目音符。曲库、导入、进度和练习控制都在主窗口内完成。自由演奏支持录制、草稿试听和 MIDI 保存，保存后可直接加入曲库。
 
@@ -36,7 +36,13 @@
 
 ## 📸 预览
 
-![Peirato Piano 主窗口](./screenshot.png)
+![PP 钢琴键盘主窗口](./screenshot.png)
+
+| 等待跟弹 | 外观主题 |
+| --- | --- |
+| ![逐音提示的 MIDI 跟弹练习](./assets/screenshots/midi-practice.webp) | ![左右手与踏板配色实时预览](./assets/screenshots/appearance.webp) |
+
+![新版主菜单](./assets/screenshots/main-menu.webp)
 
 ---
 
@@ -140,7 +146,7 @@
 
 ### 环境要求
 
-- Go 1.26.5+
+- Go 1.27.3+
 - Node.js 和 npm（满足当前 Vite 的运行要求）
 - 与 `go.mod` 对应版本兼容的 Wails 3 CLI
 - 支持 MIDI 的系统环境
@@ -184,6 +190,7 @@ wails3 task dev
 2. 构建配置使用 `Taskfile.yml` 的 `release` 任务，应用名 `pp_keyboard`，开启生产构建和 CGO。
 3. 启动程序使用默认主程序入口；Windows 为 `bin/pp_keyboard.exe`，macOS 为应用包，不再使用独立启动器。
 4. 在 Manager 中执行构建与打包，安装包输出到 `builder/release/`。
+5. 分发文件中同时包含根目录的 `LICENSE`、`NOTICE` 和 `THIRD_PARTY_NOTICES.md`；当前构建模板尚未自动收集这些文件，打包时需检查并加入。
 
 仓库分别保存 Windows 和 macOS 配置模板，路径均相对于项目根目录。Manager 实际读取的 `builder/packaging.json` 是本机配置，由 Git 忽略，避免两台机器互相覆盖平台资产或写入本机绝对路径。首次使用或切换平台时复制对应模板：
 
@@ -211,6 +218,8 @@ wails3 task release
 
 主程序与运行文件输出到 `bin/`。Wails 生成的平台构建资产保留在 `build/`，面向用户的安装包统一由 Manager 管理。
 
+当前更新组件使用 `simple-updater v0.2.8`，随附 Windows 和 macOS universal updater 使用 Go `1.27.3` 构建。以后升级组件或 Go 工具链时，手动执行 `go run ./cmd/helpergen` 同步这两份资产；普通 `release` 任务只复制已有 updater。打包、上传更新源和发布由维护者手动执行。
+
 ---
 
 ## 🕹 使用说明
@@ -237,12 +246,12 @@ wails3 task release
 
 ### 5. MIDI 播放 / 跟弹
 
-打开 MIDI 播放 / 练习窗口后：
+在主窗口切换到「播放」或「练习」后：
 
 1. 导入一个 MIDI 文件；
-2. 在左侧目录选择曲目；
+2. 在居中的曲库面板选择曲目；
 3. 使用播放控制区预览 MIDI；
-4. 调整左右锚点选择练习区间；
+4. 在进度条上调整 A–B 练习区间；
 5. 切换到跟弹模式；
 6. 选择左手、右手或双手练习；
 7. 根据键盘提示按下对应音符，完成当前步骤后自动继续。
@@ -251,14 +260,10 @@ wails3 task release
 
 ## 🧭 项目架构
 
-详细启动流程、服务职责、MIDI 设备监听、音源渲染、MIDI 文件解析、跟弹练习和多窗口同步逻辑，请查看：
-
-[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)
-
-核心模块概览：
+启动流程为配置读取 → 内置音源初始化 → 窗口创建 → MIDI 设备扫描。核心模块概览：
 
 数字唱名可在「设置中心 → 键盘显示」选择调性；更新入口在「关于软件」。
-软件更新仅使用 `/release/get_info` 与 `/release/download`，AppID 为 `com.peirato.piano`。`1.3.0` 不再包含旧 product 通道的启动器或过渡安装逻辑。随软件分发的 updater 可通过 `go run ./cmd/updater-builder` 重新生成。
+软件更新仅使用 `/release/get_info` 与 `/release/download`，AppID 为 `com.peirato.piano`。`1.3.0` 不再包含旧 product 通道的启动器或过渡安装逻辑。随软件分发的 updater 可通过 `go run ./cmd/helpergen` 重新生成。
 
 ```text
 main.go                         程序入口
@@ -276,7 +281,17 @@ frontend/src/components/MidiWaterfallCanvas.vue MIDI 向下瀑布流
 frontend/src/App.vue                    Wails 事件与多窗口状态同步
 frontend/src/store/index.js             Pinia 状态中心
 builder/packaging.json                 Wails3 Manager 打包配置
+cmd/helpergen/                        Windows/macOS updater 生成工具
+cmd/release-inspect/                  安装包解析与更新清单检查工具
 ```
+
+`cmd/release-inspect` 是维护者发布工具，用于在上传前检查 Inno Setup 或 DMG 安装包的元数据和文件清单，不会上传文件或执行安装：
+
+```bash
+go run ./cmd/release-inspect "path/to/setup.exe"
+```
+
+目前主要维护 Windows 和 macOS 桌面体验；其他平台构建文件保留在 `build/`，不代表这些平台已完成发布验收。本机网站源码、打包输出、验收记录和用户数据不属于仓库源码。
 
 ---
 
@@ -312,6 +327,12 @@ builder/packaging.json                 Wails3 Manager 打包配置
 - [Vue.js](https://vuejs.org/) — 前端框架；
 - Go MIDI / SoundFont 生态中的开源项目；
 - 所有提出建议、反馈问题和愿意使用这个小工具的朋友。
+
+## 许可证与参与贡献
+
+项目原创代码采用 [Apache License 2.0](./LICENSE)。第三方代码、内置音源和运行库保留各自的许可证，见 [第三方说明](./THIRD_PARTY_NOTICES.md)。
+
+提交问题和参与开发前，请阅读 [贡献指南](./.github/CONTRIBUTING.md)。
 
 <p align="center">
   如果这个项目对你有帮助，欢迎点一个 ⭐ Star 支持一下。

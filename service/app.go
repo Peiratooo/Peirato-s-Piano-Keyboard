@@ -31,7 +31,7 @@ func initSize() WindowSize {
 func Run(assets embed.FS) {
 	size := initSize()
 	App = application.New(application.Options{
-		Name:        "Peirato's Piano Keyboard",
+		Name:        appDisplayName,
 		Description: "Piano performance and waterfall practice",
 		Services: []application.Service{
 			application.NewService(&Keyboard{}),
@@ -50,7 +50,7 @@ func Run(assets embed.FS) {
 	})
 
 	PianoWin = App.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title: "Peirato's Piano Keyboard",
+		Title: appDisplayName,
 		Mac: application.MacWindow{
 			// The frontend marks its blank title area as draggable so toolbar
 			// buttons keep receiving clicks, including in compact mode.
@@ -164,7 +164,7 @@ func (k *Keyboard) OpenControlCenter() {
 	}
 
 	ControlWin = App.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title:                  "设置中心",
+		Title:                  appDisplayName + " · 设置",
 		URL:                    "/#/control",
 		Width:                  980,
 		Height:                 700,

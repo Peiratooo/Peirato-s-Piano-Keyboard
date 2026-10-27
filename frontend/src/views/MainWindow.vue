@@ -28,7 +28,7 @@
                 </NButton>
                 <MidiPracticeControls :session="session" :panel="panel" @open-speed="closePanel" @speed-visibility="speedPanelOpen = $event" />
             </div>
-            <div class="drag-region" @dblclick="toggleMaximize"><span v-if="!isSimple">{{ isMidi ? session.selectedSong?.name || '选择一首 MIDI' : 'Peirato’s Piano' }}</span></div>
+            <div class="drag-region" @dblclick="toggleMaximize"><span v-if="!isSimple">{{ isMidi ? session.selectedSong?.name || '选择一首 MIDI' : APP_NAME }}</span></div>
             <div class="toolbar-right" data-piano-control>
                 <NRadioGroup class="display-switch" data-preserve-piano-holds :value="store.mainDisplayMode" :disabled="switching" size="small" aria-label="显示方式" @update:value="setDisplayMode">
                     <NRadioButton value="simple" :disabled="isMidi || modeSwitching" :title="isMidi ? '简单模式仅支持自由演奏' : '简单键盘'">简单</NRadioButton><NRadioButton value="waterfall">瀑布</NRadioButton>
@@ -54,8 +54,9 @@
         <Transition name="panel">
             <section v-if="panel === 'menu' && !isSimple" class="main-menu floating-panel" data-piano-control aria-label="主菜单">
                 <button class="menu-close" type="button" aria-label="收起菜单" @click="closePanel"><PhX :size="17" /></button>
-                <img class="menu-mark" src="/appicon.png" alt="Peirato’s Piano Logo" width="48" height="48" />
-                <h1>Peirato’s Piano</h1>
+                <img class="menu-mark" src="/appicon.png" :alt="APP_NAME + ' Logo'" width="48" height="48" />
+                <h1>{{ APP_NAME }}</h1>
+                <p class="app-subtitle">{{ APP_ENGLISH_NAME }}</p>
                 <button class="start-playing" type="button" @click="startFreePlay"><PhPlay :size="17" weight="fill" />{{ isMidi ? '自由演奏' : '开始弹奏' }}<PhArrowRight :size="18" /></button>
                 <div class="menu-links">
                     <button type="button" @click="openPanel('library')"><PhMusicNotes :size="20" /><span>曲库</span><PhArrowRight :size="16" /></button>
@@ -124,6 +125,7 @@ import {useMidiSession} from '../services/midiSession'
 import {useRecordingSession} from '../services/recordingSession'
 import {getPianoUiTheme} from '../services/uiTheme'
 import {isPianoControlTarget} from '../services/computerKeyboard'
+import {APP_ENGLISH_NAME, APP_NAME} from '../services/appIdentity'
 
 const store = inject('store')
 const Keyboard = inject('Keyboard')
@@ -463,6 +465,7 @@ button:disabled { cursor: wait; opacity: .55; }
 .menu-close:hover { color: white; background: #ffffff0b; }
 .menu-mark { display: block; width: 48px; height: 48px; object-fit: contain; margin: 0 auto 16px; }
 h1 { font-size: 24px; font-weight: 500; line-height: 1.3; letter-spacing: -.025em; }
+.app-subtitle { margin-top: 6px; font-size: 12px; color: #a8a8a8; }
 .menu-description { font-size: 12px; color: #a8a8a8; margin-top: 9px; line-height: 1.6; }
 .start-playing { margin: 25px 0 14px; padding: 14px 16px; display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; color: var(--ui-accent-text); background: var(--ui-accent); border: 1px solid var(--ui-accent-ring); border-radius: 7px; font-size: 14px; font-weight: 600; transition: background 160ms; }
 .start-playing > :last-child { margin-left: auto; }

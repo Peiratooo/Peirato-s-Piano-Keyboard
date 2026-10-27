@@ -3,9 +3,10 @@ package main
 
 import (
 	"context"
-	"github.com/Peiratooo/simple-updater/updaterstub"
 	"log"
 	"os"
+
+	"github.com/Peiratooo/simple-updater/updaterstub"
 )
 
 func main() {

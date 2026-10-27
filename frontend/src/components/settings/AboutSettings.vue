@@ -4,8 +4,8 @@
         <section class="update-card" aria-label="软件更新" :aria-busy="updater.busy">
             <div class="app-summary">
                 <div class="app-identity">
-                    <img class="app-logo" src="/appicon.png" alt="Peirato Piano 标志" />
-                    <div><h3>Peirato's Piano</h3><p>Keyboard · 桌面钢琴键盘</p><span class="version-tag">当前版本 {{ store.config.version || '—' }}</span></div>
+                    <img class="app-logo" src="/appicon.png" :alt="APP_NAME + ' 标志'" />
+                    <div><h3>{{ APP_NAME }}</h3><p>{{ APP_ENGLISH_NAME }}</p><span class="version-tag">当前版本 {{ store.config.version || '—' }}</span><p class="full-name">完整名称：{{ APP_FULL_NAME }}</p></div>
                 </div>
                 <div class="update-action">
                     <span v-if="updater.phase === 'latest'" class="latest-badge"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 10 3 3 7-7" /></svg>已是最新版本</span>
@@ -45,7 +45,7 @@
 
         <n-modal v-model:show="showInstall" preset="dialog" :style="{borderRadius:'18px'}" title="更新并重新启动？" positive-text="确定更新并重启" negative-text="稍后再说" :positive-button-props="{type:'primary'}" @positive-click="confirmInstall">
             <p class="dialog-copy">将安装 {{ updater.version }}。软件会关闭，完成更新后自动重新打开。</p>
-            <p class="dialog-note">请先结束当前演奏或 MIDI 播放，确认准备好后再继续。</p>
+            <p class="dialog-note">录制将先备份为草稿，安装时会结束当前演奏或 MIDI 播放。</p>
         </n-modal>
         <n-modal v-model:show="showReset" preset="dialog" :style="{borderRadius:'18px'}" type="warning" title="恢复默认设置？" positive-text="确定恢复" negative-text="保留设置" :loading="resetting" :mask-closable="!resetting" :closable="!resetting" :close-on-esc="!resetting" :negative-button-props="{disabled:resetting}" @positive-click="confirmReset">
             <p class="dialog-copy">外观、键盘映射和音频设置将恢复默认，已添加的音源与 MIDI 列表记录也会清空。</p>
@@ -59,6 +59,7 @@ import {computed, inject, onMounted, ref} from 'vue'
 import {NButton, NModal, NProgress} from 'naive-ui'
 import Author from '../Author.vue'
 import {useUpdater, updateErrorMessage} from '../../store/updater'
+import {APP_ENGLISH_NAME, APP_FULL_NAME, APP_NAME} from '../../services/appIdentity'
 const store = inject('store')
 const resetConfig = inject('resetConfig')
 const updater = useUpdater()
@@ -93,6 +94,7 @@ async function confirmReset() {
 .app-logo { width:68px; height:68px; border-radius:0; box-shadow:0 5px 12px #00000016; flex-shrink:0; }
 h3 { margin:0; font-size:19px; font-weight:700; color:#303030; letter-spacing:-.4px; }
 .app-identity p { font-size:12px; color:#666666; margin:5px 0 9px; }
+.app-identity .full-name { margin:9px 0 0; font-size:11px; }
 .version-tag { display:inline-flex; padding:3px 8px; background:#fff; border:1px solid #e5e5e5; border-radius:6px; color:#626262; font-size:11px; }
 .update-action { display:flex; flex-direction:column; align-items:flex-end; gap:10px; flex-shrink:0; font-size:12px; }
 .latest-badge { display:flex; align-items:center; gap:5px; color:#247653; font-weight:600; }

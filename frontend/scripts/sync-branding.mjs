@@ -16,7 +16,6 @@ async function writeIfChanged(relative, contents) {
     return true
 }
 await writeIfChanged('frontend/public/appicon.png', logo)
-await writeIfChanged('frontend/public/app-icon.png', logo)
 await writeIfChanged('build/appicon.png', logo)
 await writeIfChanged('build/appicon.icon/Assets/appicon.png', logo)
 // Native desktop icons need only Node's built-ins. The frontend build syncs
