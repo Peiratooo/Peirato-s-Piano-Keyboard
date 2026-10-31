@@ -46,7 +46,6 @@ func Run(assets embed.FS) {
 			ExitCode:               0,
 		},
 		LogLevel:   application.DialogWarning,
-		OnShutdown: func() { stopRecordingForShutdown(); cleanupUpdate(); CloseMidiDevice() },
 	})
 
 	PianoWin = App.Window.NewWithOptions(application.WebviewWindowOptions{

@@ -11,9 +11,10 @@ import (
 )
 
 type KeyboardSignal struct {
-	Value    uint8 `json:"value"`
-	Velocity uint8 `json:"velocity"`
-	Channel  uint8 `json:"channel"`
+	Value    uint8    `json:"value"`
+	Velocity uint8    `json:"velocity"`
+	Channel  uint8    `json:"channel"`
+	Hand     MidiHand `json:"hand"`
 }
 
 type Listener struct {
@@ -412,7 +413,7 @@ func handleMidiMessage(deviceID int, msg midi.Message) {
 		recordingNoteOnLocked(deviceID, ch, midiKey, vel)
 		ensureSoftwareSustainChannel(ch)
 		playSelectedOutputNoteOn(ch, key, vel)
-		MidiPlayer.HandleUserNoteOn(int(midiKey))
+		hand := MidiPlayer.HandleUserNoteOn(int(midiKey))
 
 		midiMu.Lock()
 		pedal := Midis.PedalStatus[deviceID]
@@ -424,8 +425,8 @@ func handleMidiMessage(deviceID int, msg midi.Message) {
 		delete(pedal.DamperPedalKeys, channelNote{ch, midiKey})
 		midiMu.Unlock()
 
-		emitKeyboardEvent("down", midiKey, vel, ch)
-		emitKeyboardEvent("pressedDown", midiKey, vel, ch)
+		emitKeyboardEvent("down", midiKey, vel, ch, hand)
+		emitKeyboardEvent("pressedDown", midiKey, vel, ch, hand)
 
 	case msg.GetNoteEnd(&ch, &key):
 		midiKey := midi.Note(key).Value()
@@ -456,13 +457,13 @@ func handleMidiMessage(deviceID int, msg midi.Message) {
 		midiMu.Unlock()
 
 		if !pressed {
-			emitKeyboardEvent("pressedUp", midiKey, 0, ch)
+			emitKeyboardEvent("pressedUp", midiKey, 0, ch, MidiHandUnknown)
 		}
 		if !outputHeld {
 			playSelectedOutputNoteOff(ch, key)
 		}
 		if !active {
-			emitKeyboardEvent("up", midiKey, 0, ch)
+			emitKeyboardEvent("up", midiKey, 0, ch, MidiHandUnknown)
 		}
 
 	case msg.GetControlChange(&ch, &con, &vel):
@@ -542,7 +543,7 @@ func handlePedalMessage(deviceID int, channel, controller, velocity uint8) {
 		App.Event.Emit("pedal", pedalSnapshot)
 	}
 	for _, key := range releaseKeys {
-		emitKeyboardEvent("up", key, 0, channel)
+		emitKeyboardEvent("up", key, 0, channel, MidiHandUnknown)
 	}
 }
 
@@ -623,7 +624,7 @@ func (k *Keyboard) SetSoftwareSustain(enabled bool) bool {
 		App.Event.Emit("softwareSustain", enabled)
 	}
 	for note := range releaseCandidates {
-		emitKeyboardEvent("up", note, 0, 0)
+		emitKeyboardEvent("up", note, 0, 0, MidiHandUnknown)
 	}
 	return enabled
 }
@@ -640,11 +641,11 @@ func ensureSoftwareSustainChannel(channel uint8) {
 	}
 }
 
-func emitKeyboardEvent(event string, key uint8, velocity uint8, channel uint8) {
+func emitKeyboardEvent(event string, key uint8, velocity uint8, channel uint8, hand MidiHand) {
 	if App == nil {
 		return
 	}
-	App.Event.Emit(event, &KeyboardSignal{Value: key, Velocity: velocity, Channel: channel})
+	App.Event.Emit(event, &KeyboardSignal{Value: key, Velocity: velocity, Channel: channel, Hand: hand})
 }
 
 func containsUint8(list []uint8, target uint8) bool {
