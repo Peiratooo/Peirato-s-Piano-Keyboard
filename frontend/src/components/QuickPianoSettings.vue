@@ -11,7 +11,7 @@
             <label id="quick-velocity-label" class="setting-label" for="quick-velocity" @click="focusControl('quick-velocity')">触键力度 <output>{{ store.config.velocity }}</output></label>
             <n-slider v-model:value="store.config.velocity" v-piano-label="{id: 'quick-velocity', description: 'quick-velocity-hint'}"
                 :min="1" :max="127" :tooltip="false" @dragend="save" @keyup="saveSliderKey" />
-            <p id="quick-velocity-hint" class="setting-hint">用于电脑键盘与鼠标演奏</p>
+            <p id="quick-velocity-hint" class="setting-hint">键鼠演奏力度；MIDI 按此值 ÷ 127 缩放</p>
             <div class="setting-divider"></div>
             <label id="quick-range-label" class="setting-label" for="quick-range" @click="focusControl('quick-range')">键盘范围</label>
             <n-select v-model:value="store.config.keyboardType" :options="keyboardOptions" size="small"

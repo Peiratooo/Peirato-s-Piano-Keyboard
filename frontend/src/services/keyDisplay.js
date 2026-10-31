@@ -9,11 +9,19 @@ export function numberedPitch(midi, tonic = 0) {
     return {pitch: degrees[((offset % 12) + 12) % 12], octave: 4 + Math.floor(offset / 12)}
 }
 
+export function keyHand(store, key) {
+    if (store.midiPlaybackKey[key]) return 'right'
+    if (store.midiPlaybackLeftKey[key]) return 'left'
+    if (store.pressedKey[key]) return store.pressedKeyHands[key] || 'right'
+    return store.midiHintLeftKey[key] && !store.midiHintKey[key] ? 'left' : 'right'
+}
+
 export function keyVisualClass(store, item) {
     const key = item.index
     const prefix = item.color === 'black' ? 'b' : 'w'
-    if (store.pressedKey[key] || store.midiPlaybackKey[key]) return `${prefix}-active`
-    if (store.midiPlaybackLeftKey[key]) return `${prefix}-l-active`
+    if (store.pressedKey[key] || store.midiPlaybackKey[key] || store.midiPlaybackLeftKey[key]) {
+        return `${prefix}${keyHand(store, key) === 'left' ? '-l' : ''}-active`
+    }
     if (store.midiHintKey[key]) return `${prefix}-hint`
     if (store.midiHintLeftKey[key]) return `${prefix}-l-hint`
     return store.activeKey[key] ? `${prefix}-sustained` : ''

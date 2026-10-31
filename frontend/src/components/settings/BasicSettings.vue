@@ -13,7 +13,7 @@
             <div class="setting-row">
                 <div>
                     <div class="label">触键力度</div>
-                    <div class="desc">电脑键盘或鼠标触发音符时使用的 MIDI velocity。</div>
+                    <div class="desc">设置键鼠演奏力度；MIDI 播放力度 = 原力度 × 此值 ÷ 127，127 保留原力度。</div>
                 </div>
                 <n-slider v-model:value="store.config.velocity" :min="1" :max="127" @dragend="changeConfig" :tooltip="false" />
             </div>

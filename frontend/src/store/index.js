@@ -23,6 +23,7 @@ const safeConfig = {
 export const data = defineStore('data', {
     state: () => {
         return {
+            onlineWorkspaceOpen: false,
             keyboard: [],
             keyboardConfig: [],
 
@@ -31,6 +32,7 @@ export const data = defineStore('data', {
             // pressedKey：用户手指真实按住的音。和弦识别优先使用它，避免延音踏板污染和弦判断。
             backendPressedKey: {},
             interactiveKeys: {},
+            pressedKeyHands: {},
             midiPlaybackKey: {},
             midiPlaybackLeftKey: {},
             midiHintKey: {},
@@ -131,7 +133,14 @@ export const data = defineStore('data', {
     },
     actions: {
         setKeyState(key, pressed) {
+            if (pressed && !this.pressedKey[key]) this.setPressedHand(key)
             this.interactiveKeys[key] = Math.max(0, (this.interactiveKeys[key] || 0) + (pressed ? 1 : -1))
+            if (!this.pressedKey[key]) delete this.pressedKeyHands[key]
+        },
+        setPressedHand(key, hand) {
+            this.pressedKeyHands[key] = hand === 'left' || hand === 'right' ? hand
+                : this.midiPlaybackKey[key] || this.midiHintKey[key] ? 'right'
+                    : this.midiPlaybackLeftKey[key] || this.midiHintLeftKey[key] ? 'left' : 'right'
         },
         setMidiVisualKey(key, hand, active, source = 'playback') {
             const isLeft = hand === 'left'
@@ -153,6 +162,7 @@ export const data = defineStore('data', {
             this.activeKey = {}
             this.backendPressedKey = {}
             this.interactiveKeys = {}
+            this.pressedKeyHands = {}
             this.clearMidiVisualKeys()
         },
     },

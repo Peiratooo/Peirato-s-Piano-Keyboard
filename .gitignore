@@ -52,3 +52,11 @@ Desktop.ini
 *.bak
 *.orig
 *.rej
+
+# Community release output
+/release/
+
+# Web assets are copied from the desktop sources by predev/prebuild.
+/web-toy/public/appicon.png
+/web-toy/public/keyboard_config.json
+/web-toy/public/ChordNames.json

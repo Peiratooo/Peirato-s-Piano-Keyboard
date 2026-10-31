@@ -13,7 +13,7 @@ function midiError(error) {
         .replace(/\/(?:[^\s/]+\/)+[^\s:]*/g, '所选文件')
 }
 
-const summarizeSong = song => ({id: song.id, name: song.name || '未命名曲目',
+const summarizeSong = song => ({id: song.id, name: song.name || '未命名曲目', communityMidiId:song.communityMidiId, communityAccountId:song.communityAccountId,
     durationMs: Math.max(0, Number(song.durationMs) || 0), trackCount: song.trackCount || 0, missing: !!song.missing})
 
 // One session belongs to the main window, never to a transient library/settings
@@ -138,7 +138,19 @@ export function useMidiSession({store, Keyboard}) {
         }).finally(() => { if (!disposed) loading.value = false })
         return initialization
     }
-    function refreshLibrary() { return enqueue(async () => { await loadLibrary(); return true }, '曲库刷新失败') }
+    function refreshLibrary() { return enqueue(async () => {
+        await loadLibrary()
+        if (selectedId.value && !library.value.some(song => song.id === selectedId.value)) {
+            await Keyboard.StopMidiPlayback()
+            await syncState()
+            selectedId.value = ''
+            timeline.value = null
+            localCurrent.value = 0
+            options.leftMs = options.rightMs = 0
+            clockRevision.value++
+        }
+        return true
+    }, '曲库刷新失败') }
     function selectSong(id) {
         if (!id) return Promise.resolve(false)
         if (id === selectedId.value && timeline.value && !loading.value) return Promise.resolve(true)

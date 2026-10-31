@@ -1,5 +1,5 @@
 <template>
-    <section class="midi-library" data-piano-control aria-label="MIDI 曲库">
+    <div role="region" class="midi-library" data-piano-control aria-label="MIDI 曲库">
         <header>
             <div><PhMusicNotes :size="20" /><h2>曲库</h2><span>{{ session.library.length }} 首</span></div>
             <div class="library-actions"><NButton size="small" type="primary" :loading="session.importing" :disabled="session.importing" @click="importSong">
@@ -30,7 +30,7 @@
             </NScrollbar>
         </div>
         <footer>选择曲目后，点击播放或开始练习。</footer>
-    </section>
+    </div>
 </template>
 
 <script setup>

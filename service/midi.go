@@ -65,9 +65,12 @@ const (
 // =========================
 
 type UserMidi struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-	Path string `json:"path"`
+	ID                 string `json:"id"`
+	Name               string `json:"name"`
+	CommunityMIDIID    string `json:"communityMidiId,omitempty"`
+	CommunitySHA256    string `json:"communitySha256,omitempty"`
+	CommunityAccountID uint   `json:"communityAccountId,omitempty"`
+	Path               string `json:"path"`
 
 	Size       int64     `json:"size"`
 	ImportedAt time.Time `json:"importedAt"`
@@ -174,7 +177,14 @@ func RemoveMidi(id string) error {
 
 func GetMidiStore() []UserMidi {
 	config := GetUserConfig()
-	return append([]UserMidi(nil), config.MidiStore...)
+	items := make([]UserMidi, 0, len(config.MidiStore))
+	uid := communityCurrentUserID()
+	for _, item := range config.MidiStore {
+		if item.CommunityAccountID == 0 || item.CommunityAccountID == uid {
+			items = append(items, item)
+		}
+	}
+	return items
 }
 
 func FindUserMidiByID(id string) (UserMidi, bool) {
@@ -183,7 +193,7 @@ func FindUserMidiByID(id string) (UserMidi, bool) {
 		return UserMidi{}, false
 	}
 
-	for _, item := range GetUserConfig().MidiStore {
+	for _, item := range GetMidiStore() {
 		if item.ID == id {
 			return item, true
 		}
@@ -257,7 +267,9 @@ func (k *Keyboard) LoadMidiByID(id string) (UserMidi, error) {
 		return UserMidi{}, err
 	}
 
-	return MidiToUserMidi(midiFile), nil
+	userMidi.DurationMs = midiFile.DurationMs
+	userMidi.TrackCount = midiFile.TrackCount
+	return userMidi, nil
 }
 
 func (k *Keyboard) StartMidiPlayback(options MidiPlaybackOptions) error {
@@ -326,17 +338,7 @@ func MidiToUserMidi(midiFile *Midi) UserMidi {
 	if midiFile == nil {
 		return UserMidi{}
 	}
-
-	return UserMidi{
-		ID:         midiFile.ID,
-		Name:       midiFile.Name,
-		Path:       midiFile.Path,
-		Size:       midiFile.Size,
-		ImportedAt: midiFile.ImportedAt,
-		Missing:    midiFile.Missing,
-		DurationMs: midiFile.DurationMs,
-		TrackCount: midiFile.TrackCount,
-	}
+	return midiFile.UserMidi
 }
 
 func UserMidiToMidi(userMidi UserMidi) (*Midi, error) {
@@ -365,6 +367,9 @@ func ParseUserMidi(userMidi UserMidi) (*Midi, error) {
 	}
 
 	midiFile.Missing = userMidi.Missing
+	midiFile.CommunityMIDIID = userMidi.CommunityMIDIID
+	midiFile.CommunitySHA256 = userMidi.CommunitySHA256
+	midiFile.CommunityAccountID = userMidi.CommunityAccountID
 
 	return midiFile, nil
 }

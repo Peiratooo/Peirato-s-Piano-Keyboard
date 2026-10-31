@@ -346,3 +346,7 @@ go run ./cmd/release-inspect "path/to/setup.exe"
 <p align="center">
   如果这个项目对你有帮助，欢迎点一个 ⭐ Star 支持一下。
 </p>
+
+### 社区版 / MIDI 工坊
+
+已整合 Toy 网页端、独立 Go 社区服务和桌面工坊入口。使用自己的钢琴账号，支持私密/公开曲库、搜索筛选、点赞点踩收藏、下载缓存和双端练习记录；Toy 登录为可选入口。运行与接口说明见 [社区实现说明](community-docs/IMPLEMENTATION.md)，真实验证记录见 [联调记录](community-docs/VALIDATION.md)。

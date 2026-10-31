@@ -1,0 +1,9 @@
+.env
+data/
+*.db
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+server
+
+.cache/
