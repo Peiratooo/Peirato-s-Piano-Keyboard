@@ -11,7 +11,7 @@ const (
 	defaultMidiWindowMs = 100.0
 	playerTickInterval  = 4 * time.Millisecond
 	stateEmitInterval   = 50 * time.Millisecond
-	midiLeadInMs        = 5000.0
+	midiLeadInMs        = 3000.0
 )
 
 type MidiPlayStatus string
@@ -216,7 +216,10 @@ func (p *MidiPlayerRuntime) Start(midiFile *Midi, options MidiPlaybackOptions) e
 	if options.Mode == MidiPlaybackModeFollow && p.followIndex < len(followSteps) {
 		p.state.CurrentStep = cloneMidiPracticeStep(&followSteps[p.followIndex])
 	}
-	if options.LeadIn {
+	// Only a whole-song start at time zero needs the visual lead-in.
+	// A–B practice, including ranges starting at zero, begins immediately.
+	if options.LeadIn && startMs <= 0.5 &&
+		isWholeSongRange(options.LeftMs, options.RightMs, midiFile.DurationMs) {
 		p.state.LeadInMs = midiLeadInMs * options.Speed
 	}
 
@@ -230,6 +233,13 @@ func (p *MidiPlayerRuntime) Start(midiFile *Midi, options MidiPlaybackOptions) e
 	p.mu.Unlock()
 	emitMidiPlayerState(state)
 	return nil
+}
+
+// A custom end boundary also counts as an A–B range when A is at zero.
+func isWholeSongRange(leftMs, rightMs, durationMs float64) bool {
+	const boundaryEpsilonMs = 0.5
+	return durationMs > 0 && leftMs <= boundaryEpsilonMs &&
+		rightMs >= durationMs-boundaryEpsilonMs
 }
 
 func normalizeMidiPlaybackOptions(options MidiPlaybackOptions, durationMs float64) MidiPlaybackOptions {
@@ -772,6 +782,11 @@ func (p *MidiPlayerRuntime) SetOptions(options MidiPlaybackOptions) error {
 	p.state.RightMs = options.RightMs
 	if p.startingLocked() {
 		p.state.LeadInMs *= options.Speed / p.state.Speed
+		// Dragging A/B during the initial countdown must take effect now,
+		// rather than carrying the remaining lead-in into practice.
+		if !isWholeSongRange(options.LeftMs, options.RightMs, p.state.DurationMs) {
+			p.state.LeadInMs = 0
+		}
 	}
 	p.state.Speed = options.Speed
 	p.state.Loop = options.Loop

@@ -211,7 +211,13 @@ export function useMidiSession({store, Keyboard}) {
     async function startBackend() {
         if (!selectedId.value || !timeline.value || loading.value || mode.value === 'free') return false
         options.mode = mode.value === 'follow' ? 'follow' : 'play'
-        await Keyboard.StartMidiPlayback(buildOptions({startMs: localCurrent.value, leadIn: true}))
+        const rightMs = options.rightMs || durationMs.value
+        const startMs = clamp(localCurrent.value, options.leftMs, rightMs)
+        // A–B always starts immediately, even when A is at the song's start.
+        // A seek into the full song also skips the initial countdown.
+        const wholeSong = options.leftMs <= 0.5 && rightMs >= durationMs.value - 0.5
+        const leadIn = wholeSong && startMs <= 0.5
+        await Keyboard.StartMidiPlayback(buildOptions({startMs, leadIn}))
         clockRevision.value++
         await syncState()
         return true
