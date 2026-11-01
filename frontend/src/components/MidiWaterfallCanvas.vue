@@ -86,7 +86,7 @@ function colorFor(note, key) {
     return (typeof value === 'string' ? value : value?.color) || (note.hand === 'left' ? '#efbd82' : '#9af7b3')
 }
 function roundedRect(x, y, width, height) {
-    const radius = Math.min(5, width / 4, height / 2)
+    const radius = Math.min(3, width / 4, height / 2)
     context.beginPath()
     context.moveTo(x + radius, y)
     context.arcTo(x + width, y, x + width, y + height, radius)
@@ -111,19 +111,19 @@ function drawNote(note, time) {
     if (bottom < 0 || top > props.height) return
     const y = Math.max(-6, top), height = Math.min(props.height, bottom) - y
     if (height <= 0) return
-    const inset = Math.min(3, key.width * .12), width = Math.max(2, key.width - inset * 2), x = key.x + inset
+    const inset = 1.5, width = Math.max(2, key.width - inset * 2), x = key.x + inset
     const muted = state.mutedTracks?.[note.trackIndex] || state.mutedHands?.[note.hand]
         || (state.mode === 'play' && state.handMode !== 'both' && note.hand !== state.handMode)
     const color = colorFor(note, key)
     context.globalAlpha = muted ? .18 : .65 + Math.min(127, Number(note.velocity) || 80) / 127 * .3
     context.fillStyle = color
     context.shadowColor = color
-    context.shadowBlur = expected && state.waiting ? 18 : 7
+    context.shadowBlur = expected && state.waiting ? 8 : 3
     roundedRect(x, y, width, Math.max(3, height))
     context.fill()
     context.shadowBlur = 0
     context.strokeStyle = expected && state.waiting ? 'rgba(255,255,255,.92)' : 'rgba(255,255,255,.4)'
-    context.lineWidth = expected && state.waiting ? 1.5 : 1
+    context.lineWidth = 1
     context.stroke()
     context.globalAlpha = 1
 }

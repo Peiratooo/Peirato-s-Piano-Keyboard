@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"math"
 	"sort"
 	"sync"
 	"time"
@@ -388,7 +389,7 @@ func (p *MidiPlayerRuntime) advanceFollowLocked(currentMs float64) (*MidiPractic
 	return nil, false
 }
 
-func (p *MidiPlayerRuntime) HandleUserNoteOn(note int) {
+func (p *MidiPlayerRuntime) HandleUserNoteOn(note int) MidiHand {
 	var state MidiPlayerState
 	var hintStep *MidiPracticeStep
 	var clearHint bool
@@ -397,17 +398,25 @@ func (p *MidiPlayerRuntime) HandleUserNoteOn(note int) {
 	p.mu.Lock()
 	if p.state.Status != MidiPlayPlaying || p.state.Mode != MidiPlaybackModeFollow {
 		p.mu.Unlock()
-		return
+		return MidiHandUnknown
 	}
 	if p.followIndex >= len(p.followSteps) || !p.hintActive {
 		p.mu.Unlock()
-		return
+		return MidiHandUnknown
 	}
 
 	step := &p.followSteps[p.followIndex]
-	if !stepContainsNote(step, note) || p.acceptedNotes[note] {
+	hand := MidiHandUnknown
+	found := false
+	for _, item := range step.Notes {
+		if item.Note == note {
+			hand, found = item.Hand, true
+			break
+		}
+	}
+	if !found || p.acceptedNotes[note] {
 		p.mu.Unlock()
-		return
+		return MidiHandUnknown
 	}
 
 	p.acceptedNotes[note] = true
@@ -429,6 +438,7 @@ func (p *MidiPlayerRuntime) HandleUserNoteOn(note int) {
 	if shouldEmit {
 		emitMidiPlayerState(state)
 	}
+	return hand
 }
 
 func (p *MidiPlayerRuntime) pendingPracticeStepLocked(step *MidiPracticeStep) *MidiPracticeStep {
@@ -575,18 +585,6 @@ func practiceNoteFromEvent(event MidiEvent) MidiPracticeNote {
 }
 
 func practiceStepHasNote(step MidiPracticeStep, note int) bool {
-	for _, item := range step.Notes {
-		if item.Note == note {
-			return true
-		}
-	}
-	return false
-}
-
-func stepContainsNote(step *MidiPracticeStep, note int) bool {
-	if step == nil {
-		return false
-	}
 	for _, item := range step.Notes {
 		if item.Note == note {
 			return true
@@ -1036,11 +1034,11 @@ func (p *MidiPlayerRuntime) restoreAtLocked(ms float64) {
 		}
 	}
 	for _, note := range sustained {
-		playSelectedOutputNoteOn(uint8(note.Channel), uint8(note.Note), uint8(clampMidiByte(note.Velocity)))
+		playSelectedOutputNoteOn(uint8(note.Channel), uint8(note.Note), midiPlaybackVelocity(note.Velocity))
 		playSelectedOutputNoteOff(uint8(note.Channel), uint8(note.Note))
 	}
 	for _, note := range active {
-		playSelectedOutputNoteOn(uint8(note.Channel), uint8(note.Note), uint8(clampMidiByte(note.Velocity)))
+		playSelectedOutputNoteOn(uint8(note.Channel), uint8(note.Note), midiPlaybackVelocity(note.Velocity))
 		emitMidiPlaybackKey(note, uint8(note.Channel), true, false)
 	}
 }
@@ -1070,6 +1068,13 @@ func clampFloat(value float64, minValue float64, maxValue float64) float64 {
 	return value
 }
 
+func midiPlaybackVelocity(original int) uint8 {
+	configMu.RLock()
+	velocity := UserConfig.Velocity
+	configMu.RUnlock()
+	return uint8(math.Round(float64(original) * float64(velocity) / 127))
+}
+
 func dispatchMidiEvent(event MidiEvent, emitVisual bool) {
 	if event.Channel < 0 || event.Channel > 15 {
 		return
@@ -1078,7 +1083,7 @@ func dispatchMidiEvent(event MidiEvent, emitVisual bool) {
 
 	switch event.Type {
 	case MidiEventNoteOn:
-		playSelectedOutputNoteOn(channel, uint8(event.Note), uint8(clampMidiByte(event.Velocity)))
+		playSelectedOutputNoteOn(channel, uint8(event.Note), midiPlaybackVelocity(event.Velocity))
 		if emitVisual {
 			emitMidiPlaybackKey(event, channel, true, true)
 		}

@@ -1,0 +1,11 @@
+# Replace with a real API domain under your control.
+# Caddy terminates HTTPS/WSS and automatically proxies WebSocket upgrades.
+api.example.com {
+    encode zstd gzip
+    header X-Content-Type-Options nosniff
+    header Referrer-Policy no-referrer
+    reverse_proxy 127.0.0.1:8080 {
+        # Overwrite this header; the Go app accepts it ONLY from trusted proxy CIDRs.
+        header_up X-Real-IP {remote_host}
+    }
+}

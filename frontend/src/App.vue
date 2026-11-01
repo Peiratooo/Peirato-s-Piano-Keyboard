@@ -20,7 +20,7 @@
 </template>
 
 <script setup>
-import {computed, defineComponent, h, onBeforeUnmount, onMounted, provide} from 'vue'
+import {computed, onBeforeUnmount, onMounted, provide} from 'vue'
 import {useRoute} from 'vue-router'
 import {
     dateZhCN,
@@ -30,20 +30,34 @@ import {
     NMessageProvider,
     NModalProvider,
     NNotificationProvider,
-    useMessage,
-    useNotification,
     zhCN
 } from 'naive-ui'
 import {Events, WML} from '@wailsio/runtime'
 import {Keyboard} from '../bindings/main/service'
 import {data} from './store'
+import FeedbackBridge from './components/FeedbackBridge.vue'
 import {useUpdater} from './store/updater'
-import {createComputerKeyboard} from './services/computerKeyboard'
-import {acceptLivePerformance} from './services/livePerformance'
+import {createComputerKeyboard, setKeyboardMappingLabels} from './services/computerKeyboard'
+import {acceptLivePerformance, subscribeLivePerformance} from './services/livePerformance'
 import {getKeyLabelColor, getPianoUiTheme} from './services/uiTheme'
 import {changeColor, composite, rgba} from 'seemly'
 
 const store = data()
+provide('subscribeKeyboardFeedback', listener => {
+    const subscriptions = [
+        Events.On('midiPlaybackKey', event => {
+            const signal = event.data
+            if (signal?.active && signal.attack && store.midiPlayerState.status === 'playing') listener({type: 'attack', note: signal.note, hand: signal.hand})
+        }),
+        Events.On('midiVisualClear', () => listener({type: 'clear'})),
+        Events.On('allNotesOff', () => listener({type: 'clear'})),
+        subscribeLivePerformance(signal => {
+            if (signal.type === 'clear') listener({type: 'clear'})
+            else if (signal.type === 'noteOn') listener({type: 'attack', note: signal.note})
+        }),
+    ]
+    return () => subscriptions.forEach(unsubscribe => unsubscribe())
+})
 const updater = useUpdater()
 const route = useRoute()
 const isMainWindow = computed(() => route.path === '/')
@@ -63,56 +77,10 @@ const themeOverrides = computed(() => {
 })
 
 const unsubscribeBackendEvents = []
-const keyboardLabelSkipKeys = ['k', 'K', 'l', 'L', ';', "'", '\\', '|', '`', '~', '[', '{', ']', '}', 'p', 'P']
 let unsubscribeKeyboardListener = null
 let unsubscribeResizeListener = null
 let lastWindowSaveError = 0
 
-const FeedbackBridge = defineComponent({
-    name: 'FeedbackBridge',
-    setup() {
-        const message = useMessage()
-        const notification = useNotification()
-
-        window.$message = message
-        window.$notify = {
-            error(title, content) {
-                notification.error({
-                    title,
-                    content,
-                    duration: 5200,
-                    keepAliveOnHover: true,
-                })
-            },
-            success(title, content) {
-                notification.success({
-                    title,
-                    content,
-                    duration: 2800,
-                    keepAliveOnHover: true,
-                })
-            },
-            warning(title, content) {
-                notification.warning({
-                    title,
-                    content,
-                    duration: 4200,
-                    keepAliveOnHover: true,
-                })
-            },
-            info(title, content) {
-                notification.info({
-                    title,
-                    content,
-                    duration: 3200,
-                    keepAliveOnHover: true,
-                })
-            },
-        }
-
-        return () => h('span', {style: 'display: none'})
-    },
-})
 
 // ========================
 // 基础配置与设备同步
@@ -241,27 +209,7 @@ async function initKeyboardConfig() {
 }
 
 function updateKeyboardMappingLabels() {
-    if (!store.keyboardConfig.length) return
-
-    const reverseMapping = {}
-    const mapping = store.activeKeyMapping || {}
-    for (const key in mapping) {
-        if (keyboardLabelSkipKeys.includes(key)) continue
-        const midiKey = Number(mapping[key])
-        if (!Number.isFinite(midiKey)) continue
-        if (!(midiKey in reverseMapping)) {
-            reverseMapping[midiKey] = formatComputerKeyLabel(key)
-        }
-    }
-
-    for (const item of store.keyboardConfig) {
-        item.keyboard = item.index in reverseMapping ? reverseMapping[item.index] : ''
-    }
-}
-
-function formatComputerKeyLabel(key) {
-    if (key === ' ') return 'Space'
-    return key
+    setKeyboardMappingLabels(store.keyboardConfig, store.activeKeyMapping)
 }
 
 function setKeyColor() {
@@ -327,7 +275,7 @@ function keyboardListener() {
     unsubscribeKeyboardListener?.()
     const input = createComputerKeyboard({
         mapping: () => store.activeKeyMapping || {},
-        enabled: () => isMainWindow.value,
+        enabled: () => isMainWindow.value && !store.onlineWorkspaceOpen,
         press: note => setInteractiveKey(note, true),
         release: note => setInteractiveKey(note, false),
     })
@@ -380,11 +328,13 @@ function registerBackendEvents() {
     })
     on('pressedDown', (signal) => {
         if (!signal) return
+        if (signal.hand !== 'unknown' || !store.pressedKey[signal.value]) store.setPressedHand(signal.value, signal.hand)
         store.backendPressedKey[signal.value] = true
     })
     on('pressedUp', (signal) => {
         if (!signal) return
         store.backendPressedKey[signal.value] = false
+        if (!store.pressedKey[signal.value]) delete store.pressedKeyHands[signal.value]
     })
     on('pedal', (pedal) => {
         if (!pedal) return

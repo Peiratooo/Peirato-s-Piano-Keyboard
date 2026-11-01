@@ -1,0 +1,15 @@
+.git
+**/node_modules
+**/.env
+**/.env.*
+!**/.env.example
+**/data
+**/.cache
+frontend/dist
+frontend/bindings
+bin
+release
+builder
+.builder
+soundfont
+assets

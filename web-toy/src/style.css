@@ -1,0 +1,7 @@
+@import '../../frontend/src/style.css';
+@import '../../shared/community/community.css';
+html,body,#app{height:100%;width:100%;overflow:hidden;background:#242424}
+.web-piano{width:100vw;height:100dvh;overflow:hidden;color-scheme:dark}
+button,input,select,textarea{font:inherit}
+.n-modal-mask{background:#0009}
+@media(max-width:600px){.midi-library{max-width:calc(100vw - 16px)!important;padding:18px!important}.desktop-community{width:calc(100vw - 16px)!important;max-height:calc(100dvh - 24px)!important;padding:16px!important}}

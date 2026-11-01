@@ -1,0 +1,23 @@
+[Unit]
+Description=PP Piano Community API (single-node)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pp-piano
+Group=pp-piano
+WorkingDirectory=/var/lib/pp-piano
+EnvironmentFile=/etc/pp-piano/server.env
+ExecStart=/opt/pp-piano/server/pp-piano-api
+Restart=on-failure
+RestartSec=3
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/pp-piano
+
+[Install]
+WantedBy=multi-user.target

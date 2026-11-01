@@ -3,8 +3,10 @@
         class="classic-keyboard"
         :class="{'has-note-feedback': hasNoteFeedback}"
         ref="keybed"
-        @mouseup="releaseMouseKey"
-        @mouseleave="releaseMouseKey"
+        @pointermove="movePointer"
+        @pointerup="releasePointer"
+        @pointercancel="releasePointer"
+        @lostpointercapture="releasePointer"
     >
         <div
             class="key"
@@ -13,9 +15,7 @@
             :style="keyStyle(item.index)"
             :key="item.index"
             :data-midi-note="item.index"
-            @mouseenter="enterKey($event, item.index)"
-            @mousedown.prevent="pressKey($event, item.index)"
-            @mouseup="releaseKey(item.index)"
+            @pointerdown.prevent="pressKey($event, item.index)"
         >
             <span v-if="hintHand(item.index)" class="practice-dot" :class="{'is-left': hintHand(item.index) === 'left'}" aria-hidden="true"></span>
             <div class="label" v-if="store.config.keyLabel !== '' && item[store.config.keyLabel]" :class="{'pitch-label': store.config.keyLabel === 'pitch'}">
@@ -35,17 +35,16 @@
 </template>
 
 <script setup>
-import {computed, inject, onBeforeUnmount, onMounted, reactive, ref, watch} from 'vue'
-import {Events} from '@wailsio/runtime'
-import {numberedPitch, keyVisualClass} from '../services/keyDisplay'
+import {computed, inject, onBeforeUnmount, onMounted, ref, watch} from 'vue'
+import {numberedPitch, keyVisualClass, keyHand} from '../services/keyDisplay'
 import {createKeyboardLayout} from '../services/keyboardLayout'
-import {subscribeLivePerformance} from '../services/livePerformance'
 import {getKeyLabelColor} from '../services/uiTheme'
 
 const props = defineProps({layout: {type: Array, default: null}, showHints: {type: Boolean, default: true}})
 
 const store = inject('store')
 const setInteractiveKey = inject('setInteractiveKey')
+const subscribeKeyboardFeedback = inject('subscribeKeyboardFeedback')
 const keybed = ref(null)
 const keybedWidth = ref(0)
 let resizeObserver = null
@@ -56,17 +55,17 @@ const hasNoteFeedback = computed(() => store.mainMode !== 'free'
 
 // Note-on is an event, rather than a change of held state. Replaying this
 // animation also works when NoteOff/NoteOn arrive in one Vue render frame.
-function flashAttack(note, hand = 'right') {
+function flashAttack(note, hand = keyHand(store, note)) {
     if (!Number.isInteger(note) || note < 0 || note > 127) return
     const element = keybed.value?.querySelector(`[data-midi-note="${note}"]`)
     if (!element?.animate) return
     const black = element.classList.contains('black')
-    const left = hand === 'left' && !store.pressedKey[note] && !store.midiPlaybackKey[note]
+    const left = hand === 'left' && !store.midiPlaybackKey[note]
     const token = `${black ? 'blackKey' : 'whiteKey'}${left ? 'Left' : ''}`
     const palette = store.config.colors?.[token]
     const color = (typeof palette === 'string' ? palette : palette?.color)
         || (left ? '#f7e89a' : '#9af7b3')
-    const base = black ? '#333333' : '#f6f6f6'
+    const base = black ? '#242628' : '#f5f4f0'
     const baseText = black ? '#eeeeee' : '#616161'
     const activeText = getKeyLabelColor(color)
     attackAnimations.get(element)?.cancel()
@@ -88,10 +87,7 @@ function clearAttackFeedback() {
     attackAnimations.clear()
 }
 
-const mouse = reactive({
-    down: false,
-    currentKey: -1,
-})
+const pointers = new Map()
 
 const visibleKeys = computed(() => {
     const range = store.keyboardRange[store.config.keyboardType] || store.keyboardRange[0]
@@ -129,34 +125,32 @@ function pitchMarksAbove(item) {
 }
 
 function pressKey(event, key) {
-    if (event.button !== 0) return
-    mouse.down = true
-    if (mouse.currentKey === key) return
-
-    releaseKey(mouse.currentKey)
-    mouse.currentKey = key
+    if (event.pointerType === 'mouse' && event.button !== 0) return
+    keybed.value.setPointerCapture(event.pointerId)
+    pointers.set(event.pointerId, key)
     setInteractiveKey(key, true)
 }
-
-function releaseKey(key) {
-    if (key === -1 || key === undefined || mouse.currentKey !== key) return
-    mouse.currentKey = -1
-    setInteractiveKey(key, false)
+function releasePointer(event) {
+    const key = pointers.get(event.pointerId)
+    if (key !== undefined && key !== null) setInteractiveKey(key, false)
+    pointers.delete(event.pointerId)
 }
-
-function releaseMouseKey() {
-    mouse.down = false
-    releaseKey(mouse.currentKey)
-    mouse.currentKey = -1
+function releasePointers() {
+    for (const key of pointers.values()) if (key !== null) setInteractiveKey(key, false)
+    pointers.clear()
 }
-
-function enterKey(event, key) {
-    if (!(event.buttons & 1)) {
-        releaseMouseKey()
-        return
-    }
-    if (!mouse.down || mouse.currentKey === key) return
-    pressKey({button: 0}, key)
+function movePointer(event) {
+    if (!pointers.has(event.pointerId)) return
+    const rect = keybed.value.getBoundingClientRect()
+    const x = event.clientX - rect.left, y = event.clientY - rect.top
+    const key = y < 0 || y >= rect.height ? null : [...keyPositions.value.values()]
+        .sort((a, b) => Number(b.isBlack) - Number(a.isBlack))
+        .find(item => x >= item.x && x < item.x + item.width && (!item.isBlack || y < rect.height * .63))?.note ?? null
+    const previous = pointers.get(event.pointerId)
+    if (previous === key) return
+    if (previous !== null) setInteractiveKey(previous, false)
+    pointers.set(event.pointerId, key)
+    if (key !== null) setInteractiveKey(key, true)
 }
 
 onMounted(() => {
@@ -165,17 +159,10 @@ onMounted(() => {
     })
     resizeObserver.observe(keybed.value)
     keybedWidth.value = keybed.value.clientWidth
-    window.addEventListener('mouseup', releaseMouseKey)
-    window.addEventListener('blur', releaseMouseKey)
-    feedbackUnsubscribers.push(Events.On('midiPlaybackKey', event => {
-        const signal = event.data
-        if (signal?.active && signal.attack && store.midiPlayerState?.status === 'playing') flashAttack(signal.note, signal.hand)
-    }))
-    feedbackUnsubscribers.push(Events.On('midiVisualClear', clearAttackFeedback))
-    feedbackUnsubscribers.push(Events.On('allNotesOff', clearAttackFeedback))
-    feedbackUnsubscribers.push(subscribeLivePerformance(signal => {
+    window.addEventListener('blur', releasePointers)
+    feedbackUnsubscribers.push(subscribeKeyboardFeedback(signal => {
         if (signal.type === 'clear') clearAttackFeedback()
-        else if (store.mainMode !== 'free' && signal.type === 'noteOn') flashAttack(signal.note)
+        else if (hasNoteFeedback.value) flashAttack(signal.note, signal.hand)
     }))
 })
 
@@ -185,10 +172,9 @@ watch(() => store.midiPlayerState?.status, status => {
 })
 
 onBeforeUnmount(() => {
-    releaseMouseKey()
+    releasePointers()
     resizeObserver?.disconnect()
-    window.removeEventListener('mouseup', releaseMouseKey)
-    window.removeEventListener('blur', releaseMouseKey)
+    window.removeEventListener('blur', releasePointers)
     for (const unsubscribe of feedbackUnsubscribers) unsubscribe()
     clearAttackFeedback()
 })
@@ -218,25 +204,32 @@ onBeforeUnmount(() => {
     --hint-color: var(--whiteKey);
     position: absolute;
     left: 50%;
-    top: 78%;
-    width: clamp(8px, calc(var(--key-width) * .37), 18px);
-    aspect-ratio: 1;
+    bottom: 32px;
+    width: 7px;
+    height: 7px;
     border-radius: 50%;
-    transform: translate(-50%, -50%);
+    transform: translateX(-50%);
     background: var(--hint-color);
-    border: 2px solid #ffffffd9;
-    box-shadow: 0 0 0 2px #242424ab, 0 0 13px var(--hint-color);
+    border: 1px solid color-mix(in srgb, var(--hint-color), white 40%);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--hint-color) 22%, transparent);
     pointer-events: none;
+    z-index: 1;
 }
 .practice-dot.is-left { --hint-color: var(--whiteKeyLeft); }
-.black .practice-dot { --hint-color: var(--blackKey); }
+.black .practice-dot {
+    --hint-color: var(--blackKey);
+    bottom: 24px;
+    width: 6px;
+    height: 6px;
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--hint-color) 25%, transparent);
+}
 .black .practice-dot.is-left { --hint-color: var(--blackKeyLeft); }
 
 .label {
     position: absolute;
     left: 0;
     right: 0;
-    bottom: 16px;
+    bottom: 12px;
     display: flex;
     justify-content: center;
     opacity: 0.5;
@@ -274,85 +267,49 @@ onBeforeUnmount(() => {
 .white {
     height: 100%;
     z-index: 1;
-    border-left: 1px solid #bbb;
-    border-bottom: 1px solid #bbb;
-    border-radius: 0;
-    box-shadow: -1px 0 0 rgba(255, 255, 255, 0.5) inset, 0 0 5px #ccc inset, 0 0 3px rgba(0, 0, 0, 0.1);
-    background-color: #f6f6f6;
-    color: #616161;
+    border: 0;
+    border-radius: 0 0 2px 2px;
+    background-color: #f5f4f0;
+    background-image: linear-gradient(180deg, #ffffff08 0%, #ffffff85 12%, #ffffff18 84%, #0000000a 100%);
+    box-shadow: inset 1px 0 0 #bdbdb7, inset 0 -3px 0 #d8d7d1, inset 0 1px 0 #fffefa;
+    color: #6b6c68;
 
-    .label {
-        font-size: 14px;
-        color: inherit;
-        opacity: 1;
-    }
+    .label { font-size: 12px; color: inherit; opacity: 1; }
 }
 
-.w-active {
-    border-left: 1px solid var(--whiteKey-o);
-    border-bottom: 1px solid var(--whiteKey-o);
-    box-shadow: 3px 0 3px rgba(0, 0, 0, 0.1) inset, -3px 0 8px rgba(0, 0, 0, 0.1) inset, 0 0 3px rgba(0, 0, 0, 0.2);
-    background-color: var(--whiteKey);
-    color: var(--whiteKey-label);
-}
-
-.w-l-active {
-    border-left: 1px solid var(--whiteKeyLeft-o);
-    border-bottom: 1px solid var(--whiteKeyLeft-o);
-    box-shadow: 3px 0 3px rgba(0, 0, 0, 0.1) inset, -3px 0 8px rgba(0, 0, 0, 0.1) inset, 0 0 3px rgba(0, 0, 0, 0.2);
-    background-color: var(--whiteKeyLeft);
-    color: var(--whiteKeyLeft-label);
-}
-
+.w-active { background-color: var(--whiteKey); color: var(--whiteKey-label); }
+.w-l-active { background-color: var(--whiteKeyLeft); color: var(--whiteKeyLeft-label); }
 
 .black {
     height: 63%;
     z-index: 3;
-    border-bottom: 1px solid #000;
-    border-left: 1px solid #000;
+    border: 0;
     border-radius: 0 0 3px 3px;
-    box-shadow: -1px -1px 2px rgba(255, 255, 255, 0.2) inset, 0 -5px 2px 3px rgba(0, 0, 0, 0.6) inset, 0 2px 4px rgba(0, 0, 0, 0.5);
-    background-color: #333;
-    color: #eeeeee;
+    background-color: #242628;
+    background-image: linear-gradient(90deg, #00000072, #ffffff0c 14%, #ffffff02 55%, #00000022 85%, #00000080),
+        linear-gradient(180deg, #ffffff09, transparent 12%, transparent 84%, #00000035);
+    box-shadow: inset 1px 0 0 #ffffff12, inset -1px 0 0 #00000065, inset 0 -4px 0 #08090a, 0 2px 3px #00000038;
+    color: #d4d6d5;
 
-    .label {
-        font-size: 13px;
-        color: inherit;
-    }
+    .label { font-size: 10px; bottom: 9px; color: inherit; }
 }
+.b-active { background-color: var(--blackKey); color: var(--blackKey-label); }
+.b-l-active { background-color: var(--blackKeyLeft); color: var(--blackKeyLeft-label); }
 
-.b-active {
-    box-shadow: -1px -5px 2px rgba(131, 131, 131, 0.2) inset, 0 -10px 10px 5px rgba(0, 0, 0, 0.6) inset, 0 1px 2px rgba(0, 0, 0, 0.5);
-    background-color: var(--blackKey);
-    color: var(--blackKey-label);
-    border-bottom: 1px solid var(--blackKey-o);
-    border-left: 1px solid var(--blackKey-o);
+.key::after {
+    content: '';
+    position: absolute;
+    inset: 1px;
+    border: 1px solid transparent;
+    border-radius: 0 0 1px 1px;
+    pointer-events: none;
 }
-.b-l-active {
-    box-shadow: -1px -5px 2px rgba(131, 131, 131, 0.2) inset, 0 -10px 10px 5px rgba(0, 0, 0, 0.6) inset, 0 1px 2px rgba(0, 0, 0, 0.5);
-    background-color: var(--blackKeyLeft);
-    color: var(--blackKeyLeft-label);
-    border-bottom: 1px solid var(--blackKeyLeft-o);
-    border-left: 1px solid var(--blackKeyLeft-o);
-}
+.black::after { border-radius: 0 0 2px 2px; }
+.w-hint::after { border-color: var(--whiteKey); }
+.w-l-hint::after { border-color: var(--whiteKeyLeft); }
+.b-hint::after { border-color: var(--blackKey); }
+.b-l-hint::after { border-color: var(--blackKeyLeft); }
 
-
-
-.w-sustained {
-    background-color: color-mix(in srgb, var(--whiteKey) 38%, #f6f6f6);
-    color: var(--whiteKey-sustained-label);
-}
-
-.w-hint, .b-hint {
-    box-shadow: inset 0 0 0 2px var(--whiteKey), 0 0 7px var(--whiteKey-o);
-}
-.w-l-hint, .b-l-hint {
-    box-shadow: inset 0 0 0 2px var(--whiteKeyLeft), 0 0 7px var(--whiteKeyLeft-o);
-}
-
-.b-sustained {
-    background-color: color-mix(in srgb, var(--blackKey) 38%, #333);
-    color: var(--blackKey-sustained-label);
-}
-
+.w-sustained { background-color: color-mix(in srgb, var(--whiteKey) 38%, #f5f4f0); color: var(--whiteKey-sustained-label); }
+.b-sustained { background-color: color-mix(in srgb, var(--blackKey) 38%, #242628); color: var(--blackKey-sustained-label); }
 </style>

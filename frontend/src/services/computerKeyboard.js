@@ -1,3 +1,13 @@
+const keyboardLabelSkipKeys = new Set(['k', 'K', 'l', 'L', ';', "'", '\\', '|', '`', '~', '[', '{', ']', '}', 'p', 'P'])
+
+export function setKeyboardMappingLabels(keyboard, mapping) {
+    const reverse = {}
+    for (const [key, note] of Object.entries(mapping)) {
+        if (!keyboardLabelSkipKeys.has(key) && !(note in reverse)) reverse[note] = key === ' ' ? 'Space' : key
+    }
+    for (const item of keyboard) item.keyboard = reverse[item.index] || ''
+}
+
 export function isPianoEditableTarget(target) {
     return !!(target?.isContentEditable || target?.closest?.(
         'input, textarea, select, [contenteditable=""], [contenteditable="true"], '
