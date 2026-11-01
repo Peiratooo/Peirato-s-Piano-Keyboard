@@ -138,7 +138,19 @@ export function useMidiSession({store, Keyboard}) {
         }).finally(() => { if (!disposed) loading.value = false })
         return initialization
     }
-    function refreshLibrary() { return enqueue(async () => { await loadLibrary(); return true }, '曲库刷新失败') }
+    function refreshLibrary() { return enqueue(async () => {
+        await loadLibrary()
+        if (selectedId.value && !library.value.some(song => song.id === selectedId.value)) {
+            await Keyboard.StopMidiPlayback()
+            await syncState()
+            selectedId.value = ''
+            timeline.value = null
+            localCurrent.value = 0
+            options.leftMs = options.rightMs = 0
+            clockRevision.value++
+        }
+        return true
+    }, '曲库刷新失败') }
     function selectSong(id) {
         if (!id) return Promise.resolve(false)
         if (id === selectedId.value && timeline.value && !loading.value) return Promise.resolve(true)

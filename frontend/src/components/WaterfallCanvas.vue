@@ -57,14 +57,14 @@ function drawSegment(key, from, to, now, historyMs, color, alpha, glow = false) 
     const y = Math.max(-6, top)
     const height = Math.min(props.height, Math.max(bottom, top + 3)) - y
     if (height <= 0) return
-    const inset = Math.min(3, key.width * .12)
+    const inset = 1.5
     const width = Math.max(2, key.width - inset * 2)
     const x = key.x + inset
     context.globalAlpha = alpha
     context.fillStyle = color
     context.shadowColor = color
-    context.shadowBlur = glow ? 12 : 0
-    roundedRect(x, y, width, height, Math.min(5, width / 4))
+    context.shadowBlur = glow ? 5 : 0
+    roundedRect(x, y, width, height, Math.min(3, width / 4))
     context.fill()
     context.shadowBlur = 0
     if (glow) {
