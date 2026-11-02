@@ -10,6 +10,7 @@
                 <span>{{ hand.short }}</span>
             </NButton>
         </div>
+        <slot name="views" />
         <NPopover trigger="click" placement="bottom" :show="showSpeed" :to="false" :width="280" @update:show="toggleSpeed">
             <template #trigger>
                 <NButton quaternary size="small" class="speed-button" :disabled="session.loading"

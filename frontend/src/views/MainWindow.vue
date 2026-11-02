@@ -4,9 +4,15 @@
         <div class="waterfall-area" :aria-hidden="isSimple">
             <WaterfallCanvas v-show="!isMidi" :layout="layout" :width="size.width" :height="waterfallHeight"
                 :active="!isSimple && !isMidi" :colors="store.config.colors" />
-            <div v-show="isMidi" class="midi-waterfall-layer" :style="{top: midiCanvasTop + 'px'}">
+            <div v-show="isMidi && session.viewOptions.score" class="midi-score-layer"
+                :style="{top: midiContentTop + 'px'}">
+                <MidiScoreView :timeline="session.timeline" :score-document="session.scoreDocument" :player-state="session.state"
+                    :width="size.width" :height="scoreHeight"
+                    :active="!isSimple && isMidi && session.viewOptions.score" :hand-mode="session.options.handMode" />
+            </div>
+            <div v-show="isMidi && session.viewOptions.waterfall" class="midi-waterfall-layer" :style="{top: midiCanvasTop + 'px'}">
                 <MidiWaterfallCanvas :layout="layout" :width="size.width" :height="midiCanvasHeight"
-                    :active="!isSimple && isMidi" :colors="store.config.colors" :timeline="session.timeline" :player-state="session.state" />
+                     :active="!isSimple && isMidi && session.viewOptions.waterfall" :colors="store.config.colors" :timeline="session.timeline" :player-state="session.state" />
             </div>
         </div>
 
@@ -26,7 +32,25 @@
                 <NButton class="library-toggle" :type="panel === 'library' ? 'primary' : 'default'" size="small" :aria-expanded="panel === 'library'" @click="openPanel('library')">
                     <template #icon><PhMusicNotes :size="18" /></template>曲库
                 </NButton>
-                <MidiPracticeControls :session="session" :panel="panel" @open-speed="closePanel" @speed-visibility="speedPanelOpen = $event" />
+                <MidiPracticeControls :session="session" :panel="panel" @open-speed="closePanel" @speed-visibility="speedPanelOpen = $event">
+                    <template #views>
+                        <div class="practice-view-switch" role="group" aria-label="练习显示内容">
+                            <NButton quaternary size="small" class="view-button" :class="{'is-selected': session.viewOptions.waterfall}"
+                                :aria-pressed="session.viewOptions.waterfall" title="显示或隐藏瀑布流"
+                                @click="session.setView('waterfall', !session.viewOptions.waterfall)">
+                                <PhChartBar :size="17" /><span>瀑布</span>
+                            </NButton>
+                            <NButton quaternary size="small" class="view-button" :class="{'is-selected': session.viewOptions.score}"
+                                :aria-pressed="session.viewOptions.score" title="显示或隐藏五线谱"
+                                @click="session.setView('score', !session.viewOptions.score)">
+                                <PhMusicNotes :size="17" /><span>五线谱</span>
+                            </NButton>
+                        </div>
+                        <NSelect class="difficulty-select" size="small" :value="session.difficulty" :options="[{label: '入门', value: 'beginner'}, {label: '标准', value: 'normal'}, {label: '挑战', value: 'challenge'}]"
+                            :disabled="session.mode !== 'follow' || session.busy" :consistent-menu-width="false"
+                            aria-label="练习难度" @update:value="session.setDifficulty" />
+                    </template>
+                </MidiPracticeControls>
             </div>
             <div class="drag-region" @dblclick="toggleMaximize"><span v-if="!isSimple">{{ isMidi ? session.selectedSong?.name || '选择一首 MIDI' : APP_NAME }}</span></div>
             <div class="toolbar-right" data-piano-control>
@@ -94,7 +118,7 @@
                 @lostpointercapture="cancelKeyboardResize" @dblclick.stop="resetKeyboardHeight" @keydown="resizeKeyboardByKey">
                 <span></span>
             </div>
-            <ClassicKeyboard v-if="store.keyboardLoaded" :layout="layout" :show-hints="!session.state.scrubbing" />
+            <ClassicKeyboard v-if="store.keyboardLoaded" :layout="layout" :show-hints="!session.state.scrubbing && (session.mode !== 'follow' || session.difficulty !== 'challenge')" />
         </div>
 
         <Chord v-if="store.loaded" class="chord-status" :compact="isSimple" />
@@ -108,7 +132,7 @@
 import {computed, inject, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch} from 'vue'
 import {useRoute, useRouter} from 'vue-router'
 import {Events, System, Window} from '@wailsio/runtime'
-import {NButton, NRadioButton, NRadioGroup} from 'naive-ui'
+import {NButton, NRadioButton, NRadioGroup, NSelect} from 'naive-ui'
 import {PhList, PhMinus, PhArrowsOutSimple, PhX, PhPianoKeys, PhPlay,
     PhArrowRight, PhArrowUpRight, PhMusicNotes, PhGearSix, PhPower, PhChartBar, PhUsersThree} from '@phosphor-icons/vue'
 import ClassicKeyboard from '../components/ClassicKeyboard.vue'
@@ -119,6 +143,7 @@ import MidiLibraryPanel from '../components/MidiLibraryPanel.vue'
 import MidiPracticeControls from '../components/MidiPracticeControls.vue'
 import MidiTransport from '../components/MidiTransport.vue'
 import MidiWaterfallCanvas from '../components/MidiWaterfallCanvas.vue'
+import MidiScoreView from '../components/MidiScoreView.vue'
 import RecordingControls from '../components/RecordingControls.vue'
 import {createKeyboardLayout} from '../services/keyboardLayout'
 import {subscribeLivePerformance} from '../services/livePerformance'
@@ -160,7 +185,7 @@ const keyboardHeightDraft = ref(null)
 const keyboardResizing = ref(false)
 let keyboardResizePointer = null
 const maxKeyboardHeight = computed(() => Math.max(120, Math.min(size.height * .5,
-    size.height - (isMidi.value ? midiCanvasTop.value : toolbarHeight.value) - 160)))
+    size.height - (isMidi.value ? midiContentTop.value : toolbarHeight.value) - 160)))
 const keyboardHeight = computed(() => {
     if (isSimple.value) return size.height
     if (keyboardHeightDraft.value !== null) return Math.round(keyboardHeightDraft.value)
@@ -171,7 +196,17 @@ const keyboardHeight = computed(() => {
     return Math.round(Math.min(size.height * .26, naturalHeight))
 })
 const waterfallHeight = computed(() => Math.max(0, size.height - keyboardHeight.value))
-const midiCanvasTop = computed(() => toolbarHeight.value + midiControlsHeight.value)
+const midiContentTop = computed(() => toolbarHeight.value + midiControlsHeight.value)
+const midiAvailableHeight = computed(() => Math.max(0, waterfallHeight.value - midiContentTop.value))
+const scoreHeight = computed(() => {
+    if (!isMidi.value || !session.viewOptions.score) return 0
+    if (!session.viewOptions.waterfall) return midiAvailableHeight.value
+    // A grand staff needs enough vertical space for two complete staves,
+    // ledger lines and dynamics. Reserve part of the workspace for falling notes.
+    return Math.min(Math.max(0, midiAvailableHeight.value - 140),
+        Math.max(195, Math.min(300, midiAvailableHeight.value * .46)))
+})
+const midiCanvasTop = computed(() => midiContentTop.value + scoreHeight.value)
 const midiCanvasHeight = computed(() => Math.max(0, waterfallHeight.value - midiCanvasTop.value))
 const windowStyle = computed(() => ({
     ...uiTheme.value.cssVariables,
@@ -409,6 +444,15 @@ onMounted(async () => {
     })
     window.addEventListener('keydown', keydown, true)
     unsubscribeMidiRequest = Events.On('mainMidiModeRequested', event => changeMode(event.data?.mode === 'follow' ? 'follow' : 'play',!!event.data?.chooseSong))
+    unsubscribeWindowEvents.push(Events.On(Events.Types.Common.WindowFilesDropped, event => {
+        const paths = event.data?.files || []
+        if (!Array.isArray(paths) || !paths.length) return
+        void (async () => {
+            if (recording.state.status === 'recording' && !await recording.stop()) return
+            if (!isMidi.value && !await changeMode('play')) return
+            if (await session.importPaths(paths)) closePanel()
+        })()
+    }))
     try {
         const state = await Keyboard.GetMainWindowPresentation()
         store.mainDisplayMode = state.mode

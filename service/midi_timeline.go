@@ -21,14 +21,17 @@ type MidiTimeline struct {
 // Measure 1 starts at 0. Later markers are the true bar starts derived from
 // the MIDI time signature, PPQ and tempo map (never equal-width approximations).
 type MidiMeasureMark struct {
-	Index int     `json:"index"`
-	Ms    float64 `json:"ms"`
+	Index       int     `json:"index"`
+	Ms          float64 `json:"ms"`
+	Numerator   int     `json:"numerator,omitempty"`
+	Denominator int     `json:"denominator,omitempty"`
 }
 
 type MidiTimelineNote struct {
 	ID         string   `json:"id"`
 	Note       int      `json:"note"`
 	StartMs    float64  `json:"startMs"`
+	StartBeat  float64  `json:"startBeat"`
 	EndMs      float64  `json:"endMs"`
 	Velocity   int      `json:"velocity"`
 	Hand       MidiHand `json:"hand"`
@@ -74,8 +77,13 @@ func buildMidiTimeline(midiFile *Midi) MidiTimeline {
 		ms := max(0, min(event.Ms, timeline.DurationMs))
 		if event.Type == MidiEventNoteOn {
 			index := len(timeline.Notes)
+			beat := float64(0)
+			if midiFile.PPQ > 0 {
+				beat = float64(event.Tick) / float64(midiFile.PPQ)
+			}
 			timeline.Notes = append(timeline.Notes, MidiTimelineNote{
 				ID:         strconv.Itoa(i),
+				StartBeat:  beat,
 				Note:       event.Note,
 				StartMs:    ms,
 				EndMs:      timeline.DurationMs,
@@ -120,6 +128,9 @@ type midiMeterMark struct {
 // Build markers from musical time, not evenly divided duration. The original
 // note timeline uses the same file tempo map through smf.ReadTracks.
 func midiMeasureMarkers(file *Midi) []MidiMeasureMark {
+	if file != nil && file.ScoreMeasures != nil {
+		return append([]MidiMeasureMark(nil), file.ScoreMeasures...)
+	}
 	if file == nil || file.PPQ <= 0 || file.DurationTick == 0 {
 		// SMPTE-timed files have no PPQ: do not present invented measure lines.
 		return nil
@@ -181,7 +192,11 @@ func midiMeasureMarkers(file *Midi) []MidiMeasureMark {
 			break
 		}
 		if len(markers) == 0 || ms > markers[len(markers)-1].Ms+epsilon {
-			markers = append(markers, MidiMeasureMark{Index: index, Ms: math.Max(0, ms)})
+			markers = append(markers, MidiMeasureMark{
+				Index: index, Ms: math.Max(0, ms),
+				Numerator:   int(meters[meterIndex].numerator),
+				Denominator: int(meters[meterIndex].denominator),
+			})
 		}
 		current := meters[meterIndex]
 		measureTicks := ppq * 4 * current.numerator / current.denominator
