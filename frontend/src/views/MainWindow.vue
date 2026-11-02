@@ -1,16 +1,16 @@
 <template>
     <main ref="containerRef" class="piano-window" :class="{ 'is-mac': isMac, 'is-fullscreen': isFullscreen, 'is-simple': isSimple, 'is-midi': isMidi, 'resizing-keyboard': keyboardResizing, 'show-tools': toolbarVisible || panel }"
         :style="windowStyle" @pointerdown="dismissOutside" @mouseenter="showToolbar" @mouseleave="hideToolbar">
-        <div class="waterfall-area" :aria-hidden="isSimple || !!workspaceView" :inert="!!workspaceView">
+        <div class="waterfall-area" :aria-hidden="isSimple">
             <WaterfallCanvas v-show="!isMidi" :layout="layout" :width="size.width" :height="waterfallHeight"
-                :active="!isSimple && !isMidi && !workspaceView" :colors="store.config.colors" />
+                :active="!isSimple && !isMidi" :colors="store.config.colors" />
             <div v-show="isMidi" class="midi-waterfall-layer" :style="{top: midiCanvasTop + 'px'}">
                 <MidiWaterfallCanvas :layout="layout" :width="size.width" :height="midiCanvasHeight"
-                    :active="!isSimple && isMidi && !workspaceView" :colors="store.config.colors" :timeline="session.timeline" :player-state="session.state" />
+                    :active="!isSimple && isMidi" :colors="store.config.colors" :timeline="session.timeline" :player-state="session.state" />
             </div>
         </div>
 
-        <header ref="toolbarRef" class="toolbar" :inert="!!workspaceView" :aria-hidden="!!workspaceView">
+        <header ref="toolbarRef" class="toolbar">
             <div class="toolbar-left" data-piano-control>
                 <button class="tool-button" type="button" :aria-expanded="panel === 'menu'" aria-label="打开主菜单"
                     @pointerdown.prevent @click="openPanel('menu')"><PhList :size="20" /><span>菜单</span></button>
@@ -35,7 +35,7 @@
                 </NRadioGroup>
                 <button class="tool-button settings-toggle" type="button" :aria-expanded="panel === 'settings'" title="设置"
                     @pointerdown.prevent @click="openPanel('settings')"><PhGearSix :size="20" /><span>设置</span></button>
-                <button class="tool-button" type="button" title="MIDI 工坊" :aria-expanded="!!workspaceView" @pointerdown.prevent @click="openWorkspace()"><PhUsersThree :size="20"/><span>工坊</span></button>
+                <button class="tool-button" type="button" title="MIDI 工坊" @pointerdown.prevent @click="openWorkspace()"><PhUsersThree :size="20"/><span>工坊</span></button>
                 <template v-if="!isMac">
                     <span class="toolbar-separator"></span>
                     <button class="window-button" type="button" aria-label="最小化" title="最小化" @pointerdown.prevent @click="minimize"><PhMinus :size="16" /></button>
@@ -46,9 +46,9 @@
             </div>
         </header>
 
-        <RecordingControls v-if="!isMidi && !isSimple && !workspaceView" :recording="recording" />
+        <RecordingControls v-if="!isMidi && !isSimple" :recording="recording" />
 
-        <div v-show="isMidi && !isSimple" ref="midiControlsRef" :inert="!!workspaceView" :aria-hidden="!!workspaceView" class="midi-workspace-controls" :style="{top: toolbarHeight + 'px'}" data-piano-control>
+        <div v-show="isMidi && !isSimple" ref="midiControlsRef" class="midi-workspace-controls" :style="{top: toolbarHeight + 'px'}" data-piano-control>
             <MidiTransport :session="session" />
         </div>
 
@@ -61,9 +61,8 @@
                 <div class="menu-links">
                     <button type="button" @click="openPanel('library')"><PhMusicNotes :size="20" /><span>曲库</span><PhArrowRight :size="16" /></button>
                     <button type="button" @click="changeMode('play', true)"><PhPlay :size="20" /><span>MIDI 播放</span><PhArrowRight :size="16" /></button>
-                    <button type="button" @click="changeMode('follow', true)"><PhPianoKeys :size="20" /><span>跟弹练习</span><PhArrowRight :size="16" /></button>
                     <button type="button" @click="openWorkspace()"><PhUsersThree :size="20"/><span>MIDI 工坊</span><PhArrowRight :size="16"/></button>
-                    <button type="button" @click="openWorkspace('practice')"><PhChartBar :size="20"/><span>我的练习</span><PhArrowRight :size="16"/></button>
+                    <button type="button" @click="openWorkspace('practice')"><PhPianoKeys :size="20"/><span>练习</span><PhArrowRight :size="16"/></button>
                     <button type="button" @click="closePanel();accountOpen=true"><PhUserCircle :size="20"/><span>{{community.user?'我的账号':'账号登录'}}</span><PhArrowRight :size="16"/></button>
                     <button type="button" @click="openFullSettings"><PhGearSix :size="20" /><span>完整设置</span><PhArrowUpRight :size="16" /></button>
                 </div>
@@ -79,16 +78,14 @@
             <MidiLibraryPanel :session="session" :style="uiTheme.cssVariables" @selected="selectLibrarySong" @close="closePanel" />
         </NModal>
 
-        <KeepAlive><CommunityWorkspace v-if="workspaceView" :client="community" :session="session" :theme-style="uiTheme.cssVariables" :initial-view="workspaceView" logo-url="/appicon.png" :native-titlebar="isMac" @piano="workspaceView=''" @account="accountOpen=true" @settings="openFullSettings" @toggle-playback="toggleWorkshopPlayback">
-            <template v-if="!isMac" #window-controls><button class="window-button" aria-label="最小化" @click="minimize"><PhMinus :size="16"/></button><button class="window-button" aria-label="最大化或还原" @click="toggleMaximize"><PhArrowsOutSimple :size="15"/></button><button class="window-button close-window" aria-label="退出软件" @click="requestQuit"><PhX :size="17"/></button></template>
-        </CommunityWorkspace></KeepAlive>
+
         <NModal v-model:show="accountOpen" :auto-focus="true" :close-on-esc="true"><AccountDialog :client="community" :theme-style="uiTheme.cssVariables" @close="accountOpen=false"/></NModal>
         <Transition name="panel">
             <QuickPianoSettings v-if="panel === 'settings' && !isSimple" class="floating-panel settings-panel"
                 @close="closePanel" @open-full="openFullSettings" />
         </Transition>
 
-        <div class="keyboard-zone" :inert="!!workspaceView" :aria-hidden="!!workspaceView" :style="{ height: keyboardHeight + 'px' }">
+        <div class="keyboard-zone" :style="{ height: keyboardHeight + 'px' }">
             <div v-if="!isSimple" class="strike-line"></div>
             <div v-if="!isSimple" class="keyboard-resize-handle" data-piano-control data-preserve-piano-holds
                 role="separator" tabindex="0" aria-label="调整琴键高度" aria-orientation="horizontal"
@@ -125,7 +122,6 @@ import MidiPracticeControls from '../components/MidiPracticeControls.vue'
 import MidiTransport from '../components/MidiTransport.vue'
 import MidiWaterfallCanvas from '../components/MidiWaterfallCanvas.vue'
 import RecordingControls from '../components/RecordingControls.vue'
-import CommunityWorkspace from '../../../shared/community/CommunityWorkspace.vue'
 import AccountDialog from '../../../shared/community/AccountDialog.vue'
 import {useDesktopCommunity} from '../services/community'
 import {useCommunityPractice} from '../../../shared/community/usePractice'
@@ -164,8 +160,8 @@ const toolbarRef = ref(null)
 const toolbarHeight = ref(54)
 const midiControlsRef = ref(null)
 const midiControlsHeight = ref(70)
-const panel = ref('menu'), workspaceView = ref(''), accountOpen = ref(false)
-watch(() => !!workspaceView.value || accountOpen.value, value => {store.onlineWorkspaceOpen = value})
+const panel = ref('menu'), accountOpen = ref(false)
+watch(() => accountOpen.value, value => {store.onlineWorkspaceOpen = value})
 const speedPanelOpen = ref(false)
 const switching = ref(false)
 const modeSwitching = ref(false)
@@ -270,13 +266,9 @@ function dismissOutside(event) {
     closePanel()
 }
 async function openWorkspace(view = 'workshop') {
-    if (isSimple.value && !await setDisplayMode('waterfall')) return
-    if (recording.state.status === 'recording' && !await recording.stop()) return
-    closePanel(); workspaceView.value = view
-}
-async function toggleWorkshopPlayback() {
-    if (session.mode === 'free' && !await changeMode('play')) return
-    await session.togglePlayback()
+    if(recording.state.status==='recording'&&!await recording.stop())return
+    closePanel()
+    await Keyboard.OpenCommunityWindow(view)
 }
 async function openPanel(name) {
     if (isSimple.value && !await setDisplayMode('waterfall')) return
@@ -370,7 +362,7 @@ async function openFullSettings() {
 function showToolbar() { clearTimeout(hideTimer); toolbarVisible.value = true }
 function hideToolbar() { clearTimeout(hideTimer); hideTimer = setTimeout(() => { toolbarVisible.value = false }, 650) }
 function keydown(event) {
-    if (workspaceView.value || accountOpen.value) return
+    if (accountOpen.value) return
     if ((event.code === 'Space' || event.key === ' ') && isMidi.value && !isSimple.value) {
         if (event.defaultPrevented || event.ctrlKey || event.altKey || event.metaKey
             || panel.value || speedPanelOpen.value || isPianoControlTarget(event.target)) return
@@ -430,7 +422,7 @@ onMounted(async () => {
         if (signal.type === 'noteOn' && panel.value === 'menu') closePanel()
     })
     window.addEventListener('keydown', keydown, true)
-    unsubscribeMidiRequest = Events.On('mainMidiModeRequested', event => changeMode(event.data?.mode === 'follow' ? 'follow' : 'play'))
+    unsubscribeMidiRequest = Events.On('mainMidiModeRequested', event => changeMode(event.data?.mode === 'follow' ? 'follow' : 'play',!!event.data?.chooseSong))
     try {
         const state = await Keyboard.GetMainWindowPresentation()
         store.mainDisplayMode = state.mode

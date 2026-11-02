@@ -150,7 +150,7 @@ export function usePiano(notify=()=>{}) {
   // visual playhead: main-thread stalls don't shift note attack timestamps.
   const audioLookaheadMs=110
   function scheduleAudio(ms){
-    if(!audio.context||state.status!=='playing'||state.leadInMs>0)return
+    if(!audio.context||state.status!=='playing')return
     const all=notes()
     let limit=Math.min(range.b,ms+audioLookaheadMs*speed.value)
     if(mode.value==='follow'&&steps[stepIndex])limit=Math.min(limit,steps[stepIndex].ms)
@@ -202,7 +202,10 @@ export function usePiano(notify=()=>{}) {
     if(clock.lead>0){state.currentMs=baseMs;return}
     if(mode.value==='follow'&&steps[stepIndex]){
       const next=steps[stepIndex]
-      if(ms>=next.ms){ms=next.ms;state.waiting=true;state.step=next}
+      if(ms>=next.ms){
+        if(next.notes.every(n=>next.accepted.has(n.note))){stepIndex++;state.step=steps[stepIndex]||null;state.waiting=false}
+        else{ms=next.ms;state.waiting=true;state.step=next}
+      }
     }
     state.currentMs=ms
     // Audio is scheduled ahead; only the key visuals follow the current time.
@@ -288,16 +291,16 @@ export function usePiano(notify=()=>{}) {
   }
   function setHand(next){handMode.value=next;if(state.status!=='idle')seek(state.currentMs)}
   function checkFollow(note){
-    if(mode.value!=='follow'||state.status!=='playing'||!state.waiting)return
+    if(mode.value!=='follow'||state.status!=='playing')return
     const step=steps[stepIndex]
-    if(!step)return
+    if(!step||getClock().ms-getClock().lead<step.ms-300)return
     if(!step.notes.some(n=>n.note===note)){
       state.wrongNote=note
       setTimeout(()=>{if(state.wrongNote===note)state.wrongNote=-1},350)
       return
     }
     step.accepted.add(note)
-    if(step.notes.every(n=>step.accepted.has(n.note))){
+    if(state.waiting&&step.notes.every(n=>step.accepted.has(n.note))){
       stepIndex++;state.step=steps[stepIndex]||null;state.waiting=false
       baseMs=state.currentMs;baseTime=clockNow();leadStarted=0
     }

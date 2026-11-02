@@ -273,6 +273,12 @@ func (k *Keyboard) LoadMidiByID(id string) (UserMidi, error) {
 }
 
 func (k *Keyboard) StartMidiPlayback(options MidiPlaybackOptions) error {
+	recordingState := k.GetRecordingState()
+	if recordingState.Status == "recording" || recordingState.Status == "draft" && !recordingState.BackupSaved {
+		if _, err := k.StopRecording(); err != nil {
+			return err
+		}
+	}
 	userMidi, ok := FindUserMidiByID(options.MidiID)
 	if !ok {
 		return errors.New("MIDI 不存在")

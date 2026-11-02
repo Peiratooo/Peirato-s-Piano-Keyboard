@@ -1,6 +1,7 @@
 import {createRouter, createWebHashHistory} from 'vue-router'
 
 const routes = [
+ {path:'/workshop',name:'workshop-window',component:()=>import('../views/WorkshopWindow.vue')},
     {
         path: '/',
         name: 'main-window',

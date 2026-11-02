@@ -6,7 +6,7 @@
 
 ## App 与网页界面统一
 
-- App 为视觉来源；网页直接使用桌面端的 ClassicKeyboard、WaterfallCanvas、MidiWaterfallCanvas、MidiTransport、MidiPracticeControls、MidiLibraryPanel、RecordingControls、QuickPianoSettings、CommunityPanel、Chord 与 FeedbackBridge。
+- App 为视觉来源；网页直接使用桌面端的 ClassicKeyboard、WaterfallCanvas、MidiWaterfallCanvas、MidiTransport、MidiPracticeControls、MidiLibraryPanel、RecordingControls、QuickPianoSettings、CommunityWorkspace、PracticePanel、Chord 与 FeedbackBridge。
 - 主窗口、完整设置及音源面板样式集中在 `shared/piano/`，配色、键盘布局、键盘映射标签与编辑器沿用桌面源码；删除网页原有的另一套琴键、瀑布、时间轴和主题实现。
 - 网页的平台接入集中在 `web-toy/src/composables/usePianoPresentation.js`，连接现有 Web Audio/MIDI 引擎、IndexedDB、偏好和按键方案。没有引入 Wails 运行时或旧接口兼容分支。
 - 网页保留琴房与内容审核入口；完整设置采用 App 的设置样式，浏览器管理的音频参数显示实际只读信息。操作系统窗口按钮由桌面平台提供。
@@ -48,7 +48,7 @@ CGO_CFLAGS=-mmacosx-version-min=12.0 CGO_LDFLAGS=-mmacosx-version-min=12.0 MACOS
 
 必须先完成绑定生成，再构建前端，最后构建 Go 桌面程序。
 
-- 菜单与工具栏的“工坊”进入社区，提供工坊、我的练习、账号三个面板。
+- 菜单与工具栏的“工坊”打开独立窗口；“练习”统一提供选曲与记录，“我的”管理上传与收藏，账号保持独立入口。
 - 默认 API 地址为本机；运行环境变量 `PP_COMMUNITY_API_URL` 或构建变量 `main/service.CommunityAPIURL` 可指定服务器。
 - 自建账号为默认登录；“通过 Toy 登录”打开服务端 `TOY_URL`，使用同一套社区账号确认，桌面自动领取独立会话。
 - 桌面会话只保存在 Go 管理的 Application Support 中，文件名 `community-session.json`、权限 0600；不保存密码，不放入 WebView 存储。
@@ -99,3 +99,7 @@ Toy 保留单实例琴房和 WebSocket 功能，桌面本轮未接入实时琴�
 App 与 Toy 使用 shared/community/CommunityWorkspace.vue 的完整工作区，账号使用独立的 AccountDialog；曲库范围从侧栏切换。WorkshopPanel 提供无封面信息卡片和曲目详情，WorkspacePlayer 连接已有播放会话。试听保留网格，跟弹返回原钢琴界面。
 
 强调色全部读取现有 getPianoUiTheme 产生的 CSS 变量和 Naive UI 配置；切换设置主题会同步更新主按钮、选中项、卡片描边及播放进度。没有新增独立配色或 MIDI 封面字段。宽屏四列、一般桌面三列/两列、手机竖屏单列；搜索、标签、难度、排序和分页保留真实 API 行为。
+
+## 本机记录与独立窗口
+
+桌面通过 /workshop 路由的独立原生窗口展示工坊，使用同一 Go 播放器和会话。完整修整与实际验证见 [REFINEMENTS.md](REFINEMENTS.md)。本机记录不要求登录，桌面通过 service/practice_local.go 保存，网页通过 useLocalPractice 保存；账号练习记录继续由原有 usePractice 同步。

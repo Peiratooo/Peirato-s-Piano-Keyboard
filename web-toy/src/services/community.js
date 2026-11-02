@@ -1,4 +1,5 @@
 import {computed, ref, onBeforeUnmount} from 'vue'
+import {useLocalPractice} from '../composables/useLocalPractice'
 import {saveSong,getSongs,getCommunityFile,saveCommunityFile} from './storage'
 import {pongSample, bestClockOffset, remoteEventDelay} from './roomTiming'
 
@@ -36,7 +37,7 @@ export function useCommunity(piano, notify = () => {}) {
   async function request(path, options = {}) {
     const headers = {...options.headers}
     if (token.value) headers.Authorization = `Bearer ${token.value}`
-    const res = await fetch(API + path, {...options, headers, cache:'no-store'})
+    const res = await fetch(API + path, {...options, headers, cache:'no-store'}).catch(()=>{throw Error('暂时无法连接工坊，请稍后重试')})
     if (!res.ok) {
       if(res.status===401)clearAccount()
       let message = `HTTP ${res.status}`
@@ -293,8 +294,16 @@ export function useCommunity(piano, notify = () => {}) {
     if(e.type === 'on' || e.type === 'off') send({type:`note.${e.type}`,note:e.note,velocity:e.velocity||80})
   })
   onBeforeUnmount(() => {unsubscribe();leave();document.removeEventListener('visibilitychange', onVisibilityChange)})
+  const readLocalPractice=useLocalPractice(piano,notify)
+  const getLocalPractice=()=>readLocalPractice().filter(item=>!item.accountId||item.accountId===user.value?.id)
+  async function resumePractice(item){
+    const song=piano.library.find(song=>song.id===item.localId)
+    if(song){piano.selectSong(song);piano.changeMode(item.lastMode||'follow');await piano.play()}
+    else if(item.midiId)await loadSong(await request('/api/midis/'+item.midiId),item.lastMode||'follow')
+    else throw Error('本地文件已移除，请重新导入')
+  }
   const client={API,token,user,playingSong,room,connected,audience,queue,performerId,performerName,turnEndsAt,
     remainingSeconds,inRoom,isPerformer,myPosition,latestInvite,errorText,connectionState,reconnectAttempts,latencyMs,
-    request,json,auth,restoreSession,logout,join,leave,send,queueUp,leaveQueue,yieldSeat,createRoom,randomRoom,upload,loadSong,download,chooseMIDI,changeAvatar}
+    request,json,auth,restoreSession,logout,join,leave,send,queueUp,leaveQueue,yieldSeat,createRoom,randomRoom,upload,loadSong,download,chooseMIDI,changeAvatar,getLocalPractice,resumePractice}
   return client
 }

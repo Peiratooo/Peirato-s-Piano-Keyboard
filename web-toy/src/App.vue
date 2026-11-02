@@ -57,9 +57,8 @@
                 <div class="menu-links">
                     <button type="button" @click="openPanel('library')"><PhMusicNotes :size="20" /><span>曲库</span><PhArrowRight :size="16" /></button>
                     <button type="button" @click="changeMode('play', true)"><PhPlay :size="20" /><span>MIDI 播放</span><PhArrowRight :size="16" /></button>
-                    <button type="button" @click="changeMode('follow', true)"><PhPianoKeys :size="20" /><span>跟弹练习</span><PhArrowRight :size="16" /></button>
                     <button type="button" @click="openWorkspace()"><PhUsersThree :size="20"/><span>MIDI 工坊</span><PhArrowRight :size="16"/></button>
-                    <button type="button" @click="openWorkspace('practice')"><PhChartBar :size="20"/><span>我的练习</span><PhArrowRight :size="16"/></button>
+                    <button type="button" @click="openWorkspace('practice')"><PhPianoKeys :size="20"/><span>练习</span><PhArrowRight :size="16"/></button>
                     <button type="button" @click="closePanel();accountOpen=true"><PhUserCircle :size="20"/><span>{{community.user?'我的账号':'账号登录'}}</span><PhArrowRight :size="16"/></button>
                     <button type="button" @click="openFullSettings"><PhGearSix :size="20" /><span>完整设置</span><PhArrowUpRight :size="16" /></button>
                 </div>
@@ -75,7 +74,7 @@
             <MidiLibraryPanel :session="session" :style="uiTheme.cssVariables" @selected="selectLibrarySong" @close="closePanel" />
         </NModal>
 
-        <KeepAlive><CommunityWorkspace v-if="workspaceView" :client="community" :session="session" :theme-style="uiTheme.cssVariables" :initial-view="workspaceView" :logo-url="baseUrl+'appicon.png'" @piano="workspaceView=''" @account="accountOpen=true" @settings="openFullSettings" @toggle-playback="toggleWorkshopPlayback">
+        <KeepAlive><CommunityWorkspace v-if="workspaceView" :client="community" :session="session" :theme-style="uiTheme.cssVariables" :initial-view="workspaceView" :logo-url="baseUrl+'appicon.png'" @piano="workspaceView=''" @account="accountOpen=true" @settings="openFullSettings" @toggle-playback="toggleWorkshopPlayback" @practice="startPractice">
             <template #rooms><RoomsPanel :community="community" :piano="piano" @toast="toast" @close="workspaceView=''"/></template>
             <template #admin><AdminPanel :client="community"/></template>
         </CommunityWorkspace></KeepAlive>
@@ -196,12 +195,14 @@ let keyboardResizePointer, resizeObserver, hideTimer, stopContainer, midiAccess
 const connectedMidiInputs = new Set()
 function closePanel() { panel.value = null }
 function openPanel(next) { panel.value = panel.value === next ? null : next; showToolbar() }
+function startPractice(){workspaceView.value='';void changeMode('follow',true)}
 async function openWorkspace(view = 'workshop') {
     if (piano.recording.status === 'recording') await recording.stop()
+    if(piano.mode==='follow'){const position=piano.state.currentMs;piano.changeMode('play');piano.seek(position)}
     piano.displayMode = 'waterfall'; closePanel(); workspaceView.value = view
 }
 async function toggleWorkshopPlayback() {
-    if (piano.mode === 'free') piano.changeMode('play')
+    if (piano.mode !== 'play') {const position=piano.state.currentMs;piano.changeMode('play');piano.seek(position)}
     await session.togglePlayback()
 }
 function openFullSettings() { closePanel(); fullSettings.value = true }

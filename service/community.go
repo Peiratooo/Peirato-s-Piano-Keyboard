@@ -91,7 +91,7 @@ func communityFetch(path, method string, body io.Reader, contentType, token stri
 	}
 	res, err := communityHTTP.Do(req)
 	if err != nil {
-		return nil, 0, errors.New("社区服务连接失败，请检查网络或服务地址")
+		return nil, 0, errors.New("暂时无法连接工坊，请稍后重试")
 	}
 	defer res.Body.Close()
 	data, err := io.ReadAll(io.LimitReader(res.Body, (9<<20)+1))

@@ -121,7 +121,7 @@ export function usePianoPresentation(piano, community, notify) {
         if (!sustainActive.value) voices.delete(key)
       }
       store.backendPressedKey[event.note] = false
-      if (!store.pressedKey[event.note]) delete store.pressedKeyHands[event.note]
+      if (!store.pressedKey[event.note] && !sustainActive.value) delete store.pressedKeyHands[event.note]
       if (!sustainActive.value) store.activeKey[event.note] = false
     }
   })
@@ -134,6 +134,7 @@ export function usePianoPresentation(piano, community, notify) {
     if (!on) for (const [key, voice] of voices) if (!voice.pressed) {
       liveSignal('noteEnd', voice)
       store.activeKey[voice.note] = false
+      if (!store.pressedKey[voice.note]) delete store.pressedKeyHands[voice.note]
       voices.delete(key)
     }
   }

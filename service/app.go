@@ -45,8 +45,14 @@ func Run(assets embed.FS) {
 			AdditionalData:         nil,
 			ExitCode:               0,
 		},
-		LogLevel:   application.DialogWarning,
-		OnShutdown: func() { stopRecordingForShutdown(); cleanupUpdate(); CloseMidiDevice(); finishCommunityPractice() },
+		LogLevel: application.DialogWarning,
+		OnShutdown: func() {
+			_ = MidiPlayer.Stop()
+			stopRecordingForShutdown()
+			cleanupUpdate()
+			CloseMidiDevice()
+			finishCommunityPractice()
+		},
 	})
 
 	PianoWin = App.Window.NewWithOptions(application.WebviewWindowOptions{
@@ -229,4 +235,37 @@ func (k *Keyboard) OpenSoundFontDialog() error {
 func (k *Keyboard) GetMidiWindowOpen() bool {
 	// Retained for older frontend clients; MIDI is part of the main window.
 	return false
+}
+
+var CommunityWin *application.WebviewWindow
+
+func (k *Keyboard) OpenCommunityWindow(view string) {
+	if view != "practice" && view != "mine" {
+		view = "workshop"
+	}
+	if CommunityWin != nil {
+		App.Event.Emit("communityNavigate", view)
+		CommunityWin.Show()
+		CommunityWin.Focus()
+		return
+	}
+	CommunityWin = App.Window.NewWithOptions(application.WebviewWindowOptions{
+		Title: appDisplayName + " · 工坊", URL: "/#/workshop?view=" + view, Width: 1180, Height: 780, MinWidth: 780, MinHeight: 560,
+		BackgroundType: application.BackgroundTypeSolid, BackgroundColour:application.NewRGBA(43,43,43,255), DevToolsEnabled: !PRODUCTION,
+	})
+	CommunityWin.OnWindowEvent(events.Common.WindowClosing, func(e *application.WindowEvent) { CommunityWin = nil })
+	App.Window.Add(CommunityWin)
+	CommunityWin.Show()
+}
+func (k *Keyboard) ReturnToPiano() error {
+	if _, err := k.SetMainDisplayMode(mainDisplayWaterfall); err != nil {
+		return err
+	}
+	PianoWin.UnMinimise()
+	PianoWin.Show()
+	PianoWin.Focus()
+	if CommunityWin != nil {
+		CommunityWin.Hide()
+	}
+	return nil
 }

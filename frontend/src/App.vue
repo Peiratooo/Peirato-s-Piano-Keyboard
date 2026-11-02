@@ -2,7 +2,7 @@
     <n-config-provider
         :date-locale="dateZhCN"
         :locale="zhCN"
-        :theme="isMainWindow ? darkTheme : undefined"
+        :theme="route.path !== '/control' ? darkTheme : undefined"
         :theme-overrides="themeOverrides"
         :style="{...pianoUiTheme.cssVariables, opacity: isMainWindow && store.mainDisplayMode === 'simple' ? store.config.opacity / 100 : 1}"
     >
@@ -61,10 +61,10 @@ provide('subscribeKeyboardFeedback', listener => {
 const updater = useUpdater()
 const route = useRoute()
 const isMainWindow = computed(() => route.path === '/')
-const pianoUiTheme = computed(() => getPianoUiTheme(store.config.colors, isMainWindow.value ? 'dark' : 'light'))
+const pianoUiTheme = computed(() => getPianoUiTheme(store.config.colors, route.path !== '/control' ? 'dark' : 'light'))
 const themeOverrides = computed(() => {
     const theme = pianoUiTheme.value
-    if (isMainWindow.value) return theme.naiveOverrides
+    if (route.path !== '/control') return theme.naiveOverrides
     return {
         common: {
             primaryColor: theme.accent,
@@ -325,6 +325,7 @@ function registerBackendEvents() {
     on('up', (signal) => {
         if (!signal) return
         store.activeKey[signal.value] = false
+        if (!store.pressedKey[signal.value]) delete store.pressedKeyHands[signal.value]
     })
     on('pressedDown', (signal) => {
         if (!signal) return
@@ -334,7 +335,7 @@ function registerBackendEvents() {
     on('pressedUp', (signal) => {
         if (!signal) return
         store.backendPressedKey[signal.value] = false
-        if (!store.pressedKey[signal.value]) delete store.pressedKeyHands[signal.value]
+        if (!store.pressedKey[signal.value] && !store.activeKey[signal.value]) delete store.pressedKeyHands[signal.value]
     })
     on('pedal', (pedal) => {
         if (!pedal) return
