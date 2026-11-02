@@ -137,7 +137,9 @@ async function rebuild() {
     await nextTick()
     try {
         // Only load this fairly large library when score view is actually shown.
-        const {OpenSheetMusicDisplay}=await import('opensheetmusicdisplay')
+        const module=await import('opensheetmusicdisplay')
+        const OpenSheetMusicDisplay=module.OpenSheetMusicDisplay || module.default?.OpenSheetMusicDisplay
+        if (!OpenSheetMusicDisplay) throw new Error('OSMD 模块未提供排版引擎')
         if (!mounted || revision!==layoutRevision || !scoreSurface.value) return
         scoreSurface.value.replaceChildren()
         const engine=new OpenSheetMusicDisplay(scoreSurface.value, {
