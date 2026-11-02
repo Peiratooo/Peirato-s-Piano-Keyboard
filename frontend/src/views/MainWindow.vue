@@ -437,6 +437,15 @@ onMounted(async () => {
     })
     window.addEventListener('keydown', keydown, true)
     unsubscribeMidiRequest = Events.On('mainMidiModeRequested', event => changeMode(event.data?.mode === 'follow' ? 'follow' : 'play',!!event.data?.chooseSong))
+    unsubscribeWindowEvents.push(Events.On(Events.Types.Common.WindowFilesDropped, event => {
+        const paths = event.data?.files || []
+        if (!Array.isArray(paths) || !paths.length) return
+        void (async () => {
+            if (recording.state.status === 'recording' && !await recording.stop()) return
+            if (!isMidi.value && !await changeMode('play')) return
+            if (await session.importPaths(paths)) closePanel()
+        })()
+    }))
     try {
         const state = await Keyboard.GetMainWindowPresentation()
         store.mainDisplayMode = state.mode
