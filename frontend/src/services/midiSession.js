@@ -14,11 +14,23 @@ function midiError(error) {
 }
 
 const VIEW_STORAGE_KEY = 'pp-practice-view-v1'
+const DIFFICULTY_STORAGE_KEY = 'pp-practice-difficulty-v1'
+const DIFFICULTY_RULES = {
+    beginner: {leadWindowMs: 550, groupWindowMs: 140},
+    normal: {leadWindowMs: 300, groupWindowMs: 80},
+    challenge: {leadWindowMs: 90, groupWindowMs: 45},
+}
+function loadDifficulty() {
+    try {
+        const value = localStorage.getItem(DIFFICULTY_STORAGE_KEY)
+        return DIFFICULTY_RULES[value] ? value : 'beginner'
+    } catch { return 'beginner' }
+}
 function loadViews() {
     try {
         const stored = JSON.parse(localStorage.getItem(VIEW_STORAGE_KEY) || '{}')
-        return {waterfall: stored.waterfall !== false, score: stored.score === true}
-    } catch { return {waterfall: true, score: false} }
+        return {waterfall: stored.waterfall !== false, score: stored.score !== false}
+    } catch { return {waterfall: true, score: true} }
 }
 const summarizeSong = song => ({id: song.id, name: song.name || '未命名曲目',
     durationMs: Math.max(0, Number(song.durationMs) || 0), trackCount: song.trackCount || 0, missing: !!song.missing})
@@ -39,6 +51,7 @@ export function useMidiSession({store, Keyboard}) {
     const pendingPosition = ref(null)
     const previewPosition = ref(null)
     const viewOptions = reactive(loadViews())
+    const difficulty = ref(loadDifficulty())
     function setView(name, enabled) {
         if (!['waterfall', 'score'].includes(name)) return
         viewOptions[name] = !!enabled
@@ -90,7 +103,7 @@ export function useMidiSession({store, Keyboard}) {
     }
     function buildOptions(overrides = {}) {
         return {midiId: selectedId.value, ...options, rightMs: options.rightMs || durationMs.value,
-            leadWindowMs: 300, groupWindowMs: 80, ...overrides}
+            ...DIFFICULTY_RULES[difficulty.value], ...overrides}
     }
     async function loadLibrary() {
         const items = await Keyboard.GetMidiStore()
@@ -343,6 +356,24 @@ export function useMidiSession({store, Keyboard}) {
         if (!['left', 'right', 'both'].includes(handMode)) return Promise.resolve(false)
         return updateOptions({handMode}, '调整演奏手失败')
     }
+    function setDifficulty(value) {
+        if (!DIFFICULTY_RULES[value]) return Promise.resolve(false)
+        const previous = difficulty.value
+        difficulty.value = value
+        try { localStorage.setItem(DIFFICULTY_STORAGE_KEY, value) } catch { /* optional */ }
+        return enqueue(async () => {
+            if (matchingState.value && ['playing', 'paused'].includes(matchingState.value.status)) {
+                try {
+                    await Keyboard.SetMidiPlaybackOptions(buildOptions())
+                    await syncState()
+                } catch (error) {
+                    difficulty.value = previous
+                    throw error
+                }
+            }
+            return true
+        }, '设置练习难度失败')
+    }
     function setLoop(loop) { return updateOptions({loop: !!loop}, '调整循环失败') }
     function setRange(left, right) {
         const duration = durationMs.value
@@ -376,7 +407,7 @@ export function useMidiSession({store, Keyboard}) {
         ++selectionVersion
         stopWatching()
     }
-    return reactive({library, selectedId, selectedSong, timeline, loading, importing, ready, busy, mode, viewOptions, setView,
+    return reactive({library, selectedId, selectedSong, timeline, loading, importing, ready, busy, mode, viewOptions, setView, difficulty, setDifficulty,
         options, state, durationMs, clockRevision, initialize, refreshLibrary, selectSong, importSong, importPaths,
         removeSong, setMode, start, togglePlayback, stop, seek, previewSeek, endSeekPreview,
         setSpeed, setHand, setLoop, setRange, dispose})
