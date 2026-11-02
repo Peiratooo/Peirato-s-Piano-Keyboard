@@ -103,12 +103,39 @@ function hideOppositeStaff(engine) {
     }
 }
 function measurePositions(engine) {
-    const graphic=engine.GraphicSheet?.MeasureList||[]
-    const markers=(props.timeline?.measures||[]).filter(m=>Number.isFinite(m.ms)).slice().sort((a,b)=>a.ms-b.ms)
-    const points=[]
-    const zoom=engine.zoom
+    const graphic=engine.GraphicSheet?.MeasureList || []
+    const markers=(props.timeline?.measures || []).filter(m=>Number.isFinite(m.ms))
+        .slice().sort((a,b)=>a.ms-b.ms)
+    const points=[], zoom=engine.zoom
+    // Native MusicXML's source staff entries retain exact rational beat
+    // positions. Match these to the imported player's tempo-aware note timing,
+    // so the play line aligns with engraved noteheads, not just barlines.
+    const beats=props.scoreDocument?.native
+        ? (props.timeline?.notes || []).filter(n=>Number.isFinite(n.startBeat) && Number.isFinite(n.startMs))
+            .map(n=>({beat:n.startBeat,ms:n.startMs}))
+            .sort((a,b)=>a.beat-b.beat) : []
+    const beatSamples=[]
+    for (const sample of beats) {
+        if (!beatSamples.length || sample.beat-beatSamples[beatSamples.length-1].beat>0.00001)
+            beatSamples.push(sample)
+    }
+    function timeAtBeat(beat) {
+        if (!beatSamples.length || beat<beatSamples[0].beat || beat>beatSamples[beatSamples.length-1].beat)
+            return null
+        let a=0,b=beatSamples.length-1
+        while (a<b) {
+            const mid=(a+b+1)>>1
+            if (beatSamples[mid].beat<=beat) a=mid
+            else b=mid-1
+        }
+        const prev=beatSamples[a],next=beatSamples[a+1]
+        if (!next || next.beat<=prev.beat) return prev.ms
+        return prev.ms+(beat-prev.beat)*(next.ms-prev.ms)/(next.beat-prev.beat)
+    }
     for (let i=0; i<graphic.length; i++) {
-        const measure=graphic[i]?.find(m=>m && m.PositionAndShape)
+        const list=graphic[i] || []
+        const measure=list.find(m=>m?.isVisible?.() && m.PositionAndShape)
+            || list.find(m=>m?.PositionAndShape)
         if (!measure) continue
         const box=measure.PositionAndShape
         const x=box.AbsolutePosition.x*10*zoom
@@ -116,11 +143,36 @@ function measurePositions(engine) {
         const ms=markers[i]?.ms
         if (Number.isFinite(ms)) {
             points.push({ms,x})
-            if (i===graphic.length-1) points.push({ms:props.timeline?.durationMs||ms+1,x:end})
+            if (i===graphic.length-1) points.push({ms:props.timeline?.durationMs || ms+1,x:end})
+        }
+        if (beatSamples.length) {
+            const entries=new Set()
+            for (const staff of list) {
+                if (!staff?.isVisible?.()) continue
+                for (const entry of staff.staffEntries || []) {
+                    if (!entry?.PositionAndShape || entries.has(entry.getAbsoluteTimestamp?.().RealValue)) continue
+                    const timestamp=entry.getAbsoluteTimestamp?.().RealValue
+                    if (!Number.isFinite(timestamp)) continue
+                    entries.add(timestamp)
+                    const noteMs=timeAtBeat(timestamp*4)
+                    if (noteMs===null) continue
+                    points.push({ms:noteMs,x:entry.PositionAndShape.AbsolutePosition.x*10*zoom})
+                }
+            }
         }
     }
-    if (points.length<2) return []
-    return points
+    const ordered=points.filter(p=>Number.isFinite(p.ms) && Number.isFinite(p.x))
+        .sort((a,b)=>a.ms-b.ms || a.x-b.x)
+    const clean=[]
+    for (const point of ordered) {
+        const last=clean[clean.length-1]
+        if (last && point.ms-last.ms<.1) {
+            // A notehead at the beginning of a bar is a better alignment
+            // anchor than the preceding barline at the same timestamp.
+            last.x=Math.max(last.x,point.x)
+        } else if (!last || point.x>=last.x-.5) clean.push({...point})
+    }
+    return clean.length>=2?clean:[]
 }
 async function rebuild() {
     const revision=++layoutRevision
