@@ -142,6 +142,13 @@ func scoreTimeMs(beat float64, changes []scoreTempo) float64 {
     return ms+(beat-lastBeat)*60000/bpm
 }
 
+func isMusicXMLPath(path string) bool {
+    switch strings.ToLower(filepath.Ext(path)) {
+    case ".xml", ".musicxml", ".mxl": return true
+    }
+    return false
+}
+
 func ParseMusicXMLFile(path string) (*Midi, error) {
     raw, err := readMusicXML(path)
     if err != nil { return nil, err }
@@ -263,6 +270,7 @@ func ParseMusicXMLFile(path string) (*Midi, error) {
             MidiEvent{Type:MidiEventNoteOn,TrackIndex:n.track,Channel:0,Hand:n.hand,Tick:tick,Ms:start,Note:n.pitch,Velocity:88},
             MidiEvent{Type:MidiEventNoteOff,TrackIndex:n.track,Channel:0,Hand:n.hand,Tick:endTick,Ms:end,Note:n.pitch})
     }
+    for i := range events { events[i].FrontEvent = buildFrontEvent(events[i].Type, events[i].Hand) }
     sortMidiEvents(events)
     info, err := os.Stat(path)
     if err != nil { return nil, err }
