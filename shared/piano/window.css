@@ -1,6 +1,7 @@
 .piano-window { width: 100vw; height: 100vh; position: relative; overflow: hidden; background: #242424; color: #eeeeee; border-radius: 7px; font-family: 'Segoe UI', 'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif; user-select: none; }
 .waterfall-area { position: absolute; inset: 0 0 var(--keyboard-height); overflow: hidden; }
 .midi-waterfall-layer { position: absolute; left: 0; right: 0; bottom: 0; }
+.midi-score-layer { position: absolute; left: 0; right: 0; overflow: hidden; border-bottom: 1px solid #ffffff19; }
 .toolbar { position: absolute; top: 0; left: 0; right: 0; height: 54px; display: flex; align-items: center; padding: 0 16px; gap: 14px; z-index: 20; background: #242424e8; border-bottom: 1px solid #ffffff0c; }
 .toolbar-left, .toolbar-right { display: flex; gap: 10px; align-items: center; flex-shrink: 0; }
 .toolbar-left { gap: 12px; }
