@@ -94,6 +94,9 @@ type Midi struct {
 
 	// 仅运行时使用，不写入 config。
 	Events []MidiEvent `json:"-"`
+
+	// Source measure positions for score formats that do not use SMF files.
+	ScoreMeasures []MidiMeasureMark `json:"-"`
 }
 
 type MidiEvent struct {
@@ -212,8 +215,8 @@ func (k *Keyboard) OpenMidiFileDialog() (UserMidi, error) {
 	}
 
 	path, err := App.Dialog.OpenFile().
-		SetTitle("选择 MIDI 文件").
-		AddFilter("MIDI", "*.mid;*.midi").
+		SetTitle("选择乐谱文件").
+		AddFilter("乐谱与 MIDI", "*.mid;*.midi;*.musicxml;*.xml;*.mxl").
 		AddFilter("All Files", "*.*").
 		PromptForSingleSelection()
 	if err != nil {
@@ -477,6 +480,9 @@ func ParseMidiFile(path string) (*Midi, error) {
 	if err != nil {
 		return nil, err
 	}
+	if isMusicXMLPath(absPath) {
+		return ParseMusicXMLFile(absPath)
+	}
 
 	fileInfo, err := os.Stat(absPath)
 	if err != nil {
@@ -738,8 +744,8 @@ func validateMidiPath(path string) (string, error) {
 	}
 
 	ext := strings.ToLower(filepath.Ext(absPath))
-	if ext != ".mid" && ext != ".midi" {
-		return "", errors.New("文件格式不正确，只支持 .mid 或 .midi")
+	if ext != ".mid" && ext != ".midi" && !isMusicXMLPath(absPath) {
+		return "", errors.New("只支持 .mid、.midi、.musicxml、.xml 或 .mxl")
 	}
 
 	info, err := os.Stat(absPath)
