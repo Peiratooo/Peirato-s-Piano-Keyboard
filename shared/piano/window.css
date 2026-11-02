@@ -86,3 +86,10 @@ button:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 3px;
 /* Anchor the title to the whole toolbar instead of the remaining drag space. */
 .is-mac .drag-region span { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
 @media (prefers-reduced-motion: reduce) { *, .is-simple .toolbar { transition: none !important; } }
+
+.practice-view-switch { display: flex; align-items: center; gap: 2px; padding-right: 9px; border-right: 1px solid #ffffff12; }
+.difficulty-select { width: 85px; min-width: 70px; --n-height: 28px; }
+.view-button { color: #858585; border-radius: 5px; }
+.view-button .n-button__content { display: flex; gap: 5px; align-items: center; font-size: 11px; }
+.view-button.is-selected { color: var(--ui-accent); background: var(--ui-accent-soft); }
+@media (max-width: 1150px) { .view-button span { display: none; } }

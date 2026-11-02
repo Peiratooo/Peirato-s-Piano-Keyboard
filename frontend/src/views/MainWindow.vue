@@ -32,7 +32,25 @@
                 <NButton class="library-toggle" :type="panel === 'library' ? 'primary' : 'default'" size="small" :aria-expanded="panel === 'library'" @click="openPanel('library')">
                     <template #icon><PhMusicNotes :size="18" /></template>曲库
                 </NButton>
-                <MidiPracticeControls :session="session" :panel="panel" @open-speed="closePanel" @speed-visibility="speedPanelOpen = $event" />
+                <MidiPracticeControls :session="session" :panel="panel" @open-speed="closePanel" @speed-visibility="speedPanelOpen = $event">
+                    <template #views>
+                        <div class="practice-view-switch" role="group" aria-label="练习显示内容">
+                            <NButton quaternary size="small" class="view-button" :class="{'is-selected': session.viewOptions.waterfall}"
+                                :aria-pressed="session.viewOptions.waterfall" title="显示或隐藏瀑布流"
+                                @click="session.setView('waterfall', !session.viewOptions.waterfall)">
+                                <PhChartBar :size="17" /><span>瀑布</span>
+                            </NButton>
+                            <NButton quaternary size="small" class="view-button" :class="{'is-selected': session.viewOptions.score}"
+                                :aria-pressed="session.viewOptions.score" title="显示或隐藏五线谱"
+                                @click="session.setView('score', !session.viewOptions.score)">
+                                <PhMusicNotes :size="17" /><span>五线谱</span>
+                            </NButton>
+                        </div>
+                        <NSelect class="difficulty-select" size="small" :value="session.difficulty" :options="[{label: '入门', value: 'beginner'}, {label: '标准', value: 'normal'}, {label: '挑战', value: 'challenge'}]"
+                            :disabled="session.mode !== 'follow' || session.busy" :consistent-menu-width="false"
+                            aria-label="练习难度" @update:value="session.setDifficulty" />
+                    </template>
+                </MidiPracticeControls>
             </div>
             <div class="drag-region" @dblclick="toggleMaximize"><span v-if="!isSimple">{{ isMidi ? session.selectedSong?.name || '选择一首 MIDI' : APP_NAME }}</span></div>
             <div class="toolbar-right" data-piano-control>
@@ -116,7 +134,7 @@
 import {computed, inject, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch} from 'vue'
 import {useRoute, useRouter} from 'vue-router'
 import {Events, System, Window} from '@wailsio/runtime'
-import {NButton, NModal, NRadioButton, NRadioGroup} from 'naive-ui'
+import {NButton, NModal, NRadioButton, NRadioGroup, NSelect} from 'naive-ui'
 import {PhList, PhMinus, PhArrowsOutSimple, PhX, PhPianoKeys, PhPlay,
     PhArrowRight, PhArrowUpRight, PhMusicNotes, PhGearSix, PhPower, PhChartBar, PhUserCircle, PhUsersThree} from '@phosphor-icons/vue'
 import ClassicKeyboard from '../components/ClassicKeyboard.vue'
