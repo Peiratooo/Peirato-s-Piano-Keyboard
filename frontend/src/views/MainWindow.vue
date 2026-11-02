@@ -4,9 +4,15 @@
         <div class="waterfall-area" :aria-hidden="isSimple">
             <WaterfallCanvas v-show="!isMidi" :layout="layout" :width="size.width" :height="waterfallHeight"
                 :active="!isSimple && !isMidi" :colors="store.config.colors" />
-            <div v-show="isMidi" class="midi-waterfall-layer" :style="{top: midiCanvasTop + 'px'}">
+            <div v-show="isMidi && session.viewOptions.score" class="midi-score-layer"
+                :style="{top: midiContentTop + 'px'}">
+                <MidiScoreCanvas :timeline="session.timeline" :player-state="session.state"
+                    :width="size.width" :height="scoreHeight"
+                    :active="!isSimple && isMidi && session.viewOptions.score" :hand-mode="session.options.handMode" />
+            </div>
+            <div v-show="isMidi && session.viewOptions.waterfall" class="midi-waterfall-layer" :style="{top: midiCanvasTop + 'px'}">
                 <MidiWaterfallCanvas :layout="layout" :width="size.width" :height="midiCanvasHeight"
-                    :active="!isSimple && isMidi" :colors="store.config.colors" :timeline="session.timeline" :player-state="session.state" />
+                     :active="!isSimple && isMidi && session.viewOptions.waterfall" :colors="store.config.colors" :timeline="session.timeline" :player-state="session.state" />
             </div>
         </div>
 
@@ -121,6 +127,7 @@ import MidiLibraryPanel from '../components/MidiLibraryPanel.vue'
 import MidiPracticeControls from '../components/MidiPracticeControls.vue'
 import MidiTransport from '../components/MidiTransport.vue'
 import MidiWaterfallCanvas from '../components/MidiWaterfallCanvas.vue'
+import MidiScoreCanvas from '../components/MidiScoreCanvas.vue'
 import RecordingControls from '../components/RecordingControls.vue'
 import AccountDialog from '../../../shared/community/AccountDialog.vue'
 import {useDesktopCommunity} from '../services/community'
@@ -173,7 +180,7 @@ const keyboardHeightDraft = ref(null)
 const keyboardResizing = ref(false)
 let keyboardResizePointer = null
 const maxKeyboardHeight = computed(() => Math.max(120, Math.min(size.height * .5,
-    size.height - (isMidi.value ? midiCanvasTop.value : toolbarHeight.value) - 160)))
+    size.height - (isMidi.value ? midiContentTop.value : toolbarHeight.value) - 160)))
 const keyboardHeight = computed(() => {
     if (isSimple.value) return size.height
     if (keyboardHeightDraft.value !== null) return Math.round(keyboardHeightDraft.value)
@@ -184,7 +191,14 @@ const keyboardHeight = computed(() => {
     return Math.round(Math.min(size.height * .26, naturalHeight))
 })
 const waterfallHeight = computed(() => Math.max(0, size.height - keyboardHeight.value))
-const midiCanvasTop = computed(() => toolbarHeight.value + midiControlsHeight.value)
+const midiContentTop = computed(() => toolbarHeight.value + midiControlsHeight.value)
+const midiAvailableHeight = computed(() => Math.max(0, waterfallHeight.value - midiContentTop.value))
+const scoreHeight = computed(() => {
+    if (!isMidi.value || !session.viewOptions.score) return 0
+    if (!session.viewOptions.waterfall) return midiAvailableHeight.value
+    return Math.min(230, Math.max(145, midiAvailableHeight.value * .32))
+})
+const midiCanvasTop = computed(() => midiContentTop.value + scoreHeight.value)
 const midiCanvasHeight = computed(() => Math.max(0, waterfallHeight.value - midiCanvasTop.value))
 const windowStyle = computed(() => ({
     ...uiTheme.value.cssVariables,
