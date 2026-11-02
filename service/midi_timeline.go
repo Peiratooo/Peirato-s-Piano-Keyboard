@@ -120,6 +120,9 @@ type midiMeterMark struct {
 // Build markers from musical time, not evenly divided duration. The original
 // note timeline uses the same file tempo map through smf.ReadTracks.
 func midiMeasureMarkers(file *Midi) []MidiMeasureMark {
+	if file != nil && file.ScoreMeasures != nil {
+		return append([]MidiMeasureMark(nil), file.ScoreMeasures...)
+	}
 	if file == nil || file.PPQ <= 0 || file.DurationTick == 0 {
 		// SMPTE-timed files have no PPQ: do not present invented measure lines.
 		return nil
