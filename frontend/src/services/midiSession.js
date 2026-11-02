@@ -41,6 +41,7 @@ export function useMidiSession({store, Keyboard}) {
     const library = ref([])
     const selectedId = ref('')
     const timeline = shallowRef(null)
+    const scoreDocument = shallowRef(null)
     const loading = ref(false)
     const importing = ref(false)
     const ready = ref(false)
@@ -119,12 +120,19 @@ export function useMidiSession({store, Keyboard}) {
         if (version !== selectionVersion || disposed) return false
         const song = await Keyboard.LoadMidiByID(id)
         if (version !== selectionVersion || disposed) return false
-        const notes = await Keyboard.GetMidiTimeline(id)
+        const [notes, score] = await Promise.all([
+            Keyboard.GetMidiTimeline(id),
+            Keyboard.GetMidiScoreDocument(id).catch(error => {
+                console.warn('原始乐谱读取失败，将使用 MIDI 音符进行排版', error)
+                return null
+            }),
+        ])
         if (version !== selectionVersion || disposed) return false
         const summary = summarizeSong(song)
         library.value = library.value.map(item => item.id === id ? summary : item)
         selectedId.value = id
         timeline.value = {...notes, midiId: notes.midiId || notes.id || id, notes: notes.notes || []}
+        scoreDocument.value = score?.xml ? score : null
         options.leftMs = 0
         options.rightMs = Number(notes.durationMs || song.durationMs) || 0
         localCurrent.value = 0
@@ -171,6 +179,7 @@ export function useMidiSession({store, Keyboard}) {
             await syncState()
             selectedId.value = ''
             timeline.value = null
+            scoreDocument.value = null
             localCurrent.value = 0
             options.leftMs = options.rightMs = 0
             clockRevision.value++
@@ -241,6 +250,7 @@ export function useMidiSession({store, Keyboard}) {
             if (removingSelected) {
                 selectedId.value = ''
                 timeline.value = null
+                scoreDocument.value = null
                 localCurrent.value = 0
                 options.leftMs = options.rightMs = 0
                 clockRevision.value++
@@ -407,7 +417,7 @@ export function useMidiSession({store, Keyboard}) {
         ++selectionVersion
         stopWatching()
     }
-    return reactive({library, selectedId, selectedSong, timeline, loading, importing, ready, busy, mode, viewOptions, setView, difficulty, setDifficulty,
+    return reactive({library, selectedId, selectedSong, timeline, scoreDocument, loading, importing, ready, busy, mode, viewOptions, setView, difficulty, setDifficulty,
         options, state, durationMs, clockRevision, initialize, refreshLibrary, selectSong, importSong, importPaths,
         removeSong, setMode, start, togglePlayback, stop, seek, previewSeek, endSeekPreview,
         setSpeed, setHand, setLoop, setRange, dispose})
