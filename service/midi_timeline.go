@@ -23,6 +23,8 @@ type MidiTimeline struct {
 type MidiMeasureMark struct {
 	Index int     `json:"index"`
 	Ms    float64 `json:"ms"`
+	Numerator int `json:"numerator,omitempty"`
+	Denominator int `json:"denominator,omitempty"`
 }
 
 type MidiTimelineNote struct {
@@ -184,7 +186,11 @@ func midiMeasureMarkers(file *Midi) []MidiMeasureMark {
 			break
 		}
 		if len(markers) == 0 || ms > markers[len(markers)-1].Ms+epsilon {
-			markers = append(markers, MidiMeasureMark{Index: index, Ms: math.Max(0, ms)})
+			markers = append(markers, MidiMeasureMark{
+                Index: index, Ms: math.Max(0, ms),
+                Numerator: int(meters[meterIndex].numerator),
+                Denominator: int(meters[meterIndex].denominator),
+            })
 		}
 		current := meters[meterIndex]
 		measureTicks := ppq * 4 * current.numerator / current.denominator
