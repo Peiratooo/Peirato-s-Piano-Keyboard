@@ -31,6 +31,7 @@ type MidiTimelineNote struct {
 	ID         string   `json:"id"`
 	Note       int      `json:"note"`
 	StartMs    float64  `json:"startMs"`
+	StartBeat  float64  `json:"startBeat,omitempty"`
 	EndMs      float64  `json:"endMs"`
 	Velocity   int      `json:"velocity"`
 	Hand       MidiHand `json:"hand"`
@@ -76,8 +77,13 @@ func buildMidiTimeline(midiFile *Midi) MidiTimeline {
 		ms := max(0, min(event.Ms, timeline.DurationMs))
 		if event.Type == MidiEventNoteOn {
 			index := len(timeline.Notes)
+			beat := float64(0)
+			if midiFile.PPQ > 0 {
+				beat = float64(event.Tick) / float64(midiFile.PPQ)
+			}
 			timeline.Notes = append(timeline.Notes, MidiTimelineNote{
 				ID:         strconv.Itoa(i),
+				StartBeat:  beat,
 				Note:       event.Note,
 				StartMs:    ms,
 				EndMs:      timeline.DurationMs,
