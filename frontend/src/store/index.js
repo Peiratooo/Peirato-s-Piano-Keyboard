@@ -134,7 +134,7 @@ export const data = defineStore('data', {
         setKeyState(key, pressed) {
             if (pressed && !this.pressedKey[key]) this.setPressedHand(key)
             this.interactiveKeys[key] = Math.max(0, (this.interactiveKeys[key] || 0) + (pressed ? 1 : -1))
-            if (!this.pressedKey[key]) delete this.pressedKeyHands[key]
+            if (!this.pressedKey[key] && !this.activeKey[key]) delete this.pressedKeyHands[key]
         },
         setPressedHand(key, hand) {
             this.pressedKeyHands[key] = hand === 'left' || hand === 'right' ? hand

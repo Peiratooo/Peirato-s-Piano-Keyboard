@@ -24,5 +24,5 @@ export function keyVisualClass(store, item) {
     }
     if (store.midiHintKey[key]) return `${prefix}-hint`
     if (store.midiHintLeftKey[key]) return `${prefix}-l-hint`
-    return store.activeKey[key] ? `${prefix}-sustained` : ''
+    return store.activeKey[key] ? `${prefix}${store.pressedKeyHands[key] === 'left' ? '-l' : ''}-sustained` : ''
 }

@@ -45,7 +45,13 @@ func Run(assets embed.FS) {
 			AdditionalData:         nil,
 			ExitCode:               0,
 		},
-		LogLevel:   application.DialogWarning,
+		LogLevel: application.DialogWarning,
+		OnShutdown: func() {
+			_ = MidiPlayer.Stop()
+			stopRecordingForShutdown()
+			cleanupUpdate()
+			CloseMidiDevice()
+		},
 	})
 
 	PianoWin = App.Window.NewWithOptions(application.WebviewWindowOptions{
@@ -228,4 +234,37 @@ func (k *Keyboard) OpenSoundFontDialog() error {
 func (k *Keyboard) GetMidiWindowOpen() bool {
 	// Retained for older frontend clients; MIDI is part of the main window.
 	return false
+}
+
+var LibraryWin *application.WebviewWindow
+
+func (k *Keyboard) OpenLibraryWindow(view string) {
+	if view != "practice" {
+		view = "library"
+	}
+	if LibraryWin != nil {
+		App.Event.Emit("libraryNavigate", view)
+		LibraryWin.Show()
+		LibraryWin.Focus()
+		return
+	}
+	LibraryWin = App.Window.NewWithOptions(application.WebviewWindowOptions{
+		Title: appDisplayName + " · 曲库", URL: "/#/library?view=" + view, Width: 1180, Height: 780, MinWidth: 780, MinHeight: 560,
+		BackgroundType: application.BackgroundTypeSolid, BackgroundColour:application.NewRGBA(43,43,43,255), DevToolsEnabled: !PRODUCTION,
+	})
+	LibraryWin.OnWindowEvent(events.Common.WindowClosing, func(e *application.WindowEvent) { LibraryWin = nil })
+	App.Window.Add(LibraryWin)
+	LibraryWin.Show()
+}
+func (k *Keyboard) ReturnToPiano() error {
+	if _, err := k.SetMainDisplayMode(mainDisplayWaterfall); err != nil {
+		return err
+	}
+	PianoWin.UnMinimise()
+	PianoWin.Show()
+	PianoWin.Focus()
+	if LibraryWin != nil {
+		LibraryWin.Hide()
+	}
+	return nil
 }

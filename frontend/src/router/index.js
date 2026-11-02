@@ -1,6 +1,7 @@
 import {createRouter, createWebHashHistory} from 'vue-router'
 
 const routes = [
+ {path:'/library',name:'library-window',component:()=>import('../views/LibraryWindow.vue')},
     {
         path: '/',
         name: 'main-window',

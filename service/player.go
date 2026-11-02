@@ -400,12 +400,24 @@ func (p *MidiPlayerRuntime) HandleUserNoteOn(note int) MidiHand {
 		p.mu.Unlock()
 		return MidiHandUnknown
 	}
-	if p.followIndex >= len(p.followSteps) || !p.hintActive {
+	if p.followIndex >= len(p.followSteps) {
 		p.mu.Unlock()
 		return MidiHandUnknown
 	}
 
 	step := &p.followSteps[p.followIndex]
+	if !p.hintActive {
+		currentMs := p.calcCurrentMsLocked()
+		if p.startingLocked() {
+			currentMs = p.state.CurrentMs - p.state.LeadInMs
+		}
+		if currentMs < step.Ms-p.state.LeadWindowMs {
+			p.mu.Unlock()
+			return MidiHandUnknown
+		}
+		p.hintActive = true
+		p.acceptedNotes = make(map[int]bool)
+	}
 	hand := MidiHandUnknown
 	found := false
 	for _, item := range step.Notes {
@@ -1110,6 +1122,7 @@ func clampMidiByte(value int) int {
 }
 
 func emitMidiPlayerState(state MidiPlayerState) {
+	recordLocalPractice(state)
 	if App != nil {
 		App.Event.Emit("midiPlayerState", state)
 	}

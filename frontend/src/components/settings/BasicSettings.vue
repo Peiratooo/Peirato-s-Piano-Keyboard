@@ -5,7 +5,7 @@
             <div class="setting-row">
                 <div>
                     <div class="label">钢琴音量</div>
-                    <div class="desc">控制内置 SoundFont 合成器的总体播放音量。</div>
+                    <div class="desc">调整演奏与试听的音量。</div>
                 </div>
                 <n-slider v-model:value="store.config.volume" :min="0" :max="100" @dragend="changeConfig" :tooltip="false" />
             </div>
@@ -13,7 +13,7 @@
             <div class="setting-row">
                 <div>
                     <div class="label">触键力度</div>
-                    <div class="desc">设置键鼠演奏力度；MIDI 播放力度 = 原力度 × 此值 ÷ 127，127 保留原力度。</div>
+                    <div class="desc">调整弹奏与试听的轻重。</div>
                 </div>
                 <n-slider v-model:value="store.config.velocity" :min="1" :max="127" @dragend="changeConfig" :tooltip="false" />
             </div>
@@ -47,13 +47,13 @@
             <div class="setting-row">
                 <div>
                     <div class="label">MIDI 通道</div>
-                    <div class="desc">输出到外部 MIDI 设备时使用的 channel，默认 0。</div>
+                    <div class="desc">选择外部 MIDI 设备使用的通道。</div>
                 </div>
                 <n-input-number v-model:value="store.config.midiChannel" :min="0" :max="15" size="small" @update:value="changeConfig" />
             </div>
 
             <div class="tip-box">
-                采样率和缓冲大小在重启软件后生效；重新加载音源不会改变当前音频设备参数。
+                采样率和缓冲大小在重启软件后生效。
             </div>
 
 
