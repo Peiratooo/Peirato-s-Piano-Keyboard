@@ -13,6 +13,13 @@ function midiError(error) {
         .replace(/\/(?:[^\s/]+\/)+[^\s:]*/g, '所选文件')
 }
 
+const VIEW_STORAGE_KEY = 'pp-practice-view-v1'
+function loadViews() {
+    try {
+        const stored = JSON.parse(localStorage.getItem(VIEW_STORAGE_KEY) || '{}')
+        return {waterfall: stored.waterfall !== false, score: stored.score === true}
+    } catch { return {waterfall: true, score: false} }
+}
 const summarizeSong = song => ({id: song.id, name: song.name || '未命名曲目',
     durationMs: Math.max(0, Number(song.durationMs) || 0), trackCount: song.trackCount || 0, missing: !!song.missing})
 
@@ -31,6 +38,12 @@ export function useMidiSession({store, Keyboard}) {
     const localCurrent = ref(0)
     const pendingPosition = ref(null)
     const previewPosition = ref(null)
+    const viewOptions = reactive(loadViews())
+    function setView(name, enabled) {
+        if (!['waterfall', 'score'].includes(name)) return
+        viewOptions[name] = !!enabled
+        try { localStorage.setItem(VIEW_STORAGE_KEY, JSON.stringify(viewOptions)) } catch { /* preferences are optional */ }
+    }
     const options = reactive({mode: store.mainMode === 'follow' ? 'follow' : 'play', handMode: 'both', speed: 1, leftMs: 0, rightMs: 0, loop: true})
     let selectionVersion = 0
     let disposed = false
@@ -340,7 +353,7 @@ export function useMidiSession({store, Keyboard}) {
         ++selectionVersion
         stopWatching()
     }
-    return reactive({library, selectedId, selectedSong, timeline, loading, importing, ready, busy, mode,
+    return reactive({library, selectedId, selectedSong, timeline, loading, importing, ready, busy, mode, viewOptions, setView,
         options, state, durationMs, clockRevision, initialize, refreshLibrary, selectSong, importSong,
         removeSong, setMode, start, togglePlayback, stop, seek, previewSeek, endSeekPreview,
         setSpeed, setHand, setLoop, setRange, dispose})
