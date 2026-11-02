@@ -99,7 +99,7 @@ const statusLabel = computed(() => props.session.loading ? '正在加载曲目�
     : props.session.state.leadInMs > 0 ? '音符进入中'
     : props.session.state.waiting ? '等待按对琴键'
     : props.session.state.status === 'playing' ? (props.session.mode === 'follow' ? '跟弹练习中' : '正在播放')
-    : props.session.selectedId ? '已就绪' : '支持 .mid / .midi')
+    : props.session.selectedId ? '已就绪' : '支持 MIDI / MusicXML')
 
 const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, value))
 function percent(value) { return duration.value > 0 ? clamp(Number(value) / duration.value * 100, 0, 100) : 0 }
