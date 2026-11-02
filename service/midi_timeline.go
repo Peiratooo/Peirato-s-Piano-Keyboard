@@ -21,17 +21,17 @@ type MidiTimeline struct {
 // Measure 1 starts at 0. Later markers are the true bar starts derived from
 // the MIDI time signature, PPQ and tempo map (never equal-width approximations).
 type MidiMeasureMark struct {
-	Index int     `json:"index"`
-	Ms    float64 `json:"ms"`
-	Numerator int `json:"numerator,omitempty"`
-	Denominator int `json:"denominator,omitempty"`
+	Index       int     `json:"index"`
+	Ms          float64 `json:"ms"`
+	Numerator   int     `json:"numerator,omitempty"`
+	Denominator int     `json:"denominator,omitempty"`
 }
 
 type MidiTimelineNote struct {
 	ID         string   `json:"id"`
 	Note       int      `json:"note"`
 	StartMs    float64  `json:"startMs"`
-	StartBeat  float64  `json:"startBeat,omitempty"`
+	StartBeat  float64  `json:"startBeat"`
 	EndMs      float64  `json:"endMs"`
 	Velocity   int      `json:"velocity"`
 	Hand       MidiHand `json:"hand"`
@@ -193,10 +193,10 @@ func midiMeasureMarkers(file *Midi) []MidiMeasureMark {
 		}
 		if len(markers) == 0 || ms > markers[len(markers)-1].Ms+epsilon {
 			markers = append(markers, MidiMeasureMark{
-                Index: index, Ms: math.Max(0, ms),
-                Numerator: int(meters[meterIndex].numerator),
-                Denominator: int(meters[meterIndex].denominator),
-            })
+				Index: index, Ms: math.Max(0, ms),
+				Numerator:   int(meters[meterIndex].numerator),
+				Denominator: int(meters[meterIndex].denominator),
+			})
 		}
 		current := meters[meterIndex]
 		measureTicks := ppq * 4 * current.numerator / current.denominator
