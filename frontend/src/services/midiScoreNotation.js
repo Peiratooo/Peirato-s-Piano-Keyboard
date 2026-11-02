@@ -65,11 +65,15 @@ function getMeasures(timeline) {
     if (!markers.length || markers[0].ms > .01) markers.unshift({ms:0,index:1})
     const clean = []
     for (const mark of markers) if (!clean.length || mark.ms - clean[clean.length-1].start > 1)
-        clean.push({start:mark.ms,index:mark.index})
+        clean.push({start:mark.ms,index:mark.index,
+            numerator:Math.max(1,Number(mark.numerator)||4),
+            denominator:Math.max(1,Number(mark.denominator)||4)})
     return clean.map((measure,i) => ({
         start:measure.start,
         end:i + 1 < clean.length ? clean[i+1].start : duration,
         number:measure.index || i+1,
+        numerator:measure.numerator, denominator:measure.denominator,
+        grid:Math.max(1,Math.round(measure.numerator*64/measure.denominator)),
     })).filter(m => m.end > m.start)
 }
 function collectSegments(notes, measure, staff) {
@@ -79,9 +83,9 @@ function collectSegments(notes, measure, staff) {
         const hand = note.hand === 'left' ? 2 : 1
         if (hand !== staff) continue
         const start = clamp(Math.round((Math.max(note.startMs,measure.start)-measure.start)
-            / (measure.end-measure.start)*GRID),0,GRID-1)
+            / (measure.end-measure.start)*measure.grid),0,measure.grid-1)
         const end = clamp(Math.round((Math.min(note.endMs,measure.end)-measure.start)
-            / (measure.end-measure.start)*GRID),start+1,GRID)
+            / (measure.end-measure.start)*measure.grid),start+1,measure.grid)
         result.push({
             note:note.note, start, end,
             fromBefore:note.startMs < measure.start - .5,
@@ -93,7 +97,8 @@ function collectSegments(notes, measure, staff) {
 function groupVoices(segments) {
     const voices = []
     for (const segment of segments) {
-        let target = voices.find(voice => {
+        const sameDurationChord = DURATIONS.some(([value]) => value===segment.end-segment.start)
+        let target = sameDurationChord && voices.find(voice => {
             const last = voice[voice.length-1]
             return last && last.start === segment.start && last.end === segment.end
         })
@@ -103,7 +108,7 @@ function groupVoices(segments) {
     }
     return voices
 }
-function renderVoice(voice, staff, number) {
+function renderVoice(voice, staff, number, grid) {
     let xml = '', cursor = 0
     for (let i=0; i<voice.length; i++) {
         const note = voice[i]
@@ -112,7 +117,7 @@ function renderVoice(voice, staff, number) {
         xml += noteParts(note,note.end-note.start,number,staff,chord)
         cursor=Math.max(cursor,note.end)
     }
-    if (cursor<GRID) xml += restParts(GRID-cursor,number,staff)
+    if (cursor<grid) xml += restParts(grid-cursor,number,staff)
     return xml
 }
 export function midiTimelineToMusicXML(timeline) {
@@ -133,17 +138,22 @@ export function midiTimelineToMusicXML(timeline) {
     for (let i=0; i<measures.length; i++) {
         const measure=measures[i]
         xml += '<measure number="' + xmlEscape(i+1) + '">'
-        if (i===0) xml += '<attributes><divisions>16</divisions>'
-            + '<key><fifths>0</fifths></key><time><beats>4</beats><beat-type>4</beat-type></time>'
-            + '<staves>2</staves><clef number="1"><sign>G</sign><line>2</line></clef>'
+        if (i===0) xml += '<attributes><divisions>16</divisions><key><fifths>0</fifths></key>'
+            + '<time><beats>' + measure.numerator + '</beats><beat-type>' + measure.denominator
+            + '</beat-type></time><staves>2</staves>'
+            + '<clef number="1"><sign>G</sign><line>2</line></clef>'
             + '<clef number="2"><sign>F</sign><line>4</line></clef></attributes>'
+        else if (measure.numerator!==measures[i-1].numerator
+            || measure.denominator!==measures[i-1].denominator)
+            xml += '<attributes><time><beats>' + measure.numerator
+                + '</beats><beat-type>' + measure.denominator + '</beat-type></time></attributes>'
         let first=true, voiceNumber=1
         for (const staff of [1,2]) {
             let voices=groupVoices(collectSegments(notes,measure,staff))
             if (!voices.length) voices=[[]]
             for (const voice of voices) {
-                if (!first) xml+='<backup><duration>' + GRID + '</duration></backup>'
-                xml+=renderVoice(voice,staff,voiceNumber++)
+                if (!first) xml+='<backup><duration>' + measure.grid + '</duration></backup>'
+                xml+=renderVoice(voice,staff,voiceNumber++,measure.grid)
                 first=false
             }
         }
