@@ -22,6 +22,9 @@
                 <PhMusicNotes :size="17" /><span>五线谱</span>
             </NButton>
         </div>
+        <NSelect class="difficulty-select" size="small" :value="session.difficulty" :options="difficultyOptions"
+            :disabled="session.mode !== 'follow' || session.busy" :consistent-menu-width="false"
+            aria-label="练习难度" @update:value="session.setDifficulty" />
         <NPopover trigger="click" placement="bottom" :show="showSpeed" :to="false" :width="280" @update:show="toggleSpeed">
             <template #trigger>
                 <NButton quaternary size="small" class="speed-button" :disabled="session.loading"
@@ -53,7 +56,7 @@
 
 <script setup>
 import {computed, onBeforeUnmount, ref, watch} from 'vue'
-import {NButton, NPopover, NSlider} from 'naive-ui'
+import {NButton, NPopover, NSlider, NSelect} from 'naive-ui'
 import {PhArrowCounterClockwise, PhGauge, PhHandPalm, PhRepeat, PhMusicNotes, PhChartBar} from '@phosphor-icons/vue'
 const props = defineProps({session: {type: Object, required: true}, panel: {type: String, default: null}})
 const emit = defineEmits(['open-speed', 'speed-visibility'])
@@ -61,6 +64,11 @@ const showSpeed = ref(false)
 const speedDraft = ref(null)
 const speedPercent = computed(() => speedDraft.value ?? Math.round(props.session.options.speed * 100))
 const speedMarks = {25: '25%', 100: '100%', 200: '200%', 300: '300%', 500: '500%'}
+const difficultyOptions = [
+    {label:'入门', value:'beginner'},
+    {label:'标准', value:'normal'},
+    {label:'挑战', value:'challenge'},
+]
 let speedTimer
 const hands = [{label: '左手', short: '左', value: 'left'}, {label: '右手', short: '右', value: 'right'}]
 function selected(hand) { return props.session.options.handMode === 'both' || props.session.options.handMode === hand }
@@ -107,6 +115,7 @@ onBeforeUnmount(() => clearTimeout(speedTimer))
 .hand-button.is-selected { color: var(--ui-accent); background: var(--ui-accent-soft); }
 .hand-button.is-left.is-selected { color: var(--whiteKeyLeft); background: color-mix(in srgb, var(--whiteKeyLeft) 12%, transparent); }
 .practice-view-switch { display: flex; align-items: center; gap: 2px; padding-right: 9px; border-right: 1px solid #ffffff12; }
+.difficulty-select { width: 85px; min-width: 70px; --n-height: 28px; }
 .view-button { color: #858585; border-radius: 5px; }
 .view-button :deep(.n-button__content) { display: flex; gap: 5px; align-items: center; font-size: 11px; }
 .view-button.is-selected { color: var(--ui-accent); background: var(--ui-accent-soft); }
