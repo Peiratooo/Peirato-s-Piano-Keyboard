@@ -191,6 +191,29 @@ export function useMidiSession({store, Keyboard}) {
             try { return await loadSelection(song.id, version) } finally { loading.value = false }
         }, 'MIDI 导入失败').finally(() => { importing.value = false })
     }
+    function importPaths(paths) {
+        const unique = [...new Set((paths || []).filter(path => typeof path === 'string' && path.trim()))]
+        if (!unique.length || importing.value) return Promise.resolve(false)
+        importing.value = true
+        return enqueue(async () => {
+            let last = null, count = 0
+            for (const path of unique) {
+                try {
+                    const song = await Keyboard.AddMidiByPath(path)
+                    if (song?.id) { last = song; count++ }
+                } catch (error) { notify('文件导入失败', error) }
+            }
+            if (!last || disposed) return false
+            await loadLibrary()
+            const version = ++selectionVersion
+            loading.value = true
+            try {
+                const loaded = await loadSelection(last.id, version)
+                if (loaded) window.$message?.success('已导入 ' + count + ' 首曲目')
+                return loaded
+            } finally { loading.value = false }
+        }, '文件导入失败').finally(() => { importing.value = false })
+    }
     function removeSong(id) {
         if (!id) return Promise.resolve(false)
         const version = id === selectedId.value ? ++selectionVersion : selectionVersion
@@ -354,7 +377,7 @@ export function useMidiSession({store, Keyboard}) {
         stopWatching()
     }
     return reactive({library, selectedId, selectedSong, timeline, loading, importing, ready, busy, mode, viewOptions, setView,
-        options, state, durationMs, clockRevision, initialize, refreshLibrary, selectSong, importSong,
+        options, state, durationMs, clockRevision, initialize, refreshLibrary, selectSong, importSong, importPaths,
         removeSong, setMode, start, togglePlayback, stop, seek, previewSeek, endSeekPreview,
         setSpeed, setHand, setLoop, setRange, dispose})
 }
