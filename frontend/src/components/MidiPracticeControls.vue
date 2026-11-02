@@ -10,6 +10,18 @@
                 <span>{{ hand.short }}</span>
             </NButton>
         </div>
+        <div class="practice-view-switch" role="group" aria-label="练习显示内容">
+            <NButton quaternary size="small" class="view-button" :class="{'is-selected': session.viewOptions.waterfall}"
+                :aria-pressed="session.viewOptions.waterfall" title="显示或隐藏瀑布流"
+                @click="session.setView('waterfall', !session.viewOptions.waterfall)">
+                <PhChartBar :size="17" /><span>瀑布</span>
+            </NButton>
+            <NButton quaternary size="small" class="view-button" :class="{'is-selected': session.viewOptions.score}"
+                :aria-pressed="session.viewOptions.score" title="显示或隐藏五线谱"
+                @click="session.setView('score', !session.viewOptions.score)">
+                <PhMusicNotes :size="17" /><span>五线谱</span>
+            </NButton>
+        </div>
         <NPopover trigger="click" placement="bottom" :show="showSpeed" :to="false" :width="280" @update:show="toggleSpeed">
             <template #trigger>
                 <NButton quaternary size="small" class="speed-button" :disabled="session.loading"
@@ -42,7 +54,7 @@
 <script setup>
 import {computed, onBeforeUnmount, ref, watch} from 'vue'
 import {NButton, NPopover, NSlider} from 'naive-ui'
-import {PhArrowCounterClockwise, PhGauge, PhHandPalm, PhRepeat} from '@phosphor-icons/vue'
+import {PhArrowCounterClockwise, PhGauge, PhHandPalm, PhRepeat, PhMusicNotes, PhChartBar} from '@phosphor-icons/vue'
 const props = defineProps({session: {type: Object, required: true}, panel: {type: String, default: null}})
 const emit = defineEmits(['open-speed', 'speed-visibility'])
 const showSpeed = ref(false)
@@ -94,6 +106,10 @@ onBeforeUnmount(() => clearTimeout(speedTimer))
 .hand-button:not(.is-left) svg { transform: scaleX(-1); }
 .hand-button.is-selected { color: var(--ui-accent); background: var(--ui-accent-soft); }
 .hand-button.is-left.is-selected { color: var(--whiteKeyLeft); background: color-mix(in srgb, var(--whiteKeyLeft) 12%, transparent); }
+.practice-view-switch { display: flex; align-items: center; gap: 2px; padding-right: 9px; border-right: 1px solid #ffffff12; }
+.view-button { color: #858585; border-radius: 5px; }
+.view-button :deep(.n-button__content) { display: flex; gap: 5px; align-items: center; font-size: 11px; }
+.view-button.is-selected { color: var(--ui-accent); background: var(--ui-accent-soft); }
 .loop-toggle { color: #777; border-radius: 5px; }
 .loop-toggle :deep(.n-button__content) { display: flex; align-items: center; gap: 7px; font-size: 11px; white-space: nowrap; }
 .loop-toggle.is-selected { color: var(--ui-accent); background: var(--ui-accent-soft); }
@@ -104,5 +120,5 @@ onBeforeUnmount(() => clearTimeout(speedTimer))
 .speed-heading { display: flex; align-items: center; gap: 6px; }
 .speed-panel header { margin-bottom: 20px; }
 .speed-panel header strong { color: var(--ui-accent); font-variant-numeric: tabular-nums; }
-@media (max-width: 1150px) { .midi-practice { gap: 10px; } .hand-switch { padding-right: 8px; } .hand-button span, .loop-toggle span { display: none; } }
+@media (max-width: 1150px) { .midi-practice { gap: 10px; } .hand-switch { padding-right: 8px; } .hand-button span, .loop-toggle span, .view-button span { display: none; } }
 </style>
