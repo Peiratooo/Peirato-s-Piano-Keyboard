@@ -6,7 +6,7 @@
                 :active="!isSimple && !isMidi" :colors="store.config.colors" />
             <div v-show="isMidi && session.viewOptions.score" class="midi-score-layer"
                 :style="{top: midiContentTop + 'px'}">
-                <MidiScoreCanvas :timeline="session.timeline" :player-state="session.state"
+                <MidiScoreView :timeline="session.timeline" :score-document="session.scoreDocument" :player-state="session.state"
                     :width="size.width" :height="scoreHeight"
                     :active="!isSimple && isMidi && session.viewOptions.score" :hand-mode="session.options.handMode" />
             </div>
@@ -127,7 +127,7 @@ import MidiLibraryPanel from '../components/MidiLibraryPanel.vue'
 import MidiPracticeControls from '../components/MidiPracticeControls.vue'
 import MidiTransport from '../components/MidiTransport.vue'
 import MidiWaterfallCanvas from '../components/MidiWaterfallCanvas.vue'
-import MidiScoreCanvas from '../components/MidiScoreCanvas.vue'
+import MidiScoreView from '../components/MidiScoreView.vue'
 import RecordingControls from '../components/RecordingControls.vue'
 import AccountDialog from '../../../shared/community/AccountDialog.vue'
 import {useDesktopCommunity} from '../services/community'
