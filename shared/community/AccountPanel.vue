@@ -3,7 +3,7 @@
   <div v-if="error" role="alert" class="error">{{error}}</div>
   <form v-if="!client.user" class="card" @submit.prevent="submit">
    <h3>{{register?'创建钢琴账号':'登录钢琴账号'}}</h3>
-   <p class="muted">在桌面和 Toy 使用同一个账号，保存自己的作品与收藏。</p>
+   <p class="muted">登录后保存作品与收藏，同步练习记录。</p>
    <label>账号<input v-model.trim="username" autocomplete="username" minlength="3" maxlength="24" required placeholder="3–24 位字母、数字或下划线"/></label>
    <label>密码<input v-model="password" type="password" :autocomplete="register?'new-password':'current-password'" minlength="10" maxlength="72" required placeholder="至少 10 位"/></label>
    <label v-if="client.desktop" class="check"><input v-model="remember" type="checkbox"/>记住登录（7 天）</label>

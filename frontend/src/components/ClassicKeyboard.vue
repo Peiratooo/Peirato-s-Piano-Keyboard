@@ -312,4 +312,9 @@ onBeforeUnmount(() => {
 
 .w-sustained { background-color: color-mix(in srgb, var(--whiteKey) 38%, #f5f4f0); color: var(--whiteKey-sustained-label); }
 .b-sustained { background-color: color-mix(in srgb, var(--blackKey) 38%, #242628); color: var(--blackKey-sustained-label); }
+/* Keep the entire key face lit, including the bottom edge. */
+.w-active,.w-l-active,.w-sustained,.w-l-sustained{background-image:none;box-shadow:inset 1px 0 0 #00000020,inset 0 -1px 0 #00000025}
+.b-active,.b-l-active,.b-sustained,.b-l-sustained{background-image:none;box-shadow:inset 1px 0 0 #ffffff20,inset -1px 0 0 #00000025,0 1px 2px #00000030}
+.w-l-sustained{background-color:color-mix(in srgb,var(--whiteKeyLeft) 38%,#f5f4f0);color:var(--whiteKeyLeft-sustained-label)}
+.b-l-sustained{background-color:color-mix(in srgb,var(--blackKeyLeft) 38%,#242628);color:var(--blackKeyLeft-sustained-label)}
 </style>

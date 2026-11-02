@@ -5,13 +5,13 @@
         <NButton quaternary circle aria-label="关闭完整设置" @click="$emit('close')"><template #icon><PhX :size="20"/></template></NButton></div>
       <div class="settings-shell">
         <aside class="setting-menu"><button v-for="item in menus" :key="item.key" class="menu-item" :class="{active:store.controlMenu===item.key}" @click="store.controlMenu=item.key">
-          <span class="menu-icon">{{item.icon}}</span><span>{{item.label}}</span></button></aside>
+          <component :is="item.icon" class="menu-icon" :size="19" aria-hidden="true"/><span>{{item.label}}</span></button></aside>
         <main class="setting-content">
           <section v-if="store.controlMenu==='basic'" class="content-card">
             <div class="section-title">基础设置</div><div class="setting-grid">
-              <div class="setting-row"><div><div class="label">钢琴音量</div><div class="desc">控制内置 SoundFont 合成器的总体播放音量。</div></div>
+              <div class="setting-row"><div><div class="label">钢琴音量</div><div class="desc">调整演奏与试听的音量。</div></div>
                 <NSlider v-model:value="store.config.volume" :min="0" :max="100" :tooltip="false" @dragend="save" @keyup="save"/></div>
-              <div class="setting-row"><div><div class="label">触键力度</div><div class="desc">设置键鼠演奏力度；MIDI 播放力度 = 原力度 × 此值 ÷ 127，127 保留原力度。</div></div>
+              <div class="setting-row"><div><div class="label">触键力度</div><div class="desc">调整弹奏与试听的轻重。</div></div>
                 <NSlider v-model:value="store.config.velocity" :min="1" :max="127" :tooltip="false" @dragend="save" @keyup="save"/></div>
               <div class="setting-row"><div><div class="label">采样率</div><div class="desc">当前浏览器音频设备的采样率。</div></div><NInput :value="piano.audio.context?`${piano.audio.context.sampleRate} Hz`:'开始演奏后显示'" readonly/></div>
               <div class="setting-row"><div><div class="label">音频延迟</div><div class="desc">由浏览器管理，演奏采用交互延迟模式。</div></div><NInput :value="piano.audio.context?`${Math.round((piano.audio.context.baseLatency||0)*1000)} ms`:'开始演奏后显示'" readonly/></div>
@@ -46,6 +46,7 @@
   </div>
 </template>
 <script setup>
+import {settingsMenu} from '../../../shared/piano/settingsMenu'
 import {computed, inject, onBeforeUnmount} from 'vue'
 import {NButton,NConfigProvider,NInput,NSlider,NSwitch,NTag} from 'naive-ui'
 import {PhX} from '@phosphor-icons/vue'
@@ -59,7 +60,7 @@ const save=inject('changeConfig'),toggleSustain=inject('toggleSustain')
 const baseUrl=import.meta.env.BASE_URL
 const lightTheme=computed(()=>getPianoUiTheme(props.store.config.colors,'light'))
 const lightOverrides=computed(()=>({common:{primaryColor:lightTheme.value.accent,primaryColorHover:lightTheme.value.accentHover,primaryColorPressed:lightTheme.value.accentPressed,primaryColorSuppl:lightTheme.value.accent},Button:lightTheme.value.naiveOverrides.Button}))
-const menus=[{key:'basic',label:'基础设置',icon:'⌘'},{key:'devices',label:'MIDI 设备',icon:'🎛'},{key:'keyboard',label:'键盘显示',icon:'🎹'},{key:'keymap',label:'按键方案',icon:'⌨'},{key:'appearance',label:'外观主题',icon:'🎨'},{key:'soundfont',label:'音源管理',icon:'🎧'},{key:'about',label:'关于软件',icon:'i'}]
+const menus = settingsMenu
 onBeforeUnmount(save)
 </script>
 <style lang="scss" src="../../../shared/piano/settings.scss"></style>
