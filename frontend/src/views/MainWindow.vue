@@ -102,7 +102,7 @@
                 @lostpointercapture="cancelKeyboardResize" @dblclick.stop="resetKeyboardHeight" @keydown="resizeKeyboardByKey">
                 <span></span>
             </div>
-            <ClassicKeyboard v-if="store.keyboardLoaded" :layout="layout" :show-hints="!session.state.scrubbing" />
+            <ClassicKeyboard v-if="store.keyboardLoaded" :layout="layout" :show-hints="!session.state.scrubbing && (session.mode !== 'follow' || session.difficulty !== 'challenge')" />
         </div>
 
         <Chord v-if="store.loaded" class="chord-status" :compact="isSimple" />
