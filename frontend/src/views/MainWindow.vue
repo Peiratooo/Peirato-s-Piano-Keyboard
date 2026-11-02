@@ -183,7 +183,10 @@ const midiAvailableHeight = computed(() => Math.max(0, waterfallHeight.value - m
 const scoreHeight = computed(() => {
     if (!isMidi.value || !session.viewOptions.score) return 0
     if (!session.viewOptions.waterfall) return midiAvailableHeight.value
-    return Math.min(230, Math.max(145, midiAvailableHeight.value * .32))
+    // A grand staff needs enough vertical space for two complete staves,
+    // ledger lines and dynamics. Reserve part of the workspace for falling notes.
+    return Math.min(Math.max(0, midiAvailableHeight.value - 140),
+        Math.max(195, Math.min(300, midiAvailableHeight.value * .46)))
 })
 const midiCanvasTop = computed(() => midiContentTop.value + scoreHeight.value)
 const midiCanvasHeight = computed(() => Math.max(0, waterfallHeight.value - midiCanvasTop.value))
