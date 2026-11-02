@@ -3,7 +3,7 @@
         <header>
             <div><PhMusicNotes :size="20" /><h2>曲库</h2><span>{{ session.library.length }} 首</span></div>
             <div class="library-actions"><NButton size="small" type="primary" :loading="session.importing" :disabled="session.importing" @click="importSong">
-                <template #icon><PhDownloadSimple /></template>导入 MIDI
+                <template #icon><PhDownloadSimple /></template>导入乐谱
             </NButton><NButton quaternary circle size="small" aria-label="关闭曲库" @click="$emit('close')"><template #icon><PhX :size="19" /></template></NButton></div>
         </header>
         <NInput v-model:value="search" placeholder="搜索曲目" clearable size="small" aria-label="搜索曲目">
@@ -19,13 +19,13 @@
                     </NButton>
                     <NPopconfirm :positive-button-props="{type: 'error'}" positive-text="移除" negative-text="保留" @positive-click="session.removeSong(song.id)">
                         <template #trigger><NButton quaternary circle size="small" :disabled="session.busy" :aria-label="`移除 ${song.name}`"><template #icon><PhTrash :size="16" /></template></NButton></template>
-                        从曲库移除“{{ song.name }}”？原 MIDI 文件会保留。
+                        从曲库移除“{{ song.name }}”？原始文件会保留。
                     </NPopconfirm>
                 </div>
                 <div v-if="!filteredSongs.length" class="empty-library">
                     <PhMusicNotes :size="30" weight="light" />
-                    <span>{{ search ? '没有匹配的曲目' : '导入 MIDI，开始播放或跟弹' }}</span>
-                    <NButton v-if="!search" size="small" secondary :loading="session.importing" @click="importSong">选择 MIDI 文件</NButton>
+                    <span>{{ search ? '没有匹配的曲目' : '拖入 MIDI / MusicXML，开始播放或跟弹' }}</span>
+                    <NButton v-if="!search" size="small" secondary :loading="session.importing" @click="importSong">选择乐谱文件</NButton>
                 </div>
             </NScrollbar>
         </div>
