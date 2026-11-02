@@ -1,7 +1,7 @@
 <template>
     <section class="score-panel" :style="{width: width + 'px', height: height + 'px'}"
         :aria-label="scoreDocument?.native ? 'MusicXML 原谱五线谱' : 'MIDI 自动生成五线谱'">
-        <div v-show="!fallback && !pending" ref="engraving" class="engraving" aria-hidden="true">
+        <div v-show="!fallback" ref="engraving" class="engraving" aria-hidden="true">
             <div ref="scoreSurface" class="score-surface"></div>
         </div>
         <MidiScoreCanvas v-if="fallback" :width="width" :height="height"
