@@ -189,6 +189,12 @@ func ParseMusicXMLFile(path string) (*Midi, error) {
                     if d.Sound.Tempo > 0 && d.Sound.Tempo < 1000 {
                         tempos = append(tempos, scoreTempo{at:beat+cursor,bpm:d.Sound.Tempo})
                     }
+                case "sound":
+                    var sound struct { Tempo float64 `xml:"tempo,attr"` }
+                    if err := decoder.DecodeElement(&sound, &start); err != nil { return nil, err }
+                    if sound.Tempo > 0 && sound.Tempo < 1000 {
+                        tempos = append(tempos, scoreTempo{at:beat+cursor,bpm:sound.Tempo})
+                    }
                 case "backup", "forward":
                     var movement musicXMLMovement
                     if err := decoder.DecodeElement(&movement, &start); err != nil { return nil, err }
