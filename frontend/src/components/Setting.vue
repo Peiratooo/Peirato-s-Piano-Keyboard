@@ -8,7 +8,7 @@
                 :class="{active: store.controlMenu === item.key}"
                 @click="store.controlMenu = item.key"
             >
-                <span class="menu-icon">{{ item.icon }}</span>
+                <component :is="item.icon" class="menu-icon" :size="19" aria-hidden="true"/>
                 <span>{{ item.label }}</span>
                 <span v-if="item.key === 'about' && updater.available" class="update-dot" role="img" aria-label="有新版本可更新" title="有新版本可更新"></span>
             </button>
@@ -27,6 +27,7 @@
 </template>
 
 <script setup>
+import {settingsMenu} from '../../../shared/piano/settingsMenu'
 import {inject, onBeforeUnmount} from 'vue'
 import BasicSettings from './settings/BasicSettings.vue'
 import MidiDevicesSettings from './settings/MidiDevicesSettings.vue'
@@ -41,15 +42,7 @@ const store = inject('store')
 const updater = useUpdater()
 const changeConfig = inject('changeConfig')
 
-const menus = [
-    {key: 'basic', label: '基础设置', icon: '⌘'},
-    {key: 'devices', label: 'MIDI 设备', icon: '🎛'},
-    {key: 'keyboard', label: '键盘显示', icon: '🎹'},
-    {key: 'keymap', label: '按键方案', icon: '⌨'},
-    {key: 'appearance', label: '外观主题', icon: '🎨'},
-    {key: 'soundfont', label: '音源管理', icon: '🎧'},
-    {key: 'about', label: '关于软件', icon: 'i'},
-]
+const menus = settingsMenu
 
 onBeforeUnmount(() => {
     changeConfig?.()

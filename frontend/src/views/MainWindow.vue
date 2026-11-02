@@ -35,6 +35,7 @@
                 </NRadioGroup>
                 <button class="tool-button settings-toggle" type="button" :aria-expanded="panel === 'settings'" title="设置"
                     @pointerdown.prevent @click="openPanel('settings')"><PhGearSix :size="20" /><span>设置</span></button>
+                <button class="tool-button" type="button" title="MIDI 工坊" @pointerdown.prevent @click="openWorkspace()"><PhUsersThree :size="20"/><span>工坊</span></button>
                 <template v-if="!isMac">
                     <span class="toolbar-separator"></span>
                     <button class="window-button" type="button" aria-label="最小化" title="最小化" @pointerdown.prevent @click="minimize"><PhMinus :size="16" /></button>
@@ -60,7 +61,8 @@
                 <div class="menu-links">
                     <button type="button" @click="openPanel('library')"><PhMusicNotes :size="20" /><span>曲库</span><PhArrowRight :size="16" /></button>
                     <button type="button" @click="changeMode('play', true)"><PhPlay :size="20" /><span>MIDI 播放</span><PhArrowRight :size="16" /></button>
-                    <button type="button" @click="changeMode('follow', true)"><PhPianoKeys :size="20" /><span>跟弹练习</span><PhArrowRight :size="16" /></button>
+                    <button type="button" @click="openWorkspace()"><PhUsersThree :size="20"/><span>MIDI 工坊</span><PhArrowRight :size="16"/></button>
+                    <button type="button" @click="openWorkspace('practice')"><PhPianoKeys :size="20"/><span>练习</span><PhArrowRight :size="16"/></button>
                     <button type="button" @click="openFullSettings"><PhGearSix :size="20" /><span>完整设置</span><PhArrowUpRight :size="16" /></button>
                 </div>
                 <footer class="menu-footer">
@@ -74,6 +76,7 @@
             @update:show="show => { if (!show) closePanel() }">
             <MidiLibraryPanel :session="session" :style="uiTheme.cssVariables" @selected="selectLibrarySong" @close="closePanel" />
         </NModal>
+
 
         <Transition name="panel">
             <QuickPianoSettings v-if="panel === 'settings' && !isSimple" class="floating-panel settings-panel"
@@ -105,9 +108,9 @@
 import {computed, inject, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch} from 'vue'
 import {useRoute, useRouter} from 'vue-router'
 import {Events, System, Window} from '@wailsio/runtime'
-import {NButton, NModal, NRadioButton, NRadioGroup} from 'naive-ui'
+import {NButton, NRadioButton, NRadioGroup} from 'naive-ui'
 import {PhList, PhMinus, PhArrowsOutSimple, PhX, PhPianoKeys, PhPlay,
-    PhArrowRight, PhArrowUpRight, PhMusicNotes, PhGearSix, PhPower, PhChartBar} from '@phosphor-icons/vue'
+    PhArrowRight, PhArrowUpRight, PhMusicNotes, PhGearSix, PhPower, PhChartBar, PhUsersThree} from '@phosphor-icons/vue'
 import ClassicKeyboard from '../components/ClassicKeyboard.vue'
 import Chord from '../components/Chord.vue'
 import WaterfallCanvas from '../components/WaterfallCanvas.vue'
@@ -248,6 +251,11 @@ function closePanel() {
 function dismissOutside(event) {
     if (event.target.closest?.('[data-piano-control]')) return
     closePanel()
+}
+async function openWorkspace(view = 'library') {
+    if(recording.state.status==='recording'&&!await recording.stop())return
+    closePanel()
+    await Keyboard.OpenLibraryWindow(view)
 }
 async function openPanel(name) {
     if (isSimple.value && !await setDisplayMode('waterfall')) return
@@ -400,7 +408,7 @@ onMounted(async () => {
         if (signal.type === 'noteOn' && panel.value === 'menu') closePanel()
     })
     window.addEventListener('keydown', keydown, true)
-    unsubscribeMidiRequest = Events.On('mainMidiModeRequested', event => changeMode(event.data?.mode === 'follow' ? 'follow' : 'play'))
+    unsubscribeMidiRequest = Events.On('mainMidiModeRequested', event => changeMode(event.data?.mode === 'follow' ? 'follow' : 'play',!!event.data?.chooseSong))
     try {
         const state = await Keyboard.GetMainWindowPresentation()
         store.mainDisplayMode = state.mode

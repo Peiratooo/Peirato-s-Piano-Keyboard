@@ -77,7 +77,7 @@ export function useMidiSession({store, Keyboard}) {
     }
     function buildOptions(overrides = {}) {
         return {midiId: selectedId.value, ...options, rightMs: options.rightMs || durationMs.value,
-            leadWindowMs: 80, groupWindowMs: 80, ...overrides}
+            leadWindowMs: 300, groupWindowMs: 80, ...overrides}
     }
     async function loadLibrary() {
         const items = await Keyboard.GetMidiStore()
@@ -319,7 +319,15 @@ export function useMidiSession({store, Keyboard}) {
     }
     const stopWatching = watch(() => store.midiPlayerState, (current, previous) => {
         receivedAt.value = performance.now()
-        if (!selectedId.value || current?.midiId !== selectedId.value || loading.value) return
+        if (loading.value) return
+        if (current?.midiId && current.midiId !== selectedId.value) {
+            store.mainMode = current.mode === 'follow' ? 'follow' : 'play'
+            loading.value=true
+            void enqueue(async()=>{try{await loadLibrary();await loadSelection(current.midiId,++selectionVersion,true)}finally{loading.value=false}})
+            return
+        }
+        if (!selectedId.value || current?.midiId !== selectedId.value) return
+        if (current.status !== 'idle') store.mainMode = current.mode === 'follow' ? 'follow' : 'play'
         if (current.status === 'idle' && previous?.status === 'idle' && current.midiId === previous.midiId) return
         localCurrent.value = Number(current.currentMs) || 0
         for (const key of ['mode', 'handMode', 'speed', 'leftMs', 'rightMs', 'loop']) {
