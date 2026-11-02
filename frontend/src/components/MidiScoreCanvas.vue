@@ -120,6 +120,9 @@ function render(now) {
     const w = props.width, h = props.height
     ctx.fillStyle = '#1d1d1d'
     ctx.fillRect(0, 0, w, h)
+    ctx.fillStyle = '#858585'
+    ctx.font = '11px "Segoe UI", sans-serif'
+    ctx.fillText('五线谱演奏预览', Math.max(6, w - 108), 13)
     const time = currentMs(now), speed = Math.max(.25, Number(clock.state?.speed) || 1)
     const pxPerMs = Math.max(0.025, w * .72 / (6000 * speed))
     const playX = Math.max(88, Math.min(w * .27, 250))
