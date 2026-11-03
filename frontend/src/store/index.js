@@ -32,8 +32,8 @@ export const data = defineStore('data', {
             backendPressedKey: {},
             interactiveKeys: {},
             pressedKeyHands: {},
-            midiPlaybackKey: {},
-            midiPlaybackLeftKey: {},
+            midiPlaybackVoices: {},
+            midiPlaybackHands: {},
             midiHintKey: {},
             midiHintLeftKey: {},
             midiPlayerState: {
@@ -138,23 +138,35 @@ export const data = defineStore('data', {
         },
         setPressedHand(key, hand) {
             this.pressedKeyHands[key] = hand === 'left' || hand === 'right' ? hand
-                : this.midiPlaybackKey[key] || this.midiHintKey[key] ? 'right'
-                    : this.midiPlaybackLeftKey[key] || this.midiHintLeftKey[key] ? 'left' : 'right'
+                : this.midiHintLeftKey[key] && !this.midiHintKey[key] ? 'left'
+                    : this.midiHintKey[key] ? 'right' : this.midiPlaybackHands[key] || 'right'
         },
-        setMidiVisualKey(key, hand, active, source = 'playback') {
+        setMidiVisualKey(key, hand, active, source = 'playback', voice = '') {
             const isLeft = hand === 'left'
-            const target = source === 'followHint'
-                ? (isLeft ? this.midiHintLeftKey : this.midiHintKey)
-                : (isLeft ? this.midiPlaybackLeftKey : this.midiPlaybackKey)
-            target[key] = active
+            if (source === 'followHint') {
+                const target = isLeft ? this.midiHintLeftKey : this.midiHintKey
+                target[key] = active
+                return
+            }
+            const voices = this.midiPlaybackVoices[key] ||= {}
+            // Tracks may overlap on the same pitch. Release only that voice;
+            // the most recent sounding note determines the key's color.
+            delete voices[voice]
+            if (active) voices[voice] = isLeft ? 'left' : 'right'
+            const hands = Object.values(voices)
+            if (hands.length) this.midiPlaybackHands[key] = hands.at(-1)
+            else {
+                delete this.midiPlaybackHands[key]
+                delete this.midiPlaybackVoices[key]
+            }
         },
         clearMidiHints() {
             this.midiHintKey = {}
             this.midiHintLeftKey = {}
         },
         clearMidiVisualKeys() {
-            this.midiPlaybackKey = {}
-            this.midiPlaybackLeftKey = {}
+            this.midiPlaybackVoices = {}
+            this.midiPlaybackHands = {}
             this.clearMidiHints()
         },
         clearAllKeys() {

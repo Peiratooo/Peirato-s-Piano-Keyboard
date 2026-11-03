@@ -10,8 +10,7 @@ export function numberedPitch(midi, tonic = 0) {
 }
 
 export function keyHand(store, key) {
-    if (store.midiPlaybackKey[key]) return 'right'
-    if (store.midiPlaybackLeftKey[key]) return 'left'
+    if (store.midiPlaybackHands[key]) return store.midiPlaybackHands[key]
     if (store.pressedKey[key]) return store.pressedKeyHands[key] || 'right'
     return store.midiHintLeftKey[key] && !store.midiHintKey[key] ? 'left' : 'right'
 }
@@ -19,7 +18,7 @@ export function keyHand(store, key) {
 export function keyVisualClass(store, item) {
     const key = item.index
     const prefix = item.color === 'black' ? 'b' : 'w'
-    if (store.pressedKey[key] || store.midiPlaybackKey[key] || store.midiPlaybackLeftKey[key]) {
+    if (store.pressedKey[key] || store.midiPlaybackHands[key]) {
         return `${prefix}${keyHand(store, key) === 'left' ? '-l' : ''}-active`
     }
     if (store.midiHintKey[key]) return `${prefix}-hint`

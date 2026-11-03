@@ -93,7 +93,8 @@ type Midi struct {
 	Events []MidiEvent `json:"-"`
 
 	// Source measure positions for score formats that do not use SMF files.
-	ScoreMeasures []MidiMeasureMark `json:"-"`
+	ScoreMeasures []MidiMeasureMark  `json:"-"`
+	KeySignatures []MidiKeySignature `json:"-"`
 }
 
 type MidiEvent struct {
@@ -205,7 +206,7 @@ func (k *Keyboard) OpenMidiFileDialog() (UserMidi, error) {
 
 	path, err := App.Dialog.OpenFile().
 		SetTitle("选择乐谱文件").
-		AddFilter("乐谱与 MIDI", "*.mid;*.midi;*.musicxml;*.xml;*.mxl").
+		AddFilter("MIDI / MusicXML", "*.mid;*.midi;*.musicxml;*.xml;*.mxl").
 		AddFilter("All Files", "*.*").
 		PromptForSingleSelection()
 	if err != nil {
@@ -235,6 +236,9 @@ func (k *Keyboard) AddMidiByPath(path string) (UserMidi, error) {
 		config.MidiStore = append(config.MidiStore, userMidi)
 		err = SaveConfig(config)
 		if err == nil {
+			if App != nil {
+				App.Event.Emit("midiLibraryChanged")
+			}
 			return userMidi, nil
 		}
 		if !strings.Contains(err.Error(), "设置已被其他窗口修改") {
@@ -503,6 +507,41 @@ func ParseMidiFile(path string) (*Midi, error) {
 	applyHandsToEvents(events, handByTrack)
 	sortMidiEvents(events)
 
+	// Prefer the conductor/lowest track when a file repeats key metadata in
+	// several tracks. Keep both the written signature and its major/minor mode.
+	keyTracks := make(map[uint64]int)
+	keyChanges := make(map[uint64]MidiKeySignature)
+	if ppq > 0 {
+		for trackIndex, track := range raw.Tracks {
+			var tick uint64
+			for _, event := range track {
+				tick += uint64(event.Delta)
+				var key smf.Key
+				if !event.Message.GetMetaKey(&key) || key.Num > 7 {
+					continue
+				}
+				if previous, ok := keyTracks[tick]; ok && previous < trackIndex {
+					continue
+				}
+				fifths, mode := int(key.Num), "major"
+				if key.IsFlat {
+					fifths = -fifths
+				}
+				if !key.IsMajor {
+					mode = "minor"
+				}
+				keyTracks[tick] = trackIndex
+				keyChanges[tick] = MidiKeySignature{StartBeat: float64(tick) / float64(ppq),
+					Ms: float64(raw.TimeAt(int64(tick))) / 1000, Fifths: fifths, Mode: mode}
+			}
+		}
+	}
+	keys := make([]MidiKeySignature, 0, len(keyChanges))
+	for _, key := range keyChanges {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool { return keys[i].StartBeat < keys[j].StartBeat })
+
 	return &Midi{
 		UserMidi: UserMidi{
 			ID:         id,
@@ -514,10 +553,11 @@ func ParseMidiFile(path string) (*Midi, error) {
 			DurationMs: durationMs,
 			TrackCount: int(raw.NumTracks()),
 		},
-		Format:       raw.Format(),
-		PPQ:          ppq,
-		DurationTick: durationTick,
-		Events:       events,
+		Format:        raw.Format(),
+		PPQ:           ppq,
+		DurationTick:  durationTick,
+		Events:        events,
+		KeySignatures: keys,
 	}, nil
 }
 
@@ -731,7 +771,7 @@ func validateMidiPath(path string) (string, error) {
 
 	ext := strings.ToLower(filepath.Ext(absPath))
 	if ext != ".mid" && ext != ".midi" && !isMusicXMLPath(absPath) {
-		return "", errors.New("只支持 .mid、.midi、.musicxml、.xml 或 .mxl")
+		return "", errors.New("只支持 MIDI、MusicXML、MXL 或 MSCZ 乐谱文件")
 	}
 
 	info, err := os.Stat(absPath)

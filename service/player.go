@@ -92,13 +92,13 @@ type MidiPracticeStep struct {
 }
 
 type MidiVisualEvent struct {
-	Note     int      `json:"note"`
-	Velocity int      `json:"velocity"`
-	Channel  uint8    `json:"channel"`
-	Hand     MidiHand `json:"hand"`
-	Source   string   `json:"source"`
-	Active   bool     `json:"active"`
-	Attack   bool     `json:"attack"`
+	TrackIndex int      `json:"trackIndex"`
+	Note       int      `json:"note"`
+	Velocity   int      `json:"velocity"`
+	Channel    uint8    `json:"channel"`
+	Hand       MidiHand `json:"hand"`
+	Source     string   `json:"source"`
+	Active     bool     `json:"active"`
 }
 
 type MidiPlayerRuntime struct {
@@ -974,7 +974,6 @@ func (p *MidiPlayerRuntime) restoreAtLocked(ms float64) {
 	active := make(map[midiRestoreNoteKey]MidiEvent)
 	sustained := make(map[midiRestoreNoteKey]MidiEvent)
 	controllers := make(map[int]map[int]int)
-	programs := make(map[int]int)
 	sustain := make(map[int]bool)
 	for _, event := range p.events[:findMidiEventIndexByMs(p.events, ms)] {
 		if event.Channel < 0 || event.Channel > 15 || p.state.MutedTracks[event.TrackIndex] {
@@ -1017,8 +1016,6 @@ func (p *MidiPlayerRuntime) restoreAtLocked(ms float64) {
 					}
 				}
 			}
-		case MidiEventProgramChange:
-			programs[ch] = event.Program
 		case MidiEventNoteOn, MidiEventNoteOff:
 			if p.shouldMuteEventLocked(event) || event.Note < 0 || event.Note > 127 {
 				continue
@@ -1036,10 +1033,11 @@ func (p *MidiPlayerRuntime) restoreAtLocked(ms float64) {
 		}
 	}
 	for ch := 0; ch < 16; ch++ {
-		if program, ok := programs[ch]; ok {
-			playSelectedOutputProgramChange(uint8(ch), uint8(clampMidiByte(program)))
-		}
 		for controller := 0; controller <= 119; controller++ {
+			// Bank selection belongs to the instrument chosen on the keyboard.
+			if controller == 0 || controller == 32 {
+				continue
+			}
 			if value, ok := controllers[ch][controller]; ok {
 				playSelectedOutputControlChange(uint8(ch), uint8(controller), uint8(clampMidiByte(value)))
 			}
@@ -1049,9 +1047,14 @@ func (p *MidiPlayerRuntime) restoreAtLocked(ms float64) {
 		playSelectedOutputNoteOn(uint8(note.Channel), uint8(note.Note), midiPlaybackVelocity(note.Velocity))
 		playSelectedOutputNoteOff(uint8(note.Channel), uint8(note.Note))
 	}
+	activeNotes := make([]MidiEvent, 0, len(active))
 	for _, note := range active {
+		activeNotes = append(activeNotes, note)
+	}
+	sortMidiEvents(activeNotes)
+	for _, note := range activeNotes {
 		playSelectedOutputNoteOn(uint8(note.Channel), uint8(note.Note), midiPlaybackVelocity(note.Velocity))
-		emitMidiPlaybackKey(note, uint8(note.Channel), true, false)
+		emitMidiPlaybackKey(note, uint8(note.Channel), true)
 	}
 }
 
@@ -1097,17 +1100,18 @@ func dispatchMidiEvent(event MidiEvent, emitVisual bool) {
 	case MidiEventNoteOn:
 		playSelectedOutputNoteOn(channel, uint8(event.Note), midiPlaybackVelocity(event.Velocity))
 		if emitVisual {
-			emitMidiPlaybackKey(event, channel, true, true)
+			emitMidiPlaybackKey(event, channel, true)
 		}
 	case MidiEventNoteOff:
 		playSelectedOutputNoteOff(channel, uint8(event.Note))
 		if emitVisual {
-			emitMidiPlaybackKey(event, channel, false, false)
+			emitMidiPlaybackKey(event, channel, false)
 		}
 	case MidiEventControlChange:
+		if event.Controller == 0 || event.Controller == 32 {
+			return
+		}
 		playSelectedOutputControlChange(channel, uint8(clampMidiByte(event.Controller)), uint8(clampMidiByte(event.Value)))
-	case MidiEventProgramChange:
-		playSelectedOutputProgramChange(channel, uint8(clampMidiByte(event.Program)))
 	}
 }
 
@@ -1128,18 +1132,18 @@ func emitMidiPlayerState(state MidiPlayerState) {
 	}
 }
 
-func emitMidiPlaybackKey(event MidiEvent, channel uint8, active, attack bool) {
+func emitMidiPlaybackKey(event MidiEvent, channel uint8, active bool) {
 	if App == nil {
 		return
 	}
 	App.Event.Emit("midiPlaybackKey", MidiVisualEvent{
-		Note:     event.Note,
-		Velocity: event.Velocity,
-		Channel:  channel,
-		Hand:     event.Hand,
-		Source:   "playback",
-		Active:   active,
-		Attack:   attack,
+		TrackIndex: event.TrackIndex,
+		Note:       event.Note,
+		Velocity:   event.Velocity,
+		Channel:    channel,
+		Hand:       event.Hand,
+		Source:     "playback",
+		Active:     active,
 	})
 }
 

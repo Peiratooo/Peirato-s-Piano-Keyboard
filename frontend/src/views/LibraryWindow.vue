@@ -39,6 +39,9 @@ async function togglePlayback() {
 }
 
 async function returnToPiano() {
+    if (session.selectedId && session.mode !== 'free' && !['playing', 'paused'].includes(session.state.status)) {
+        await Events.Emit('mainMidiModeRequested', {mode: session.mode, midiId: session.selectedId})
+    }
     await Keyboard.ReturnToPiano()
 }
 
@@ -50,9 +53,17 @@ const offNavigate = Events.On('libraryNavigate', ({data}) => {
     view.value = data
     void session.refreshLibrary()
 })
+const offDrop = Events.On('scoreFilesDropped', async ({data}) => {
+    if (!await session.importPaths(data)) return
+    view.value = 'library'
+    if (!['playing', 'paused'].includes(session.state.status)) {
+        await Events.Emit('mainMidiModeRequested', {mode: session.mode, midiId: session.selectedId})
+    }
+})
 onMounted(() => session.initialize())
 onBeforeUnmount(() => {
     offNavigate()
+    offDrop()
     session.dispose()
 })
 </script>

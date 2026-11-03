@@ -914,7 +914,9 @@ func clearMidiPlaybackOutput() {
 		return
 	}
 	for channel := uint8(0); channel < 16; channel++ {
-		for _, controller := range []uint8{midiCCAllSoundOff, midiCCResetControllers, midiCCAllNotesOff} {
+		// Release notes and pedals without resetting the keyboard's controllers
+		// or voice settings when playback pauses, loops, seeks, or ends.
+		for _, controller := range []uint8{midiCCSustain, 66, 69, midiCCAllNotesOff, midiCCAllSoundOff} {
 			if err := device.Device.Send(midi.ControlChange(channel, controller, 0)); err != nil {
 				fmt.Println("清理 MIDI 播放输出失败:", err)
 				return

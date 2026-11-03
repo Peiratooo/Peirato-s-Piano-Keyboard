@@ -38,26 +38,11 @@ import {data} from './store'
 import FeedbackBridge from './components/FeedbackBridge.vue'
 import {useUpdater} from './store/updater'
 import {createComputerKeyboard, setKeyboardMappingLabels} from './services/computerKeyboard'
-import {acceptLivePerformance, subscribeLivePerformance} from './services/livePerformance'
+import {acceptLivePerformance} from './services/livePerformance'
 import {getKeyLabelColor, getPianoUiTheme} from './services/uiTheme'
 import {changeColor, composite, rgba} from 'seemly'
 
 const store = data()
-provide('subscribeKeyboardFeedback', listener => {
-    const subscriptions = [
-        Events.On('midiPlaybackKey', event => {
-            const signal = event.data
-            if (signal?.active && signal.attack && store.midiPlayerState.status === 'playing') listener({type: 'attack', note: signal.note, hand: signal.hand})
-        }),
-        Events.On('midiVisualClear', () => listener({type: 'clear'})),
-        Events.On('allNotesOff', () => listener({type: 'clear'})),
-        subscribeLivePerformance(signal => {
-            if (signal.type === 'clear') listener({type: 'clear'})
-            else if (signal.type === 'noteOn') listener({type: 'attack', note: signal.note})
-        }),
-    ]
-    return () => subscriptions.forEach(unsubscribe => unsubscribe())
-})
 const updater = useUpdater()
 const route = useRoute()
 const isMainWindow = computed(() => route.path === '/')
@@ -374,7 +359,7 @@ function registerBackendEvents() {
     })
     on('midiPlaybackKey', (signal) => {
         if (!signal) return
-        store.setMidiVisualKey(signal.note, signal.hand, !!signal.active, 'playback')
+        store.setMidiVisualKey(signal.note, signal.hand, !!signal.active, 'playback', `${signal.trackIndex}:${signal.channel}`)
     })
     on('midiFollowHint', (step) => {
         store.clearMidiHints()

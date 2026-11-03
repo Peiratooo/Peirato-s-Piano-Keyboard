@@ -12,10 +12,18 @@ import (
 // MidiTimeline is read-only score data. Its timing uses the same song
 // milliseconds as MidiPlayerState rather than the frontend animation clock.
 type MidiTimeline struct {
-	MidiID     string             `json:"midiId"`
-	DurationMs float64            `json:"durationMs"`
-	Notes      []MidiTimelineNote `json:"notes"`
-	Measures   []MidiMeasureMark  `json:"measures"`
+	MidiID        string             `json:"midiId"`
+	DurationMs    float64            `json:"durationMs"`
+	Notes         []MidiTimelineNote `json:"notes"`
+	Measures      []MidiMeasureMark  `json:"measures"`
+	KeySignatures []MidiKeySignature `json:"keySignatures"`
+}
+
+type MidiKeySignature struct {
+	StartBeat float64 `json:"startBeat"`
+	Ms        float64 `json:"ms"`
+	Fifths    int     `json:"fifths"`
+	Mode      string  `json:"mode"`
 }
 
 // Measure 1 starts at 0. Later markers are the true bar starts derived from
@@ -23,6 +31,7 @@ type MidiTimeline struct {
 type MidiMeasureMark struct {
 	Index       int     `json:"index"`
 	Ms          float64 `json:"ms"`
+	StartBeat   float64 `json:"startBeat"`
 	Numerator   int     `json:"numerator,omitempty"`
 	Denominator int     `json:"denominator,omitempty"`
 }
@@ -33,6 +42,7 @@ type MidiTimelineNote struct {
 	StartMs    float64  `json:"startMs"`
 	StartBeat  float64  `json:"startBeat"`
 	EndMs      float64  `json:"endMs"`
+	EndBeat    float64  `json:"endBeat"`
 	Velocity   int      `json:"velocity"`
 	Hand       MidiHand `json:"hand"`
 	TrackIndex int      `json:"trackIndex"`
@@ -53,10 +63,11 @@ func (k *Keyboard) GetMidiTimeline(id string) (MidiTimeline, error) {
 
 func buildMidiTimeline(midiFile *Midi) MidiTimeline {
 	timeline := MidiTimeline{
-		MidiID:     midiFile.ID,
-		DurationMs: max(0, midiFile.DurationMs),
-		Notes:      make([]MidiTimelineNote, 0, len(midiFile.Events)/2),
-		Measures:   midiMeasureMarkers(midiFile),
+		MidiID:        midiFile.ID,
+		DurationMs:    max(0, midiFile.DurationMs),
+		Notes:         make([]MidiTimelineNote, 0, len(midiFile.Events)/2),
+		Measures:      midiMeasureMarkers(midiFile),
+		KeySignatures: append([]MidiKeySignature{}, midiFile.KeySignatures...),
 	}
 	// Cached events are shared with the player: normalize a copy, including
 	// velocity-zero NoteOn as NoteOff, before ordering simultaneous retriggers.
@@ -87,6 +98,7 @@ func buildMidiTimeline(midiFile *Midi) MidiTimeline {
 				Note:       event.Note,
 				StartMs:    ms,
 				EndMs:      timeline.DurationMs,
+				EndBeat:    float64(midiFile.DurationTick) / float64(max(1, midiFile.PPQ)),
 				Velocity:   event.Velocity,
 				Hand:       event.Hand,
 				TrackIndex: event.TrackIndex,
@@ -100,6 +112,7 @@ func buildMidiTimeline(midiFile *Midi) MidiTimeline {
 			continue // Unmatched NoteOff does not create a visual note.
 		}
 		timeline.Notes[queue[0]].EndMs = ms
+		timeline.Notes[queue[0]].EndBeat = float64(event.Tick) / float64(max(1, midiFile.PPQ))
 		if len(queue) == 1 {
 			delete(pending, key)
 		} else {
@@ -194,6 +207,7 @@ func midiMeasureMarkers(file *Midi) []MidiMeasureMark {
 		if len(markers) == 0 || ms > markers[len(markers)-1].Ms+epsilon {
 			markers = append(markers, MidiMeasureMark{
 				Index: index, Ms: math.Max(0, ms),
+				StartBeat:   cursor / ppq,
 				Numerator:   int(meters[meterIndex].numerator),
 				Denominator: int(meters[meterIndex].denominator),
 			})

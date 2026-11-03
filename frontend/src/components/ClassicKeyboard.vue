@@ -1,7 +1,6 @@
 <template>
     <div
         class="classic-keyboard"
-        :class="{'has-note-feedback': hasNoteFeedback}"
         ref="keybed"
         @pointermove="movePointer"
         @pointerup="releasePointer"
@@ -35,57 +34,17 @@
 </template>
 
 <script setup>
-import {computed, inject, onBeforeUnmount, onMounted, ref, watch} from 'vue'
-import {numberedPitch, keyVisualClass, keyHand} from '../services/keyDisplay'
+import {computed, inject, onBeforeUnmount, onMounted, ref} from 'vue'
+import {numberedPitch, keyVisualClass} from '../services/keyDisplay'
 import {createKeyboardLayout} from '../services/keyboardLayout'
-import {getKeyLabelColor} from '../services/uiTheme'
 
 const props = defineProps({layout: {type: Array, default: null}, showHints: {type: Boolean, default: true}})
 
 const store = inject('store')
 const setInteractiveKey = inject('setInteractiveKey')
-const subscribeKeyboardFeedback = inject('subscribeKeyboardFeedback')
 const keybed = ref(null)
 const keybedWidth = ref(0)
 let resizeObserver = null
-const attackAnimations = new Map()
-const feedbackUnsubscribers = []
-const hasNoteFeedback = computed(() => store.mainMode !== 'free'
-    || ['playing', 'paused'].includes(store.midiPlayerState?.status))
-
-// Note-on is an event, rather than a change of held state. Replaying this
-// animation also works when NoteOff/NoteOn arrive in one Vue render frame.
-function flashAttack(note, hand = keyHand(store, note)) {
-    if (!Number.isInteger(note) || note < 0 || note > 127) return
-    const element = keybed.value?.querySelector(`[data-midi-note="${note}"]`)
-    if (!element?.animate) return
-    const black = element.classList.contains('black')
-    const left = hand === 'left' && !store.midiPlaybackKey[note]
-    const token = `${black ? 'blackKey' : 'whiteKey'}${left ? 'Left' : ''}`
-    const palette = store.config.colors?.[token]
-    const color = (typeof palette === 'string' ? palette : palette?.color)
-        || (left ? '#f7e89a' : '#9af7b3')
-    const base = black ? '#242628' : '#f5f4f0'
-    const baseText = black ? '#eeeeee' : '#616161'
-    const activeText = getKeyLabelColor(color)
-    attackAnimations.get(element)?.cancel()
-    const animation = element.animate([
-        {backgroundColor: base, color: baseText, offset: 0},
-        {backgroundColor: base, color: baseText, offset: .3},
-        {backgroundColor: color, color: activeText, offset: .7},
-        {backgroundColor: color, color: activeText, offset: 1},
-    ], {duration: 100, easing: 'linear'})
-    attackAnimations.set(element, animation)
-    const forget = () => {
-        if (attackAnimations.get(element) === animation) attackAnimations.delete(element)
-    }
-    animation.onfinish = forget
-    animation.oncancel = forget
-}
-function clearAttackFeedback() {
-    for (const animation of attackAnimations.values()) animation.cancel()
-    attackAnimations.clear()
-}
 
 const pointers = new Map()
 
@@ -160,23 +119,12 @@ onMounted(() => {
     resizeObserver.observe(keybed.value)
     keybedWidth.value = keybed.value.clientWidth
     window.addEventListener('blur', releasePointers)
-    feedbackUnsubscribers.push(subscribeKeyboardFeedback(signal => {
-        if (signal.type === 'clear') clearAttackFeedback()
-        else if (hasNoteFeedback.value) flashAttack(signal.note, signal.hand)
-    }))
-})
-
-watch(() => [store.mainMode, store.config.keyboardType], clearAttackFeedback)
-watch(() => store.midiPlayerState?.status, status => {
-    if (status !== 'playing') clearAttackFeedback()
 })
 
 onBeforeUnmount(() => {
     releasePointers()
     resizeObserver?.disconnect()
     window.removeEventListener('blur', releasePointers)
-    for (const unsubscribe of feedbackUnsubscribers) unsubscribe()
-    clearAttackFeedback()
 })
 </script>
 
@@ -193,12 +141,10 @@ onBeforeUnmount(() => {
     position: absolute;
     top: 0;
     box-sizing: border-box;
-    transition: background-color 100ms, box-shadow 100ms;
     height: 100%;
     user-select: none;
 }
 
-.has-note-feedback .key { transition: none; }
 
 .practice-dot {
     --hint-color: var(--whiteKey);
@@ -299,12 +245,12 @@ onBeforeUnmount(() => {
 .key::after {
     content: '';
     position: absolute;
-    inset: 1px;
+    inset: 0;
+    box-sizing: border-box;
     border: 1px solid transparent;
-    border-radius: 0 0 1px 1px;
+    border-radius: inherit;
     pointer-events: none;
 }
-.black::after { border-radius: 0 0 2px 2px; }
 .w-hint::after { border-color: var(--whiteKey); }
 .w-l-hint::after { border-color: var(--whiteKeyLeft); }
 .b-hint::after { border-color: var(--blackKey); }

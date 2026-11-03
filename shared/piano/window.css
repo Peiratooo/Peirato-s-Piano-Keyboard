@@ -88,8 +88,9 @@ button:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 3px;
 @media (prefers-reduced-motion: reduce) { *, .is-simple .toolbar { transition: none !important; } }
 
 .practice-view-switch { display: flex; align-items: center; gap: 2px; padding-right: 9px; border-right: 1px solid #ffffff12; }
-.difficulty-select { width: 85px; min-width: 70px; --n-height: 28px; }
 .view-button { color: #858585; border-radius: 5px; }
 .view-button .n-button__content { display: flex; gap: 5px; align-items: center; font-size: 11px; }
 .view-button.is-selected { color: var(--ui-accent); background: var(--ui-accent-soft); }
 @media (max-width: 1150px) { .view-button span { display: none; } }
+
+.score-import-status { position:absolute; z-index:35; top:calc(var(--toolbar-height) + 10px); right:18px; margin:0; padding:10px 14px; border:1px solid #ffffff24; border-radius:7px; background:#292929; color:#ddd; font-size:12px; line-height:1.4; }

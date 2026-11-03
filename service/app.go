@@ -84,6 +84,7 @@ func Run(assets embed.FS) {
 		Hidden: true,
 	})
 	App.Window.Add(PianoWin)
+	installScoreFileDrop(PianoWin)
 	installMainWindowPresentation()
 	installMainWindowCloseHandler()
 
@@ -250,11 +251,22 @@ func (k *Keyboard) OpenLibraryWindow(view string) {
 	}
 	LibraryWin = App.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title: appDisplayName + " · 曲库", URL: "/#/library?view=" + view, Width: 1180, Height: 780, MinWidth: 780, MinHeight: 560,
-		BackgroundType: application.BackgroundTypeSolid, BackgroundColour:application.NewRGBA(43,43,43,255), DevToolsEnabled: !PRODUCTION,
+		BackgroundType: application.BackgroundTypeSolid, BackgroundColour: application.NewRGBA(43, 43, 43, 255), DevToolsEnabled: !PRODUCTION,
+		EnableFileDrop: true,
 	})
+	installScoreFileDrop(LibraryWin)
 	LibraryWin.OnWindowEvent(events.Common.WindowClosing, func(e *application.WindowEvent) { LibraryWin = nil })
 	App.Window.Add(LibraryWin)
 	LibraryWin.Show()
+}
+
+func installScoreFileDrop(window *application.WebviewWindow) {
+	window.OnWindowEvent(events.Common.WindowFilesDropped, func(event *application.WindowEvent) {
+		window.DispatchWailsEvent(&application.CustomEvent{
+			Name: "scoreFilesDropped",
+			Data: event.Context().DroppedFiles(),
+		})
+	})
 }
 func (k *Keyboard) ReturnToPiano() error {
 	if _, err := k.SetMainDisplayMode(mainDisplayWaterfall); err != nil {

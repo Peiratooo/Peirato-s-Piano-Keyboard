@@ -1,249 +1,477 @@
 <template>
-    <section class="score-panel" :style="{width: width + 'px', height: height + 'px'}"
-        :aria-label="scoreDocument?.native ? 'MusicXML 原谱五线谱' : 'MIDI 自动生成五线谱'">
-        <div v-show="!fallback" ref="engraving" class="engraving" aria-hidden="true">
-            <div ref="scoreSurface" class="score-surface"></div>
+    <section class="score-panel" :style="{width: width + 'px', height: height + 'px'}" aria-label="五线谱" data-piano-control @wheel="browseWheel">
+        <div ref="viewport" class="engraving" :class="{'is-dragging': dragging}" tabindex="0" aria-label="横向浏览乐谱"
+            title="拖动或滚轮横向浏览；Alt + 滚轮纵向浏览" @scroll.passive="onViewportScroll"
+            @pointerdown="beginPan" @pointermove="movePan" @pointerup="endPan"
+            @pointerleave="!dragging && endPan($event)"
+            @pointercancel="endPan" @lostpointercapture="endPan" @keydown="browseByKey"
+            @click="seekNote" @keydown.enter.prevent="seekNote" @keydown.space.prevent="seekNote">
+            <div ref="scoreSurface" class="score-surface" :style="{marginLeft: musicStart - firstNoteX + 'px', top: sourceTop + 'px'}"></div>
         </div>
-        <MidiScoreCanvas v-if="fallback" :width="width" :height="height"
-            :active="active" :timeline="timeline" :player-state="playerState" :hand-mode="handMode" />
-        <div v-if="!fallback" class="playhead" :class="{'is-waiting': playerState.waiting}"
-            :style="{left: playheadX + 'px'}" aria-hidden="true"></div>
-        <span class="score-caption">{{ pending ? '正在排版五线谱…' : fallback ? '简化演奏谱 · 排版不可用' : scoreDocument?.native ? 'MusicXML 原谱' : 'MIDI 自动排版（推定）' }}</span>
+        <div v-show="layoutReady" class="signature-panel" :style="{width: signatureWidth + 'px'}" aria-label="谱号、调号与拍号">
+            <div ref="signatureSurface" class="signature-surface" :style="{top: sourceTop - scrollY + 'px'}"></div>
+        </div>
+        <button v-if="browsing && layoutReady" class="resume-follow" @click="resumeFollow">回到播放位置</button>
+        <div v-if="layoutReady" v-show="cursorLeft >= musicStart - 14 && cursorLeft <= width - 8" class="playhead" :class="{'is-waiting': playerState.waiting}"
+            :style="{left: cursorLeft + 'px'}" aria-hidden="true"></div>
+        <p v-if="error" class="score-message" role="status">{{error}}</p>
+        <span class="score-caption">{{pending ? '正在排版…' : scoreDocument?.native ? '原谱' : timeline?.keySignatures?.length ? '自动记谱' : '自动记谱 · 文件未提供调号'}}</span>
     </section>
 </template>
 
 <script setup>
 import {computed, nextTick, onBeforeUnmount, onMounted, ref, watch} from 'vue'
-import MidiScoreCanvas from './MidiScoreCanvas.vue'
-import {midiTimelineToMusicXML} from '../services/midiScoreNotation'
+import {Key} from 'tonal'
+import {midiTimelineToScore} from '../services/midiScoreNotation'
 
 const props = defineProps({
-    scoreDocument: {type:Object, default:null},
-    timeline: {type:Object, default:null},
-    playerState: {type:Object, default:() => ({})},
-    width: {type:Number, default:0},
-    height: {type:Number, default:0},
-    active: {type:Boolean, default:true},
-    handMode: {type:String, default:'both'},
+    scoreDocument: {type: Object, default: null}, timeline: {type: Object, default: null},
+    playerState: {type: Object, default: () => ({})}, width: {type: Number, default: 0},
+    height: {type: Number, default: 0}, active: {type: Boolean, default: true},
+    handMode: {type: String, default: 'both'},
 })
-const engraving=ref(null), scoreSurface=ref(null)
-const fallback=ref(false), pending=ref(false)
-const playheadX=computed(() => Math.min(Math.max(100, props.width*.27), 240))
-let layout=null, anchorPoints=[], mounted=false, layoutRevision=0, frameId=0
-let playerClock={ms:0,at:0,state:{}}, clockRevision=null
+const emit = defineEmits(['seek'])
+const viewport = ref(null), scoreSurface = ref(null), signatureSurface = ref(null)
+const pending = ref(false), error = ref(''), layoutReady = ref(false)
+const browsing = ref(false), dragging = ref(false)
+const signatureWidth = ref(150), firstNoteX = ref(0), cursorLeft = ref(0), sourceTop = ref(0), scrollY = ref(0)
+const musicStart = computed(() => signatureWidth.value + 24)
+const colorOptions = {applyToNoteheads: true, applyToStem: true, applyToFlag: true,
+    applyToLedgerLines: true, applyToBeams: false, applyToTies: false, applyToSlurs: false}
+let anchorPoints = [], mounted = false, layoutRevision = 0, activeColumn = -1, frameId = 0, firstColumn = 0
+let clock = {ms: 0, at: 0, state: {}}, presentedMs = 0, forcePosition = true
+let pageOffset = 0, motion = null, signatureKey = '', cropTop = 0, svgHeight = 0
+let panGesture = null, ignoreNextClick = false, playbackScrollLeft = 0
 
-function captureClock() {
-    const state=props.playerState || {}, now=performance.now()
-    const discontinuity=clockRevision!==state.clockRevision
-    clockRevision=state.clockRevision
-    const received=Number(state.receivedAt)
-    playerClock={state:{...state},ms:Math.max(0,Number(state.currentMs)||0),
-        at: !discontinuity && Number.isFinite(received) ? Math.min(received,now) : now}
-    if (state.waiting && Number.isFinite(state.currentStep?.ms)) playerClock.ms=state.currentStep.ms
+function seekNote(event) {
+    if (event.type === 'click' && ignoreNextClick) {ignoreNextClick = false; return}
+    const note = event.target.closest('[data-score-ms]')
+    if (!note) return
+    viewport.value.scrollTo({left: viewport.value.scrollLeft, top: viewport.value.scrollTop, behavior: 'instant'})
+    playbackScrollLeft = viewport.value.scrollLeft
+    browsing.value = false
+    forcePosition = true
+    emit('seek', Number(note.dataset.scoreMs))
 }
-function currentMs(now) {
-    const state=playerClock.state
-    if (state.scrubbing || state.waiting) return playerClock.ms
-    if (state.leadInMs>0) {
-        const elapsed=state.status==='playing'?Math.min(200,Math.max(0,now-playerClock.at)):0
-        return playerClock.ms-Math.max(0,state.leadInMs-elapsed*(Number(state.speed)||1))
+
+function beginBrowse() {
+    browsing.value = true
+    motion = null
+    pageOffset = viewport.value.scrollLeft
+}
+
+function onViewportScroll() {
+    scrollY.value = viewport.value.scrollTop
+    if (layoutReady.value && !browsing.value && Math.abs(viewport.value.scrollLeft - playbackScrollLeft) > 1) beginBrowse()
+    if (!browsing.value || !anchorPoints.length) return
+    pageOffset = viewport.value.scrollLeft
+    if (activeColumn >= 0) cursorLeft.value = anchorPoints[activeColumn].x + musicStart.value - firstNoteX.value - pageOffset
+    let low = 0, high = anchorPoints.length - 1
+    const left = firstNoteX.value + pageOffset
+    while (low < high) {
+        const middle = (low + high + 1) >> 1
+        if (anchorPoints[middle].x <= left) low = middle
+        else high = middle - 1
     }
-    let ms=playerClock.ms
-    if (state.status==='playing') ms+=Math.min(200,Math.max(0,now-playerClock.at))*(Number(state.speed)||1)
-    if (state.mode==='follow' && Number.isFinite(state.currentStep?.ms)
-        && state.currentStep.ms>=playerClock.ms) ms=Math.min(ms,state.currentStep.ms)
-    return Math.min(Math.max(0,ms),Number(state.rightMs)||props.timeline?.durationMs||ms)
+    drawSignature(anchorPoints[low].signature)
 }
-function getXAtTime(ms) {
-    if (!anchorPoints.length) return 0
-    if (ms<=anchorPoints[0].ms) return anchorPoints[0].x
-    let low=0,high=anchorPoints.length-1
-    while (low<high) {
-        const mid=(low+high+1)>>1
-        if (anchorPoints[mid].ms<=ms) low=mid
-        else high=mid-1
+
+function browseWheel(event) {
+    if (!layoutReady.value || event.ctrlKey || event.metaKey) return
+    event.preventDefault()
+    event.stopPropagation()
+    beginBrowse()
+    const vertical = event.altKey
+    const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2
+        ? (vertical ? viewport.value.clientHeight : viewport.value.clientWidth) : 1
+    const delta = (Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY) * unit
+    viewport.value.scrollBy({left: vertical ? 0 : delta, top: vertical ? delta : 0, behavior: 'smooth'})
+}
+
+function beginPan(event) {
+    if (!layoutReady.value || panGesture) return
+    ignoreNextClick = false
+    const element = viewport.value, box = element.getBoundingClientRect()
+    if (event.clientX - box.left >= element.clientWidth || event.clientY - box.top >= element.clientHeight || event.button === 1) {
+        beginBrowse()
+        return
     }
-    const a=anchorPoints[low], b=anchorPoints[low+1]
-    if (!b || b.ms<=a.ms) return a.x
-    const ratio=Math.max(0,Math.min(1,(ms-a.ms)/(b.ms-a.ms)))
-    return a.x+(b.x-a.x)*ratio
+    if (event.button !== 0) return
+    panGesture = {id: event.pointerId, x: event.clientX, y: event.clientY,
+        left: element.scrollLeft, top: element.scrollTop}
 }
-function drawPosition(now) {
-    if (!mounted || !props.active || !scoreSurface.value || !layout || !anchorPoints.length) return
-    const x=getXAtTime(currentMs(now))
-    scoreSurface.value.style.transform='translate3d(' + Math.round(playheadX.value-x) + 'px, 0, 0)'
+
+function movePan(event) {
+    if (panGesture?.id !== event.pointerId) return
+    const dx = event.clientX - panGesture.x, dy = event.clientY - panGesture.y
+    if (!dragging.value && Math.hypot(dx, dy) < 6) return
+    if (!dragging.value) {
+        beginBrowse()
+        dragging.value = true
+        ignoreNextClick = true
+        viewport.value.setPointerCapture(event.pointerId)
+    }
+    event.preventDefault()
+    viewport.value.scrollTo({left: panGesture.left - dx, top: panGesture.top - dy, behavior: 'instant'})
 }
-function animating() {
-    const state=playerClock.state
-    return state.status==='playing' && !state.waiting && !state.scrubbing
+
+function endPan(event) {
+    if (panGesture?.id !== event.pointerId) return
+    panGesture = null
+    dragging.value = false
+    if (viewport.value.hasPointerCapture(event.pointerId)) viewport.value.releasePointerCapture(event.pointerId)
 }
+
+function browseByKey(event) {
+    if (!layoutReady.value) return
+    const width = viewport.value.clientWidth - musicStart.value
+    const distance = {ArrowLeft: -60, ArrowRight: 60, PageUp: -width, PageDown: width}
+    let left
+    if (event.key === 'Home') left = 0
+    else if (event.key === 'End') left = anchorPoints.at(-1)?.x - firstNoteX.value
+    else if (event.key in distance) left = viewport.value.scrollLeft + distance[event.key]
+    else return
+    event.preventDefault()
+    beginBrowse()
+    viewport.value.scrollTo({left, behavior: 'smooth'})
+}
+
+function resumeFollow() {
+    browsing.value = false
+    motion = null
+    viewport.value.scrollTo({left: viewport.value.scrollLeft, top: viewport.value.scrollTop, behavior: 'instant'})
+    playbackScrollLeft = viewport.value.scrollLeft
+    forcePosition = true
+    if (!frameId) frameId = requestAnimationFrame(frame)
+}
+
+function scrollForPlayback(left) {
+    viewport.value.scrollLeft = left
+    playbackScrollLeft = viewport.value.scrollLeft
+}
+
+function drawSignature(signature) {
+    if (signature.key === signatureKey) return
+    signatureKey = signature.key
+    signatureSurface.value.replaceChildren()
+    // Use the same VexFlow stave and SVG context classes as the main OSMD
+    // renderer. Symbols retain their original glyphs, sizes and staff heights.
+    const Context = signature.staves[0].getContext().constructor
+    const context = new Context(signatureSurface.value)
+    context.resize(signatureWidth.value, svgHeight)
+    context.setViewBox(0, cropTop, signatureWidth.value, svgHeight)
+    context.setFillStyle('#161616')
+    context.setStrokeStyle('#161616')
+    context.setLineWidth(1)
+    for (const stave of signature.staves) stave.setWidth(signatureWidth.value - stave.x + 1).setContext(context).draw()
+}
+
+function selectColumn(index, now) {
+    const column = anchorPoints[index]
+    if (activeColumn >= 0) for (const note of anchorPoints[activeColumn].notes) note.setColor('#161616', colorOptions)
+    for (const note of column.notes) note.setColor('#b66b35', colorOptions)
+    if (!browsing.value) drawSignature(column.signature)
+    const absoluteX = column.x + musicStart.value - firstNoteX.value
+    const currentX = absoluteX - pageOffset
+    const snap = forcePosition || activeColumn < 0 || props.playerState.scrubbing
+    if (browsing.value) {
+        motion = null
+        pageOffset = viewport.value.scrollLeft
+        cursorLeft.value = absoluteX - pageOffset
+    } else if (snap) {
+        if (currentX < musicStart.value || currentX > props.width - 30) pageOffset = absoluteX - musicStart.value
+        motion = null
+        scrollForPlayback(pageOffset)
+        cursorLeft.value = absoluteX - pageOffset
+    } else {
+        const nextPage = currentX > props.width - 30 || currentX < musicStart.value - 1
+        const targetOffset = nextPage ? absoluteX - musicStart.value : pageOffset
+        const gap = (anchorPoints[index + 1]?.ms ?? column.ms + 250) - column.ms
+        const duration = Math.min(nextPage ? 220 : 120, Math.max(20, gap / (clock.state.speed || 1) * .65))
+        motion = {at: now, duration, fromScroll: viewport.value.scrollLeft, toScroll: targetOffset,
+            fromCursor: cursorLeft.value, toCursor: absoluteX - targetOffset}
+        pageOffset = targetOffset
+    }
+    activeColumn = index
+    forcePosition = false
+}
+
+function songMs(now) {
+    const state = clock.state
+    if (state.scrubbing || state.status !== 'playing') return clock.ms
+    if (state.waiting) return state.currentStep?.ms ?? clock.ms
+    const elapsed = Math.min(200, Math.max(0, now - clock.at)) * (state.speed || 1)
+    if (state.leadInMs > 0) return clock.ms - Math.max(0, state.leadInMs - elapsed)
+    let ms = clock.ms + elapsed
+    if (state.mode === 'follow' && state.currentStep?.ms >= clock.ms) ms = Math.min(ms, state.currentStep.ms)
+    ms = Math.min(ms, state.rightMs || props.timeline.durationMs)
+    presentedMs = Math.max(presentedMs, ms)
+    return presentedMs
+}
+
 function frame(now) {
-    frameId=0
-    drawPosition(now)
-    if (mounted && props.active && animating()) frameId=requestAnimationFrame(frame)
+    frameId = 0
+    if (!mounted || !props.active || !layoutReady.value || !anchorPoints.length) return
+    const ms = songMs(now)
+    let low = 0, high = anchorPoints.length - 1
+    while (low < high) {
+        const middle = (low + high + 1) >> 1
+        if (anchorPoints[middle].ms <= ms) low = middle
+        else high = middle - 1
+    }
+    if (low < firstColumn) low = firstColumn
+    if (low !== activeColumn || forcePosition) selectColumn(low, now)
+    if (motion) {
+        const progress = Math.min(1, (now - motion.at) / motion.duration)
+        const eased = 1 - Math.pow(1 - progress, 3)
+        scrollForPlayback(motion.fromScroll + (motion.toScroll - motion.fromScroll) * eased)
+        cursorLeft.value = motion.fromCursor + (motion.toCursor - motion.fromCursor) * eased
+        if (progress === 1) motion = null
+    }
+    if ((clock.state.status === 'playing' && !clock.state.waiting && !clock.state.scrubbing) || motion)
+        frameId = requestAnimationFrame(frame)
 }
+
 function syncClock() {
-    captureClock()
-    if (frameId) cancelAnimationFrame(frameId)
-    frameId=0
-    drawPosition(performance.now())
-    if (mounted && props.active && animating()) frameId=requestAnimationFrame(frame)
+    const state = props.playerState, now = performance.now()
+    if (state.clockRevision !== clock.state.clockRevision || state.currentMs < clock.ms - 1 || state.scrubbing) {
+        forcePosition = true
+        presentedMs = state.currentMs
+    }
+    clock = {ms: state.currentMs || 0, at: state.receivedAt ?? now, state: {...state}}
+    if (mounted && props.active && !frameId) frameId = requestAnimationFrame(frame)
 }
-function hideOppositeStaff(engine) {
-    const instruments=engine.Sheet?.Instruments || []
-    for (const instrument of instruments) {
-        instrument.Visible=true
-        for (const staff of instrument.Staves || []) staff.Visible=true
-    }
-    if (props.handMode==='both') return
-    if (instruments.length===1 && instruments[0].Staves?.length===2) {
-        instruments[0].Staves[props.handMode==='left'?0:1].Visible=false
-    } else if (instruments.length===2 && instruments.every(p=>p.Staves?.length===1)) {
-        instruments[props.handMode==='left'?0:1].Visible=false
-    }
-}
-function measurePositions(engine) {
-    const graphic=engine.GraphicSheet?.MeasureList || []
-    const markers=(props.timeline?.measures || []).filter(m=>Number.isFinite(m.ms))
-        .slice().sort((a,b)=>a.ms-b.ms)
-    const points=[], zoom=engine.zoom
-    // Native MusicXML's source staff entries retain exact rational beat
-    // positions. Match these to the imported player's tempo-aware note timing,
-    // so the play line aligns with engraved noteheads, not just barlines.
-    const beats=props.scoreDocument?.native
-        ? (props.timeline?.notes || []).filter(n=>Number.isFinite(n.startBeat) && Number.isFinite(n.startMs))
-            .map(n=>({beat:n.startBeat,ms:n.startMs}))
-            .sort((a,b)=>a.beat-b.beat) : []
-    const beatSamples=[]
-    for (const sample of beats) {
-        if (!beatSamples.length || sample.beat-beatSamples[beatSamples.length-1].beat>0.00001)
-            beatSamples.push(sample)
-    }
-    function timeAtBeat(beat) {
-        if (!beatSamples.length || beat<beatSamples[0].beat || beat>beatSamples[beatSamples.length-1].beat)
-            return null
-        let a=0,b=beatSamples.length-1
-        while (a<b) {
-            const mid=(a+b+1)>>1
-            if (beatSamples[mid].beat<=beat) a=mid
-            else b=mid-1
-        }
-        const prev=beatSamples[a],next=beatSamples[a+1]
-        if (!next || next.beat<=prev.beat) return prev.ms
-        return prev.ms+(beat-prev.beat)*(next.ms-prev.ms)/(next.beat-prev.beat)
-    }
-    for (let i=0; i<graphic.length; i++) {
-        const list=graphic[i] || []
-        const measure=list.find(m=>m?.isVisible?.() && m.PositionAndShape)
-            || list.find(m=>m?.PositionAndShape)
-        if (!measure) continue
-        const box=measure.PositionAndShape
-        const x=box.AbsolutePosition.x*10*zoom
-        const end=(box.AbsolutePosition.x+box.Size.width)*10*zoom
-        const ms=markers[i]?.ms
-        if (Number.isFinite(ms)) {
-            points.push({ms,x})
-            if (i===graphic.length-1) points.push({ms:props.timeline?.durationMs || ms+1,x:end})
-        }
-        if (beatSamples.length) {
-            const entries=new Set()
-            for (const staff of list) {
-                if (!staff?.isVisible?.()) continue
-                for (const entry of staff.staffEntries || []) {
-                    if (!entry?.PositionAndShape || entries.has(entry.getAbsoluteTimestamp?.().RealValue)) continue
-                    const timestamp=entry.getAbsoluteTimestamp?.().RealValue
-                    if (!Number.isFinite(timestamp)) continue
-                    entries.add(timestamp)
-                    const noteMs=timeAtBeat(timestamp*4)
-                    if (noteMs===null) continue
-                    points.push({ms:noteMs,x:entry.PositionAndShape.AbsolutePosition.x*10*zoom})
-                }
+
+function measurePositions(engine, samples, types) {
+    const ordered = samples.slice().sort((a, b) => a.beat - b.beat || Number(b.attack) - Number(a.attack) || a.ms - b.ms)
+    const beats = []
+    for (const sample of ordered) if (!beats.length || sample.beat - beats.at(-1).beat > .00001) beats.push(sample)
+    if (beats.length < 2) return []
+    const svgLeft = scoreSurface.value.querySelector('svg').getBoundingClientRect().left
+    const points = [], staffStates = new Map(), signatures = new Map()
+    const clefs = [{1: 'french', 2: 'treble'}, {3: 'baritone-f', 4: 'bass', 5: 'subbass'},
+        {1: 'soprano', 2: 'mezzo-soprano', 3: 'alto', 4: 'tenor', 5: 'baritone-c'}]
+    let headerWidth = 120
+    function readInstructions(state, instructions) {
+        for (const instruction of instructions) {
+            if (instruction instanceof types.KeyInstruction) state.fifths = instruction.Key
+            if (instruction instanceof types.RhythmInstruction) state.time = instruction.SynthesizedFromNoTimeSignature ? null
+                : instruction.SymbolEnum === 1 ? 'C' : instruction.SymbolEnum === 2 ? 'C|'
+                    : `${instruction.Rhythm.Numerator}/${instruction.Rhythm.Denominator}`
+            if (instruction instanceof types.ClefInstruction) {
+                state.clef = instruction.ClefType < 3 ? clefs[instruction.ClefType][instruction.Line]
+                    : instruction.ClefType === 3 ? 'percussion' : 'tab'
+                state.annotation = instruction.OctaveOffset > 0 ? '8va' : instruction.OctaveOffset < 0 ? '8vb' : undefined
             }
         }
     }
-    const ordered=points.filter(p=>Number.isFinite(p.ms) && Number.isFinite(p.x))
-        .sort((a,b)=>a.ms-b.ms || a.x-b.x)
-    const clean=[]
-    for (const point of ordered) {
-        const last=clean[clean.length-1]
-        if (last && point.ms-last.ms<.1) {
-            // A notehead at the beginning of a bar is a better alignment
-            // anchor than the preceding barline at the same timestamp.
-            last.x=Math.max(last.x,point.x)
-        } else if (!last || point.x>=last.x-.5) clean.push({...point})
+    function signatureFor(measures) {
+        const labels = measures.map(measure => staffStates.get(measure.ParentStaff.Id))
+        const key = JSON.stringify(labels)
+        if (!signatures.has(key)) {
+            const staves = measures.map((measure, index) => {
+                const source = measure.getVFStave(), label = labels[index]
+                const stave = new source.constructor(12, source.y, 500, {...source.getOptions(), left_bar: false, right_bar: false})
+                stave.addClef(label.clef, 'default', label.annotation)
+                stave.addKeySignature(Key.majorTonicFromKeySignature(label.fifths))
+                if (label.time) stave.addTimeSignature(label.time)
+                headerWidth = Math.max(headerWidth, Math.ceil(stave.getNoteStartX() + 16))
+                stave.setContext(source.getContext())
+                return stave
+            })
+            signatures.set(key, {key, staves})
+        }
+        return signatures.get(key)
     }
-    return clean.length>=2?clean:[]
+    for (const measures of engine.GraphicSheet.MeasureList) {
+        const visible = measures.filter(measure => measure.isVisible())
+        if (!visible.length) continue
+        for (const measure of visible) {
+            const staff = measure.ParentStaff
+            const state = {...(staffStates.get(staff.Id) || {fifths: 0, time: '4/4'})}
+            const entry = measure.parentSourceMeasure.FirstInstructionsStaffEntries.find(item => item?.ParentStaff === staff)
+            readInstructions(state, [measure.InitiallyActiveClef, ...(entry?.Instructions || [])])
+            staffStates.set(staff.Id, state)
+        }
+        const entries = visible.flatMap(measure => measure.staffEntries.map(entry => ({measure, entry,
+            beat: entry.getAbsoluteTimestamp().RealValue * 4}))).sort((a, b) => a.beat - b.beat)
+        for (let index = 0; index < entries.length;) {
+            let endIndex = index + 1
+            while (endIndex < entries.length && Math.abs(entries[endIndex].beat - entries[index].beat) < .00001) endIndex++
+            // Apply changes from both staves before constructing this column's
+            // fixed header, including changes occurring inside a measure.
+            for (let item = index; item < endIndex; item++) {
+                const {measure, entry} = entries[item]
+                readInstructions(staffStates.get(measure.ParentStaff.Id), entry.sourceStaffEntry?.Instructions || [])
+            }
+            const signature = signatureFor(visible)
+            for (let item = index; item < endIndex; item++) {
+                const {entry, beat} = entries[item]
+                if (beat > beats.at(-1).beat + .00001) continue
+                let low = 0, high = beats.length - 1
+                while (low < high) {
+                    const middle = (low + high + 1) >> 1
+                    if (beats[middle].beat <= beat) low = middle
+                    else high = middle - 1
+                }
+                const start = beats[low], end = beats[low + 1]
+                const ms = end ? start.ms + Math.max(0, beat - start.beat) / (end.beat - start.beat) * (end.ms - start.ms) : start.ms
+                const notes = entry.graphicalVoiceEntries.flatMap(voice => voice.notes).filter(note => !note.sourceNote.isRest())
+                let left = Infinity, right = -Infinity
+                for (const head of new Set(notes.flatMap(note => note.getNoteheadSVGs()))) {
+                    const box = head.getBoundingClientRect()
+                    left = Math.min(left, box.left)
+                    right = Math.max(right, box.right)
+                }
+                const x = notes.length && Number.isFinite(left) ? (left + right) / 2 - svgLeft
+                    : entry.PositionAndShape.AbsolutePosition.x * 10
+                for (const note of notes) {
+                    const element = note.getSVGGElement()
+                    if (!element) continue
+                    element.dataset.scoreMs = String(ms)
+                    element.setAttribute('tabindex', '0')
+                    element.setAttribute('role', 'button')
+                    element.setAttribute('aria-label', `跳转到音符 ${note.sourceNote.NoteAsString}`)
+                }
+                points.push({beat, ms, x, notes, signature})
+            }
+            index = endIndex
+        }
+    }
+    signatureWidth.value = headerWidth
+    points.sort((a, b) => a.beat - b.beat || a.x - b.x)
+    const columns = []
+    for (const point of points) {
+        const last = columns.at(-1)
+        if (last && Math.abs(point.beat - last.beat) < .00001) {
+            const count = last.notes.length + point.notes.length
+            if (count) last.x = (last.x * last.notes.length + point.x * point.notes.length) / count
+            last.notes.push(...point.notes)
+        } else columns.push(point)
+    }
+    return columns
 }
+
 async function rebuild() {
-    const revision=++layoutRevision
+    const revision = ++layoutRevision
+    if (frameId) cancelAnimationFrame(frameId)
+    frameId = 0
     if (!mounted || !props.active || !props.height || !props.width) return
-    const source=props.scoreDocument?.xml || midiTimelineToMusicXML(props.timeline)
-    if (!source) {
-        pending.value=false
-        fallback.value=true
-        layout=null
+    layoutReady.value = false
+    pending.value = true
+    error.value = ''
+    anchorPoints = []
+    activeColumn = -1
+    motion = null
+    signatureKey = ''
+    pageOffset = 0
+    playbackScrollLeft = 0
+    forcePosition = true
+    browsing.value = false
+    dragging.value = false
+    panGesture = null
+    ignoreNextClick = false
+    firstNoteX.value = 0
+    viewport.value.scrollLeft = 0
+    viewport.value.scrollTop = 0
+    scoreSurface.value.style.width = `${props.width}px`
+    const native = props.scoreDocument?.native
+    const score = native ? {xml: props.scoreDocument.xml, positions: [
+        ...(props.timeline?.notes || []).flatMap(note => [{beat: note.startBeat, ms: note.startMs, attack: true},
+            {beat: note.endBeat, ms: note.endMs, attack: false}]),
+        ...(props.timeline?.measures || []).map(mark => ({beat: mark.startBeat, ms: mark.ms, attack: false})),
+    ]} : midiTimelineToScore(props.timeline)
+    if (!score.xml) {
+        pending.value = false
+        error.value = '暂无可显示的乐谱'
+        scoreSurface.value.replaceChildren()
         return
     }
-    pending.value=true
-    fallback.value=false
     await nextTick()
     try {
-        // Only load this fairly large library when score view is actually shown.
-        const module=await import('opensheetmusicdisplay')
-        const OpenSheetMusicDisplay=module.OpenSheetMusicDisplay || module.default?.OpenSheetMusicDisplay
-        if (!OpenSheetMusicDisplay) throw new Error('OSMD 模块未提供排版引擎')
-        if (!mounted || revision!==layoutRevision || !scoreSurface.value) return
+        const types = await import('opensheetmusicdisplay')
+        if (!mounted || revision !== layoutRevision) return
         scoreSurface.value.replaceChildren()
-        const engine=new OpenSheetMusicDisplay(scoreSurface.value, {
-            backend:'svg', autoResize:false, renderSingleHorizontalStaffline:true,
-            drawingParameters:'compacttight', drawTitle:false, drawSubtitle:false,
-            drawComposer:false, drawCredits:false, drawPartNames:false,
-            drawFingerings:true, drawMeasureNumbers:true, measureNumberInterval:2,
-            disableCursor:true, followCursor:false,
+        const engine = new types.OpenSheetMusicDisplay(scoreSurface.value, {
+            backend: 'svg', autoResize: false, renderSingleHorizontalStaffline: true,
+            drawingParameters: 'default', drawTitle: false, drawSubtitle: false,
+            drawComposer: false, drawCredits: false, drawPartNames: false,
+            drawFingerings: !!native, drawMeasureNumbers: true, measureNumberInterval: 1,
+            autoBeam: true, alignRests: 2, darkMode: false, coloringEnabled: false,
+            defaultColorMusic: '#161616', defaultColorNotehead: '#161616',
+            defaultColorStem: '#161616', defaultColorRest: '#161616', defaultColorLabel: '#444444',
+            disableCursor: true, followCursor: false,
         })
-        engine.zoom=Math.max(.4,Math.min(1.15,props.height/(props.handMode==='both'?245:160)))
-        await engine.load(source)
-        if (!mounted || revision!==layoutRevision) return
-        hideOppositeStaff(engine)
+        engine.EngravingRules.PageTopMargin = 1
+        engine.EngravingRules.PageBottomMargin = 1
+        engine.EngravingRules.StaffDistance = 5
+        engine.EngravingRules.BetweenStaffDistance = 5
+        engine.EngravingRules.SnapStafflinesToCrispPixels = false
+        engine.zoom = 1
+        await engine.load(score.xml)
+        if (!mounted || revision !== layoutRevision) return
+        const instruments = engine.Sheet.Instruments
+        if (props.handMode !== 'both') {
+            if (instruments.length === 1 && instruments[0].Staves.length === 2)
+                instruments[0].Staves[props.handMode === 'left' ? 0 : 1].Visible = false
+            else if (instruments.length === 2 && instruments.every(part => part.Staves.length === 1))
+                instruments[props.handMode === 'left' ? 0 : 1].Visible = false
+        }
         engine.render()
-        if (!mounted || revision!==layoutRevision) return
-        const anchors=measurePositions(engine)
-        if (anchors.length<2) throw new Error('五线谱无法建立小节时间定位')
-        layout=engine
-        anchorPoints=anchors
-        pending.value=false
-        fallback.value=false
+        const svg = scoreSurface.value.querySelector('svg'), bounds = svg.getBBox()
+        cropTop = Math.floor(bounds.y) - 12
+        svgHeight = Math.ceil(bounds.height) + 24
+        // Crop unused page margins at 1:1 scale instead of shrinking glyphs.
+        const viewBox = svg.viewBox.baseVal
+        svg.setAttribute('viewBox', `${viewBox.x} ${cropTop} ${viewBox.width} ${svgHeight}`)
+        svg.setAttribute('height', String(svgHeight))
+        svg.style.height = `${svgHeight}px`
+        sourceTop.value = Math.max(6, (props.height - svgHeight) / 2)
+        scoreSurface.value.style.width = `${Math.ceil(svg.getBoundingClientRect().width + props.width)}px`
+        anchorPoints = measurePositions(engine, score.positions, types)
+        firstColumn = anchorPoints.findIndex(column => column.notes.length)
+        if (firstColumn < 0) throw new Error('无法定位乐谱音符')
+        firstNoteX.value = anchorPoints[firstColumn].x
+        // The fixed header replaces the source's opening symbols. Hiding the
+        // originals prevents fragments of time/key signatures leaking past it.
+        const firstNote = svg.getBoundingClientRect().left + firstNoteX.value
+        for (const symbol of svg.querySelectorAll('.vf-clef, .vf-keysignature, .vf-timesignature')) {
+            if (symbol.getBoundingClientRect().right <= firstNote) symbol.style.visibility = 'hidden'
+        }
+        drawSignature(anchorPoints[firstColumn].signature)
+        layoutReady.value = true
+        pending.value = false
         syncClock()
-    } catch (error) {
-        if (!mounted || revision!==layoutRevision) return
-        console.error('五线谱排版失败，回退至音符预览',error)
-        layout=null
-        anchorPoints=[]
-        pending.value=false
-        fallback.value=true
+    } catch (failure) {
+        if (!mounted || revision !== layoutRevision) return
+        console.error('五线谱排版失败', failure)
+        pending.value = false
+        error.value = '乐谱排版失败，请重新选择曲目'
+        scoreSurface.value.replaceChildren()
     }
 }
-watch(() => props.playerState, syncClock, {deep:true})
-watch(() => [props.scoreDocument, props.timeline?.midiId,props.handMode,Math.floor(props.height/24),props.active],rebuild)
-watch(() => props.width,() => drawPosition(performance.now()))
-onMounted(() => {mounted=true; captureClock(); void rebuild()})
-onBeforeUnmount(() => {
-    mounted=false
-    layoutRevision++
-    if (frameId) cancelAnimationFrame(frameId)
-    layout=null
-    anchorPoints=[]
-})
+watch(() => props.playerState, syncClock)
+watch(() => [props.scoreDocument, props.timeline, props.handMode, Math.floor(props.height / 16), props.active], rebuild)
+watch(() => props.width, () => {forcePosition = true; syncClock()})
+onMounted(() => {mounted = true; void rebuild()})
+onBeforeUnmount(() => {mounted = false; panGesture = null; layoutRevision++; if (frameId) cancelAnimationFrame(frameId); anchorPoints = []})
 </script>
 
 <style scoped>
-.score-panel { position:relative; overflow:hidden; background:#1d1d1d; color:#aaa; }
-.engraving { position:absolute; inset:0; overflow:hidden; pointer-events:none; }
-.score-surface { position:absolute; top:0; left:0; width:max-content; will-change:transform; }
-.score-surface :deep(svg) { display:block; max-width:none !important; filter:invert(1) hue-rotate(180deg); }
-.playhead { position:absolute; z-index:3; top:9px; bottom:8px; width:2px;
-    transform:translateX(-1px); background:#e7a17a; box-shadow:0 0 10px #e7a17a70; pointer-events:none; }
-.playhead.is-waiting { background:#f9d1a0; box-shadow:0 0 15px #f9d1a0a0; }
-.score-caption { position:absolute; z-index:4; right:10px; bottom:6px; padding:2px 5px;
-    border-radius:3px; background:#1d1d1dc9; font-size:10px; color:#9c9c9c; pointer-events:none; }
+.score-panel { position: relative; overflow: hidden; background: #fff; color: #161616; border-bottom: 1px solid #dedbd5; --wails-draggable: no-drag; }
+.engraving { position: absolute; inset: 0; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #c8c5bf #f8f7f4; touch-action: pan-y; cursor: grab; }
+.score-surface { position: absolute; top: 0; left: 0; width: 100%; }
+.score-surface :deep(svg), .signature-surface :deep(svg) { display: block; max-width: none !important; shape-rendering: geometricPrecision; text-rendering: geometricPrecision; }
+.score-surface :deep([data-score-ms]) { cursor: pointer; }
+.score-surface :deep([data-score-ms]:focus-visible) { outline: 1px solid #b66b35; outline-offset: 3px; }
+.engraving.is-dragging, .engraving.is-dragging :deep(*) { cursor: grabbing !important; user-select: none; }
+.signature-panel { position: absolute; z-index: 4; left: 0; top: 0; bottom: 10px; overflow: hidden; background: #fff; }
+.signature-panel::after { content: ''; position: absolute; right: 0; top: 12px; bottom: 12px; width: 1px; background: #00000010; }
+.resume-follow { position: absolute; z-index: 5; right: 14px; top: 10px; padding: 6px 10px; border: 1px solid #ddd6cc; border-radius: 5px; background: #fffffff0; color: #775536; font: inherit; font-size: 12px; cursor: pointer; }
+.resume-follow:focus-visible { outline: 2px solid #b66b35; outline-offset: 2px; }
+.signature-surface { position: absolute; left: 0; width: 100%; }
+.playhead { position: absolute; z-index: 3; top: 12px; bottom: 20px; width: 28px; transform: translateX(-14px); border-radius: 3px; background: #d08b3c26; border: 1px solid #c9893a42; pointer-events: none; }
+.playhead.is-waiting { background: #d08b3c38; }
+.score-caption { position: absolute; z-index: 4; right: 12px; bottom: 13px; font-size: 10px; line-height: 1.4; color: #8b8882; background: #ffffffe8; }
+.score-message { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; font-size: 13px; color: #777; }
 </style>

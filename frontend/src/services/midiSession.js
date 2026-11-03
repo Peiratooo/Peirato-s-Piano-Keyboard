@@ -14,18 +14,6 @@ function midiError(error) {
 }
 
 const VIEW_STORAGE_KEY = 'pp-practice-view-v1'
-const DIFFICULTY_STORAGE_KEY = 'pp-practice-difficulty-v1'
-const DIFFICULTY_RULES = {
-    beginner: {leadWindowMs: 550, groupWindowMs: 140},
-    normal: {leadWindowMs: 300, groupWindowMs: 80},
-    challenge: {leadWindowMs: 90, groupWindowMs: 45},
-}
-function loadDifficulty() {
-    try {
-        const value = localStorage.getItem(DIFFICULTY_STORAGE_KEY)
-        return DIFFICULTY_RULES[value] ? value : 'beginner'
-    } catch { return 'beginner' }
-}
 function loadViews() {
     try {
         const stored = JSON.parse(localStorage.getItem(VIEW_STORAGE_KEY) || '{}')
@@ -44,6 +32,7 @@ export function useMidiSession({store, Keyboard}) {
     const scoreDocument = shallowRef(null)
     const loading = ref(false)
     const importing = ref(false)
+    const importStatus = ref('')
     const ready = ref(false)
     const busyCount = ref(0)
     const clockRevision = ref(0)
@@ -52,7 +41,6 @@ export function useMidiSession({store, Keyboard}) {
     const pendingPosition = ref(null)
     const previewPosition = ref(null)
     const viewOptions = reactive(loadViews())
-    const difficulty = ref(loadDifficulty())
     function setView(name, enabled) {
         if (!['waterfall', 'score'].includes(name)) return
         viewOptions[name] = !!enabled
@@ -104,7 +92,7 @@ export function useMidiSession({store, Keyboard}) {
     }
     function buildOptions(overrides = {}) {
         return {midiId: selectedId.value, ...options, rightMs: options.rightMs || durationMs.value,
-            ...DIFFICULTY_RULES[difficulty.value], ...overrides}
+            leadWindowMs: 300, groupWindowMs: 80, ...overrides}
     }
     async function loadLibrary() {
         const items = await Keyboard.GetMidiStore()
@@ -131,7 +119,7 @@ export function useMidiSession({store, Keyboard}) {
         const summary = summarizeSong(song)
         library.value = library.value.map(item => item.id === id ? summary : item)
         selectedId.value = id
-        timeline.value = {...notes, midiId: notes.midiId || notes.id || id, notes: notes.notes || []}
+        timeline.value = {...notes, midiId: notes.midiId || notes.id || id, notes: notes.notes || [], measures: notes.measures || []}
         scoreDocument.value = score?.xml ? score : null
         options.leftMs = 0
         options.rightMs = Number(notes.durationMs || song.durationMs) || 0
@@ -197,44 +185,57 @@ export function useMidiSession({store, Keyboard}) {
         }, '曲目加载失败')
             .finally(() => { if (version === selectionVersion && !disposed) loading.value = false })
     }
-    function importSong() {
-        if (importing.value) return Promise.resolve(false)
-        importing.value = true
+    function selectImportedSong(song, count) {
         return enqueue(async () => {
-            let song
-            try { song = await Keyboard.OpenMidiFileDialog() } catch (error) {
-                if (/cancel|取消|未选择/i.test(String(error))) return false
-                throw error
-            }
-            if (!song?.id || disposed) return false
+            const nextMode = mode.value === 'follow' ? 'follow' : 'play'
+            const resume = matchingState.value?.status === 'playing'
             await loadLibrary()
             const version = ++selectionVersion
             loading.value = true
-            try { return await loadSelection(song.id, version) } finally { loading.value = false }
-        }, 'MIDI 导入失败').finally(() => { importing.value = false })
+            try {
+                const loaded = await loadSelection(song.id, version)
+                if (loaded) {
+                    options.mode = nextMode
+                    store.mainMode = nextMode
+                    loading.value = false
+                    if (resume) await startBackend()
+                    window.$message?.success('已导入 ' + count + ' 首曲目')
+                }
+                return loaded
+            } finally { loading.value = false }
+        }, '乐谱导入失败')
     }
-    function importPaths(paths) {
-        const unique = [...new Set((paths || []).filter(path => typeof path === 'string' && path.trim()))]
-        if (!unique.length || importing.value) return Promise.resolve(false)
+    async function importSong() {
+        if (importing.value) return false
         importing.value = true
-        return enqueue(async () => {
+        importStatus.value = '正在导入乐谱…'
+        try {
+            const song = await Keyboard.OpenMidiFileDialog()
+            if (!song?.id || disposed) return false
+            return await selectImportedSong(song, 1)
+        } catch (error) {
+            if (!/cancel|取消|未选择/i.test(String(error))) notify('乐谱导入失败', error)
+            return false
+        } finally { importing.value = false; importStatus.value = '' }
+    }
+    async function importPaths(paths) {
+        const unique = [...new Set(paths.filter(path => typeof path === 'string' && path.trim()))]
+        if (!unique.length || importing.value) return false
+        importing.value = true
+        try {
             let last = null, count = 0
+            // Upload/conversion must not hold the transport command queue.
+            // The current song remains playable while the new file is prepared.
             for (const path of unique) {
+                importStatus.value = '正在导入乐谱…'
                 try {
                     const song = await Keyboard.AddMidiByPath(path)
                     if (song?.id) { last = song; count++ }
                 } catch (error) { notify('文件导入失败', error) }
             }
             if (!last || disposed) return false
-            await loadLibrary()
-            const version = ++selectionVersion
-            loading.value = true
-            try {
-                const loaded = await loadSelection(last.id, version)
-                if (loaded) window.$message?.success('已导入 ' + count + ' 首曲目')
-                return loaded
-            } finally { loading.value = false }
-        }, '文件导入失败').finally(() => { importing.value = false })
+            return await selectImportedSong(last, count)
+        } finally { importing.value = false; importStatus.value = '' }
     }
     function removeSong(id) {
         if (!id) return Promise.resolve(false)
@@ -366,24 +367,6 @@ export function useMidiSession({store, Keyboard}) {
         if (!['left', 'right', 'both'].includes(handMode)) return Promise.resolve(false)
         return updateOptions({handMode}, '调整演奏手失败')
     }
-    function setDifficulty(value) {
-        if (!DIFFICULTY_RULES[value]) return Promise.resolve(false)
-        const previous = difficulty.value
-        difficulty.value = value
-        try { localStorage.setItem(DIFFICULTY_STORAGE_KEY, value) } catch { /* optional */ }
-        return enqueue(async () => {
-            if (matchingState.value && ['playing', 'paused'].includes(matchingState.value.status)) {
-                try {
-                    await Keyboard.SetMidiPlaybackOptions(buildOptions())
-                    await syncState()
-                } catch (error) {
-                    difficulty.value = previous
-                    throw error
-                }
-            }
-            return true
-        }, '设置练习难度失败')
-    }
     function setLoop(loop) { return updateOptions({loop: !!loop}, '调整循环失败') }
     function setRange(left, right) {
         const duration = durationMs.value
@@ -417,7 +400,7 @@ export function useMidiSession({store, Keyboard}) {
         ++selectionVersion
         stopWatching()
     }
-    return reactive({library, selectedId, selectedSong, timeline, scoreDocument, loading, importing, ready, busy, mode, viewOptions, setView, difficulty, setDifficulty,
+    return reactive({library, selectedId, selectedSong, timeline, scoreDocument, loading, importing, importStatus, ready, busy, mode, viewOptions, setView,
         options, state, durationMs, clockRevision, initialize, refreshLibrary, selectSong, importSong, importPaths,
         removeSong, setMode, start, togglePlayback, stop, seek, previewSeek, endSeekPreview,
         setSpeed, setHand, setLoop, setRange, dispose})

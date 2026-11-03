@@ -8,7 +8,7 @@
                 :style="{top: midiContentTop + 'px'}">
                 <MidiScoreView :timeline="session.timeline" :score-document="session.scoreDocument" :player-state="session.state"
                     :width="size.width" :height="scoreHeight"
-                    :active="!isSimple && isMidi && session.viewOptions.score" :hand-mode="session.options.handMode" />
+                    :active="!isSimple && isMidi && session.viewOptions.score" :hand-mode="session.options.handMode" @seek="seekScore" />
             </div>
             <div v-show="isMidi && session.viewOptions.waterfall" class="midi-waterfall-layer" :style="{top: midiCanvasTop + 'px'}">
                 <MidiWaterfallCanvas :layout="layout" :width="size.width" :height="midiCanvasHeight"
@@ -29,7 +29,7 @@
                 </NRadioGroup>
             </div>
             <div v-show="isMidi && !isSimple" class="midi-header-controls" data-piano-control>
-                <NButton class="library-toggle" :type="panel === 'library' ? 'primary' : 'default'" size="small" :aria-expanded="panel === 'library'" @click="openPanel('library')">
+                <NButton class="library-toggle" size="small" @click="openWorkspace('library')">
                     <template #icon><PhMusicNotes :size="18" /></template>曲库
                 </NButton>
                 <MidiPracticeControls :session="session" :panel="panel" @open-speed="closePanel" @speed-visibility="speedPanelOpen = $event">
@@ -46,9 +46,7 @@
                                 <PhMusicNotes :size="17" /><span>五线谱</span>
                             </NButton>
                         </div>
-                        <NSelect class="difficulty-select" size="small" :value="session.difficulty" :options="[{label: '入门', value: 'beginner'}, {label: '标准', value: 'normal'}, {label: '挑战', value: 'challenge'}]"
-                            :disabled="session.mode !== 'follow' || session.busy" :consistent-menu-width="false"
-                            aria-label="练习难度" @update:value="session.setDifficulty" />
+
                     </template>
                 </MidiPracticeControls>
             </div>
@@ -59,7 +57,7 @@
                 </NRadioGroup>
                 <button class="tool-button settings-toggle" type="button" :aria-expanded="panel === 'settings'" title="设置"
                     @pointerdown.prevent @click="openPanel('settings')"><PhGearSix :size="20" /><span>设置</span></button>
-                <button class="tool-button" type="button" title="MIDI 工坊" @pointerdown.prevent @click="openWorkspace()"><PhUsersThree :size="20"/><span>工坊</span></button>
+                <button v-if="!isMidi" class="tool-button" type="button" title="曲库" @pointerdown.prevent @click="openWorkspace()"><PhMusicNotes :size="20"/><span>曲库</span></button>
                 <template v-if="!isMac">
                     <span class="toolbar-separator"></span>
                     <button class="window-button" type="button" aria-label="最小化" title="最小化" @pointerdown.prevent @click="minimize"><PhMinus :size="16" /></button>
@@ -70,6 +68,7 @@
             </div>
         </header>
 
+        <p v-if="session.importing" class="score-import-status" role="status">{{session.importStatus || '正在导入乐谱…'}}</p>
         <RecordingControls v-if="!isMidi && !isSimple" :recording="recording" />
 
         <div v-show="isMidi && !isSimple" ref="midiControlsRef" class="midi-workspace-controls" :style="{top: toolbarHeight + 'px'}" data-piano-control>
@@ -83,9 +82,8 @@
                 <h1>{{ APP_NAME }}</h1>
                 <button class="start-playing" type="button" @click="startFreePlay"><PhPlay :size="17" weight="fill" />{{ isMidi ? '自由演奏' : '开始弹奏' }}<PhArrowRight :size="18" /></button>
                 <div class="menu-links">
-                    <button type="button" @click="openPanel('library')"><PhMusicNotes :size="20" /><span>曲库</span><PhArrowRight :size="16" /></button>
+                    <button type="button" @click="openWorkspace('library')"><PhMusicNotes :size="20" /><span>曲库</span><PhArrowRight :size="16" /></button>
                     <button type="button" @click="changeMode('play', true)"><PhPlay :size="20" /><span>MIDI 播放</span><PhArrowRight :size="16" /></button>
-                    <button type="button" @click="openWorkspace()"><PhUsersThree :size="20"/><span>MIDI 工坊</span><PhArrowRight :size="16"/></button>
                     <button type="button" @click="openWorkspace('practice')"><PhPianoKeys :size="20"/><span>练习</span><PhArrowRight :size="16"/></button>
                     <button type="button" @click="openFullSettings"><PhGearSix :size="20" /><span>完整设置</span><PhArrowUpRight :size="16" /></button>
                 </div>
@@ -96,10 +94,7 @@
             </section>
         </Transition>
 
-        <NModal :show="panel === 'library' && !isSimple" :auto-focus="true" :close-on-esc="true"
-            @update:show="show => { if (!show) closePanel() }">
-            <MidiLibraryPanel :session="session" :style="uiTheme.cssVariables" @selected="selectLibrarySong" @close="closePanel" />
-        </NModal>
+
 
 
         <Transition name="panel">
@@ -118,7 +113,7 @@
                 @lostpointercapture="cancelKeyboardResize" @dblclick.stop="resetKeyboardHeight" @keydown="resizeKeyboardByKey">
                 <span></span>
             </div>
-            <ClassicKeyboard v-if="store.keyboardLoaded" :layout="layout" :show-hints="!session.state.scrubbing && (session.mode !== 'follow' || session.difficulty !== 'challenge')" />
+            <ClassicKeyboard v-if="store.keyboardLoaded" :layout="layout" :show-hints="!session.state.scrubbing" />
         </div>
 
         <Chord v-if="store.loaded" class="chord-status" :compact="isSimple" />
@@ -132,14 +127,13 @@
 import {computed, inject, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch} from 'vue'
 import {useRoute, useRouter} from 'vue-router'
 import {Events, System, Window} from '@wailsio/runtime'
-import {NButton, NRadioButton, NRadioGroup, NSelect} from 'naive-ui'
+import {NButton, NRadioButton, NRadioGroup} from 'naive-ui'
 import {PhList, PhMinus, PhArrowsOutSimple, PhX, PhPianoKeys, PhPlay,
-    PhArrowRight, PhArrowUpRight, PhMusicNotes, PhGearSix, PhPower, PhChartBar, PhUsersThree} from '@phosphor-icons/vue'
+    PhArrowRight, PhArrowUpRight, PhMusicNotes, PhGearSix, PhPower, PhChartBar} from '@phosphor-icons/vue'
 import ClassicKeyboard from '../components/ClassicKeyboard.vue'
 import Chord from '../components/Chord.vue'
 import WaterfallCanvas from '../components/WaterfallCanvas.vue'
 import QuickPianoSettings from '../components/QuickPianoSettings.vue'
-import MidiLibraryPanel from '../components/MidiLibraryPanel.vue'
 import MidiPracticeControls from '../components/MidiPracticeControls.vue'
 import MidiTransport from '../components/MidiTransport.vue'
 import MidiWaterfallCanvas from '../components/MidiWaterfallCanvas.vue'
@@ -203,8 +197,8 @@ const scoreHeight = computed(() => {
     if (!session.viewOptions.waterfall) return midiAvailableHeight.value
     // A grand staff needs enough vertical space for two complete staves,
     // ledger lines and dynamics. Reserve part of the workspace for falling notes.
-    return Math.min(Math.max(0, midiAvailableHeight.value - 140),
-        Math.max(195, Math.min(300, midiAvailableHeight.value * .46)))
+    return Math.min(midiAvailableHeight.value,
+        Math.max(session.options.handMode === 'both' ? 280 : 180, Math.min(360, midiAvailableHeight.value * .55)))
 })
 const midiCanvasTop = computed(() => midiContentTop.value + scoreHeight.value)
 const midiCanvasHeight = computed(() => Math.max(0, waterfallHeight.value - midiCanvasTop.value))
@@ -337,14 +331,16 @@ async function changeMode(mode, chooseSong = false) {
         if (mode !== 'free' && isSimple.value && !await setDisplayMode('waterfall')) return false
         await session.initialize()
         if (!await session.setMode(mode)) return false
-        panel.value = mode !== 'free' && (chooseSong || !session.selectedId) ? 'library' : null
+        closePanel()
+        if (mode !== 'free' && (chooseSong || !session.selectedId)) await openWorkspace('library')
         releaseControlFocus()
         return true
     } finally { modeSwitching.value = false }
 }
-async function selectLibrarySong() {
-    if (!isMidi.value && !await changeMode('play')) return
-    closePanel()
+
+async function seekScore(ms) {
+    if (ms < session.options.leftMs || ms > session.options.rightMs) await session.setRange(0, session.durationMs)
+    await session.seek(ms)
 }
 async function startFreePlay() {
     if (isMidi.value) await changeMode('free')
@@ -443,13 +439,19 @@ onMounted(async () => {
         if (signal.type === 'noteOn' && panel.value === 'menu') closePanel()
     })
     window.addEventListener('keydown', keydown, true)
-    unsubscribeMidiRequest = Events.On('mainMidiModeRequested', event => changeMode(event.data?.mode === 'follow' ? 'follow' : 'play',!!event.data?.chooseSong))
-    unsubscribeWindowEvents.push(Events.On(Events.Types.Common.WindowFilesDropped, event => {
-        const paths = event.data?.files || []
+    unsubscribeMidiRequest = Events.On('mainMidiModeRequested', async event => {
+        if (event.data?.midiId) {
+            await session.refreshLibrary()
+            if (!await session.selectSong(event.data.midiId)) return
+        }
+        await changeMode(event.data?.mode === 'follow' ? 'follow' : 'play', !!event.data?.chooseSong)
+    })
+    unsubscribeWindowEvents.push(Events.On('scoreFilesDropped', event => {
+        const paths = event.data || []
         if (!Array.isArray(paths) || !paths.length) return
         void (async () => {
             if (recording.state.status === 'recording' && !await recording.stop()) return
-            if (!isMidi.value && !await changeMode('play')) return
+            if (isSimple.value && !await setDisplayMode('waterfall')) return
             if (await session.importPaths(paths)) closePanel()
         })()
     }))

@@ -284,7 +284,7 @@ func ParseMusicXMLFile(path string) (*Midi, error) {
     if err != nil { return nil, err }
     markers := make([]MidiMeasureMark,0,len(measureBeats))
     for i,b := range measureBeats {
-        markers = append(markers,MidiMeasureMark{Index:i+1,Ms:scoreTimeMs(b,compact)})
+        markers = append(markers,MidiMeasureMark{Index:i+1,Ms:scoreTimeMs(b,compact),StartBeat:b})
     }
     return &Midi{
         UserMidi:UserMidi{ID:id,Name:strings.TrimSuffix(filepath.Base(path),filepath.Ext(path)),
