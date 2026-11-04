@@ -128,7 +128,7 @@
 - 在完整瀑布流的自由演奏中开始、停止录制；切换简单模式前停止录制并保留草稿；
 - 记录真实音符、力度与踏板事件，支持草稿试听、命名、保存 `.mid` 并加入曲库；
 - 定期备份录制草稿，正常退出前检查持久化，保存取消或失败时保留草稿；
-- 本分支处于 2.0 开发阶段，正式版本标识和安装包在发布时统一。
+- 本仓库维护 2.1 系列开源离线版。安装包由维护者测试后通过 GitHub Releases 手动发布。
 
 ### 🎨 外观与主题
 
@@ -226,7 +226,7 @@ mkdir -p builder
 cp build/darwin/packaging.json builder/packaging.json
 ```
 
-Windows 模板包含 `bin/updater.exe` 和三个运行库 DLL；`release` 任务会从仓库资源复制这些文件。安装脚本由 Manager 生成到 `builder/windows/inno.iss`。macOS 模板使用仓库内的 `dmg-background.png`，保留默认应用包入口，无须额外添加 updater 资产：Manager 使用项目的 `darwin:create:app:bundle` 任务组装应用，通用 updater 会复制到 `Contents/MacOS/updater`，随后签名。
+Windows 模板包含三个原生运行库 DLL。安装脚本由 Manager 生成到 builder/windows/inno.iss。macOS 模板使用仓库内的 dmg-background.png，由 Manager 组装并签名。
 
 只检查构建、不生成安装包时，可以运行与 Manager 相同的任务：
 
@@ -236,7 +236,6 @@ wails3 task release
 
 主程序与运行文件输出到 `bin/`。Wails 生成的平台构建资产保留在 `build/`，面向用户的安装包统一由 Manager 管理。
 
-当前更新组件使用 `simple-updater v0.2.8`，随附 Windows 和 macOS universal updater 使用 Go `1.27.3` 构建。以后升级组件或 Go 工具链时，手动执行 `go run ./cmd/helpergen` 同步这两份资产；普通 `release` 任务只复制已有 updater。打包、上传更新源和发布由维护者手动执行。
 
 ---
 
@@ -280,8 +279,7 @@ wails3 task release
 
 启动流程为配置读取 → 内置音源初始化 → 窗口创建 → MIDI 设备扫描。核心模块概览：
 
-数字唱名可在「设置中心 → 键盘显示」选择调性；更新入口在「关于软件」。
-软件更新仅使用 `/release/get_info` 与 `/release/download`，AppID 为 `com.peirato.piano`。`1.3.0` 不再包含旧 product 通道的启动器或过渡安装逻辑。随软件分发的 updater 可通过 `go run ./cmd/helpergen` 重新生成。
+数字唱名可在「设置中心 → 键盘显示」选择调性。
 
 ```text
 main.go                         程序入口
@@ -291,7 +289,6 @@ service/piano.go                MIDI 设备扫描、监听与演奏入口
 service/soundfont.go            SF2 音源加载与实时渲染
 service/midi.go                 MIDI 文件目录、解析与缓存
 service/player.go               MIDI 播放调度与跟弹练习
-service/release_update.go       release 更新检查、下载与校验
 frontend/src/views/MainWindow.vue       主钢琴窗口
 frontend/src/views/ControlCenterWindow.vue 设置中心窗口
 frontend/src/services/midiSession.js    主窗口曲库与播放 / 跟弹会话
@@ -299,15 +296,8 @@ frontend/src/components/MidiWaterfallCanvas.vue MIDI 向下瀑布流
 frontend/src/App.vue                    Wails 事件与多窗口状态同步
 frontend/src/store/index.js             Pinia 状态中心
 builder/packaging.json                 Wails3 Manager 打包配置
-cmd/helpergen/                        Windows/macOS updater 生成工具
-cmd/release-inspect/                  安装包解析与更新清单检查工具
 ```
 
-`cmd/release-inspect` 是维护者发布工具，用于在上传前检查 Inno Setup 或 DMG 安装包的元数据和文件清单，不会上传文件或执行安装：
-
-```bash
-go run ./cmd/release-inspect "path/to/setup.exe"
-```
 
 目前主要维护 Windows 和 macOS 桌面体验；其他平台构建文件保留在 `build/`，不代表这些平台已完成发布验收。本机网站源码、打包输出、验收记录和用户数据不属于仓库源码。
 
@@ -355,3 +345,7 @@ go run ./cmd/release-inspect "path/to/setup.exe"
 <p align="center">
   如果这个项目对你有帮助，欢迎点一个 ⭐ Star 支持一下。
 </p>
+
+### 离线乐谱导入
+
+从本地曲库选择或拖入 MIDI、MusicXML 或 MXL 文件。对于 MuseScore 的 MSCZ 文件，请先在 MuseScore 中导出 MusicXML，再导入曲库。

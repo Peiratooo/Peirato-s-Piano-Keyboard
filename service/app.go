@@ -49,7 +49,6 @@ func Run(assets embed.FS) {
 		OnShutdown: func() {
 			_ = MidiPlayer.Stop()
 			stopRecordingForShutdown()
-			cleanupUpdate()
 			CloseMidiDevice()
 		},
 	})

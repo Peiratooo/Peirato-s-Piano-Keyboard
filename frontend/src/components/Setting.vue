@@ -10,7 +10,6 @@
             >
                 <component :is="item.icon" class="menu-icon" :size="19" aria-hidden="true"/>
                 <span>{{ item.label }}</span>
-                <span v-if="item.key === 'about' && updater.available" class="update-dot" role="img" aria-label="有新版本可更新" title="有新版本可更新"></span>
             </button>
         </aside>
 
@@ -36,10 +35,8 @@ import KeyboardMappingSettings from './settings/KeyboardMappingSettings.vue'
 import AppearanceSettings from './settings/AppearanceSettings.vue'
 import SoundFont from './settings/SoundFont.vue'
 import AboutSettings from './settings/AboutSettings.vue'
-import {useUpdater} from '../store/updater'
 
 const store = inject('store')
-const updater = useUpdater()
 const changeConfig = inject('changeConfig')
 
 const menus = settingsMenu

@@ -31,7 +31,7 @@
                 </div>
             </div>
         </div>
-        <footer>导入的曲目保存在本机，可直接播放或跟弹练习。</footer>
+        <footer>支持 MIDI、MusicXML 和 MXL。导入的曲目保存在本机，可直接播放或跟弹练习。</footer>
     </div>
 </template>
 
@@ -74,6 +74,5 @@ header span { font-size: 11px; color: #939393; }
 .song-info small { color: #969696; font-size: 11px; }
 .selection-mark { color: var(--ui-accent, #b8d1a6); flex-shrink: 0; }
 .empty-library { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 35px 12px; color: #a5a5a5; font-size: 12px; }
-footer span { display: block; margin-top: 6px; }
 footer { border-top: 1px solid #ffffff0d; padding-top: 13px; margin-top: 10px; font-size: 11px; line-height: 1.5; color: #939393; }
 </style>

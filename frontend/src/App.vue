@@ -36,14 +36,12 @@ import {Events, WML} from '@wailsio/runtime'
 import {Keyboard} from '../bindings/main/service'
 import {data} from './store'
 import FeedbackBridge from './components/FeedbackBridge.vue'
-import {useUpdater} from './store/updater'
 import {createComputerKeyboard, setKeyboardMappingLabels} from './services/computerKeyboard'
 import {acceptLivePerformance} from './services/livePerformance'
 import {getKeyLabelColor, getPianoUiTheme} from './services/uiTheme'
 import {changeColor, composite, rgba} from 'seemly'
 
 const store = data()
-const updater = useUpdater()
 const route = useRoute()
 const isMainWindow = computed(() => route.path === '/')
 const pianoUiTheme = computed(() => getPianoUiTheme(store.config.colors, route.path !== '/control' ? 'dark' : 'light'))
@@ -343,7 +341,6 @@ function registerBackendEvents() {
             softwareSustain: !!devices.softwareSustain,
         }
     })
-    on('updateState', state => updater.apply(state))
     on('configChanged', (config) => {
         applyConfig(config)
         setKeyColor()
@@ -411,11 +408,6 @@ onMounted(async () => {
     store.menuBar = false
     store.keyboardMenu = false
     store.showSetting = false
-    try {
-        await updater.sync()
-        if (route.path === '/control' || (isMainWindow.value && import.meta.env.PROD)) await updater.check()
-    } catch { /* A transient update failure must not interrupt playing. */ }
-
 })
 
 onBeforeUnmount(() => {

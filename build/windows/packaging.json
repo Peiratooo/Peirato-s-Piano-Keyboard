@@ -29,12 +29,6 @@
       "type": "file",
       "required": true,
       "target": ""
-    },
-    {
-      "src": "bin/updater.exe",
-      "type": "file",
-      "required": true,
-      "target": ""
     }
   ],
   "windows": {

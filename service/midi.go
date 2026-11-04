@@ -65,9 +65,9 @@ const (
 // =========================
 
 type UserMidi struct {
-	ID                 string `json:"id"`
-	Name               string `json:"name"`
-	Path               string `json:"path"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Path string `json:"path"`
 
 	Size       int64     `json:"size"`
 	ImportedAt time.Time `json:"importedAt"`
@@ -167,6 +167,9 @@ func RemoveMidi(id string) error {
 		err := SaveConfig(config)
 		if err == nil {
 			RemoveMidiCacheByID(id)
+			if App != nil {
+				App.Event.Emit("midiLibraryChanged")
+			}
 			return nil
 		}
 		if !strings.Contains(err.Error(), "设置已被其他窗口修改") {

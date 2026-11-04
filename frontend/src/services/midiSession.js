@@ -224,7 +224,7 @@ export function useMidiSession({store, Keyboard}) {
         importing.value = true
         try {
             let last = null, count = 0
-            // Upload/conversion must not hold the transport command queue.
+            // Local file parsing stays outside the transport command queue.
             // The current song remains playable while the new file is prepared.
             for (const path of unique) {
                 importStatus.value = '正在导入乐谱…'

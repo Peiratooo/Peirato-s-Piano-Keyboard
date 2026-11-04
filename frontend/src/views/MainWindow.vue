@@ -155,6 +155,8 @@ const router = useRouter()
 const isMac = System.IsMac()
 const isFullscreen = ref(false)
 const session = useMidiSession({store, Keyboard})
+const offLibrary = Events.On('midiLibraryChanged', () => void session.refreshLibrary())
+onBeforeUnmount(offLibrary)
 const recording = useRecordingSession({Keyboard,
     canStart: () => store.mainDisplayMode !== 'simple' && store.mainMode === 'free' && !switching.value && !modeSwitching.value,
     getPlayerState: () => store.midiPlayerState, onSaved: async song => {

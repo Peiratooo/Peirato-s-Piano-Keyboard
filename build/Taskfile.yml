@@ -2,17 +2,12 @@ version: '3'
 
 tasks:
   stage:runtime:
-    summary: Stages the precompiled updater and native runtime files for Wails3 Manager
+    summary: Stages the native runtime files for Wails3 Manager
     internal: true
     cmds:
       - cmd: >-
-          powershell -NoProfile -Command "Copy-Item -LiteralPath 'assets/updater/updater-windows-amd64.bin' -Destination '{{.BIN_DIR}}/updater.exe' -ErrorAction Stop;
-          Copy-Item -LiteralPath 'libgcc_s_seh-1.dll','libstdc++-6.dll','libwinpthread-1.dll' -Destination '{{.BIN_DIR}}' -ErrorAction Stop"
+          powershell -NoProfile -Command "Copy-Item -LiteralPath 'libgcc_s_seh-1.dll','libstdc++-6.dll','libwinpthread-1.dll' -Destination '{{.BIN_DIR}}' -ErrorAction Stop"
         platforms: [windows]
-      - cmd: cp assets/updater/updater-darwin.bin "{{.BIN_DIR}}/updater"
-        platforms: [darwin]
-      - cmd: chmod +x "{{.BIN_DIR}}/updater"
-        platforms: [darwin]
 
   go:mod:tidy:
     summary: Runs `go mod tidy`

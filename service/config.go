@@ -12,7 +12,7 @@ const (
 	appDisplayName = "PP 钢琴键盘"
 	// This directory is the persistent data identity, independent of branding.
 	configDirectoryName = "Peirato's Piano Keyboard"
-	AppVersion          = "2.0.0"
+	AppVersion          = "2.1.0"
 )
 
 var (
